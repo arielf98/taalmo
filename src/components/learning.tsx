@@ -1,0 +1,599 @@
+"use client";
+import Link from "next/link";
+import { useState } from "react";
+import {
+  ArrowRight,
+  ArrowUpRight,
+  BookOpen,
+  Check,
+  ChevronRight,
+  Clock,
+  Database,
+  FlaskConical,
+  GitBranch,
+  Lightbulb,
+  LockKeyhole,
+  RotateCcw,
+  Sparkles,
+} from "lucide-react";
+import { lessons, pathHref } from "@/content/lessons";
+import { useProgress } from "@/lib/progress";
+import { Badge, Completion, Workspace } from "./shell";
+import { Button } from "./ui/button";
+import { Quiz } from "./quiz";
+
+export function Dashboard() {
+  const { progress } = useProgress();
+  const count = progress.completed.length;
+  const labDone = progress.completed.includes("lab-payment");
+  const next = lessons.find((l) => !progress.completed.includes(l.id));
+  const pathComplete = !next && labDone;
+  const continueLab =
+    !labDone && progress.completed.includes("duplicate-payment");
+  return (
+    <Workspace>
+      <div className="breadcrumb">
+        Your workspace <ChevronRight size={13} /> My learning
+      </div>
+      <div className="page-heading">
+        <div>
+          <span className="eyebrow">A LITTLE CURIOSITY GOES A LONG WAY</span>
+          <h1>
+            Welcome to your playground<span className="mint-text">.</span>
+          </h1>
+          <p>Let’s turn one more concept into something that clicks.</p>
+        </div>
+        <span className="welcome-spark">
+          <Sparkles size={30} />
+        </span>
+      </div>
+      <section className="continue-card">
+        <div>
+          <Badge>{pathComplete ? "PATH COMPLETE" : "CONTINUE LEARNING"}</Badge>
+          <h2>
+            {pathComplete
+              ? "You’ve completed your first path."
+              : continueLab
+                ? "Ready to put it to the test?"
+                : labDone
+                  ? "Keep your curiosity going."
+                  : "One payment. Two callbacks."}
+          </h2>
+          <p>
+            {pathComplete
+              ? "Keep experimenting: revisit the sandbox and explore what changes when a transaction fails."
+              : continueLab
+                ? "You’ve checked the concept. Run both modes and see how a transaction protects the payment."
+                : labDone
+                  ? "You’ve completed the payment lab. Explore another transaction concept."
+                  : "Discover how a tiny race condition can turn into a double payment."}
+          </p>
+          <Button asChild>
+            <Link
+              href={
+                pathComplete || continueLab
+                  ? "/sandbox/duplicate-payment"
+                  : labDone
+                    ? `/lessons/${next?.id ?? "duplicate-payment"}`
+                    : "/lessons/duplicate-payment"
+              }
+            >
+              {pathComplete
+                ? "Revisit the sandbox"
+                : continueLab
+                  ? "Continue to the lab"
+                  : labDone
+                    ? "Explore a lesson"
+                    : "Pick up the lesson"}
+              <ArrowRight size={17} />
+            </Link>
+          </Button>
+          <div className="continue-meta">
+            {pathComplete ? (
+              <>
+                <Check size={13} /> All four milestones complete
+              </>
+            ) : (
+              <>
+                <Clock size={13} /> About 15 minutes <span>•</span> Beginner
+                friendly
+              </>
+            )}
+          </div>
+        </div>
+        <div className="continue-art" aria-hidden="true">
+          <div className="art-callback a">
+            callback A <ArrowRight size={18} />
+          </div>
+          <div className="art-callback b">
+            callback B <ArrowRight size={18} />
+          </div>
+          <div className="art-db">
+            <Database size={40} />
+            <span>One effect.</span>
+          </div>
+          <span className="art-stamp">
+            <Check size={17} /> idempotent
+          </span>
+        </div>
+      </section>
+      <div className="dashboard-stats">
+        <div>
+          <BookOpen size={20} />
+          <strong>
+            {progress.completed.filter((id) => id !== "lab-payment").length}
+            <span>/ 3</span>
+          </strong>
+          <span>Lessons completed</span>
+        </div>
+        <div>
+          <FlaskConical size={20} />
+          <strong>
+            {labDone ? 1 : 0}
+            <span>/ 1</span>
+          </strong>
+          <span>Labs completed</span>
+        </div>
+        <div>
+          <GitBranch size={20} />
+          <strong>
+            {Math.round((count / 4) * 100)}
+            <span>%</span>
+          </strong>
+          <span>Path progress</span>
+        </div>
+      </div>
+      <section>
+        <div className="section-heading compact">
+          <h2>Your learning path</h2>
+          <span className="muted small">One good place to start</span>
+        </div>
+        <div className="dashboard-path card">
+          <span className="feature-icon mint">
+            <Database size={26} />
+          </span>
+          <div>
+            <Badge tone="gray">DATABASE TRANSACTIONS</Badge>
+            <h3>Database Engineering</h3>
+            <p>
+              Concurrency, consistency, and the things that happen between
+              queries.
+            </p>
+            <div className="progress-track">
+              <span style={{ width: `${(count / 4) * 100}%` }} />
+            </div>
+            <small>{count} of 4 milestones complete</small>
+          </div>
+          <Button variant="outline" asChild>
+            <Link href={pathHref}>
+              Explore path <ArrowUpRight size={16} />
+            </Link>
+          </Button>
+        </div>
+      </section>
+      <section className="activity-section">
+        <div className="section-heading compact">
+          <h2>Recent activity</h2>
+          <Badge tone="gray">ON THIS DEVICE</Badge>
+        </div>
+        {progress.activity.length ? (
+          <div className="card activity-list">
+            {progress.activity.map((a) => (
+              <Link
+                key={a.id}
+                href={
+                  a.id === "lab-payment"
+                    ? "/sandbox/duplicate-payment"
+                    : `/lessons/${a.id}`
+                }
+              >
+                <span className="activity-check">
+                  <Check size={17} />
+                </span>
+                <div>
+                  <strong>
+                    {a.id === "lab-payment"
+                      ? "Payment lab completed"
+                      : `${lessons.find((l) => l.id === a.id)?.title} completed`}
+                  </strong>
+                  <p>
+                    {new Date(a.at).toLocaleDateString("en", {
+                      month: "short",
+                      day: "numeric",
+                    })}{" "}
+                    · Keep building your understanding
+                  </p>
+                </div>
+                <ChevronRight size={16} />
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-activity">
+            <span className="feature-icon mint">
+              <Lightbulb size={20} />
+            </span>
+            <div>
+              <strong>Your first “aha” goes here.</strong>
+              <p>Finish a checkpoint or a lab to start your learning story.</p>
+            </div>
+          </div>
+        )}
+      </section>
+      <div className="recommendation">
+        <Lightbulb size={19} />
+        <p>
+          <strong>A good next step:</strong>{" "}
+          {progress.completed.includes("duplicate-payment")
+            ? "Try both processing modes in the payment sandbox and compare their timelines."
+            : "Start with Duplicate Payment Callback. It connects a common backend bug to a powerful database guarantee."}
+        </p>
+      </div>
+    </Workspace>
+  );
+}
+export function LearningPath() {
+  const { progress } = useProgress();
+  return (
+    <Workspace>
+      <div className="breadcrumb">
+        <Link href="/dashboard">My learning</Link>
+        <ChevronRight size={13} />
+        Database Engineering
+      </div>
+      <div className="path-header">
+        <span className="feature-icon mint">
+          <Database size={28} />
+        </span>
+        <Badge>LEARNING PATH · BEGINNER FRIENDLY</Badge>
+        <h1>Database Engineering</h1>
+        <p>
+          Great systems start with trustworthy data. Explore what happens when
+          concurrent requests meet a database—and learn to make the outcome
+          predictable.
+        </p>
+        <div className="inline-meta">
+          <span>
+            <BookOpen size={15} /> 3 lessons
+          </span>
+          <span>
+            <FlaskConical size={15} /> 1 available lab
+          </span>
+          <span>
+            <Clock size={15} /> About 35 minutes
+          </span>
+        </div>
+      </div>
+      <div className="path-overview card">
+        <div>
+          <strong>Database Transactions</strong>
+          <p>Your first chapter: concurrency, one experiment at a time.</p>
+        </div>
+        <div className="path-progress">
+          <strong>{Math.round((progress.completed.length / 4) * 100)}%</strong>
+          <div className="progress-track">
+            <span
+              style={{ width: `${(progress.completed.length / 4) * 100}%` }}
+            />
+          </div>
+        </div>
+      </div>
+      <div className="lesson-list">
+        {lessons.map((l) => (
+          <Link
+            className={`lesson-row card ${l.available ? "available-lesson" : ""}`}
+            key={l.id}
+            href={`/lessons/${l.id}`}
+          >
+            <span
+              className={`lesson-number ${progress.completed.includes(l.id) ? "done" : ""}`}
+            >
+              {progress.completed.includes(l.id) ? (
+                <Check size={22} />
+              ) : (
+                l.number
+              )}
+            </span>
+            <div className="lesson-row-copy">
+              <div className="lesson-tags">
+                <span className="eyebrow">{l.tag}</span>
+                {l.available && <Badge>INTERACTIVE LAB</Badge>}
+              </div>
+              <h2>{l.title}</h2>
+              <p>{l.subtitle}</p>
+              <div className="lesson-meta">
+                <span>
+                  <Clock size={13} />
+                  {l.duration}
+                </span>
+                <span>
+                  {l.available
+                    ? "Lesson + sandbox"
+                    : "Introduction · lab coming soon"}
+                </span>
+              </div>
+            </div>
+            <div className="lesson-row-status">
+              <Completion done={progress.completed.includes(l.id)} />
+              <ArrowUpRight size={21} />
+            </div>
+          </Link>
+        ))}
+      </div>
+      <div className="path-outcomes">
+        <h3>What you’ll walk away with</h3>
+        <div>
+          <p>
+            <Check size={17} /> Spot race conditions hiding in everyday code
+          </p>
+          <p>
+            <Check size={17} /> Explain what a transaction actually protects
+          </p>
+          <p>
+            <Check size={17} /> Design an idempotent payment handler
+          </p>
+        </div>
+      </div>
+    </Workspace>
+  );
+}
+function InteractiveExample({ slug }: { slug: string }) {
+  const [step, setStep] = useState(0);
+  const content =
+    slug === "lost-update"
+      ? [
+          "Start: balance = $100.",
+          "A reads $100. B also reads $100.",
+          "A adds $20 and writes $120.",
+          "B adds $30 to its old $100 and writes $130.",
+          "Expected $150. Actual $130. A’s update was lost.",
+        ]
+      : slug === "deadlock"
+        ? [
+            "Start: both accounts are unlocked.",
+            "A locks account X.",
+            "B locks account Y.",
+            "A waits for Y. B waits for X. A circular wait.",
+            "The database aborts one transaction. Retry the full transaction.",
+          ]
+        : [
+            "Start: pay_1042 has not been processed.",
+            "Callback A reads processed = false.",
+            "Callback B also reads false, before A commits.",
+            "A credits $49. B credits $49. Same payment.",
+            "The ledger now has $98 in credits for one $49 payment.",
+          ];
+  return (
+    <div className="interactive-example">
+      <div className="example-top">
+        <span className="eyebrow">
+          <FlaskConical size={15} /> FOLLOW THE INTERLEAVING
+        </span>
+        <span>
+          {step + 1} / {content.length}
+        </span>
+      </div>
+      <div className="example-state" aria-live="polite">
+        <span className="example-step">
+          {String(step + 1).padStart(2, "0")}
+        </span>
+        <p>{content[step]}</p>
+      </div>
+      <div className="example-controls">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setStep((s) => s + 1)}
+          disabled={step === content.length - 1}
+        >
+          Next step <ArrowRight size={14} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setStep(0)}
+          aria-label="Reset example"
+        >
+          <RotateCcw size={15} />
+          Reset
+        </Button>
+      </div>
+    </div>
+  );
+}
+export function Lesson({ slug }: { slug: string }) {
+  const index = lessons.findIndex((l) => l.id === slug);
+  const lesson = lessons[index];
+  if (!lesson) return null;
+  return (
+    <Workspace>
+      <div className="breadcrumb">
+        <Link href={pathHref}>Database Transactions</Link>
+        <ChevronRight size={13} />
+        <span>Lesson {lesson.number}</span>
+      </div>
+      <div className="lesson-layout">
+        <article>
+          <div className="lesson-heading">
+            <Badge>{lesson.tag.toUpperCase()}</Badge>
+            <h1>{lesson.title}</h1>
+            <p>{lesson.subtitle}</p>
+            <div className="inline-meta">
+              <span>
+                <Clock size={14} />
+                {lesson.duration}
+              </span>
+              <span>
+                <BookOpen size={14} /> Beginner friendly
+              </span>
+            </div>
+          </div>
+          <section className="lesson-section" id="the-concept">
+            <span className="eyebrow">01 · THE CONCEPT</span>
+            <h2>
+              {slug === "duplicate-payment"
+                ? "Retries are normal. Double payments aren’t."
+                : slug === "lost-update"
+                  ? "A read and a write leave room for a race."
+                  : "Two locks. One circular wait."}
+            </h2>
+            <p>{lesson.intro}</p>
+            <div className="concept-callout">
+              <Lightbulb size={20} />
+              <p>{lesson.example}</p>
+            </div>
+          </section>
+          <section className="lesson-section" id="try-it">
+            <span className="eyebrow">02 · SEE IT HAPPEN</span>
+            <h2>Slow things down. See the problem.</h2>
+            <p>
+              Step through the requests to see where the two operations overlap.
+            </p>
+            <InteractiveExample slug={slug} />
+          </section>
+          <section className="lesson-section" id="the-fix">
+            <span className="eyebrow">03 · THE ENGINEERING IDEA</span>
+            <h2>
+              {slug === "duplicate-payment"
+                ? "Make the decision and the effect atomic."
+                : "Make concurrency part of the design."}
+            </h2>
+            <p>{lesson.principle}</p>
+            {slug === "duplicate-payment" && (
+              <>
+                <pre className="code-block">
+                  <code>{`BEGIN;\nINSERT INTO processed_payments (payment_id)\nVALUES ('pay_1042')\nON CONFLICT DO NOTHING\nRETURNING payment_id;\n\n-- Only when INSERT returns a row:\nINSERT INTO ledger (...);\nINSERT INTO outbox (...);\nCOMMIT;`}</code>
+                </pre>
+                <p className="small muted">
+                  Conceptual SQL. The unique constraint must be on payment_id.
+                  Only the transaction that claims the key makes the business
+                  writes. Outbox publication happens later, and delivery may
+                  repeat.
+                </p>
+              </>
+            )}
+          </section>
+          <div id="checkpoint">
+            <Quiz
+              id={lesson.id}
+              question={lesson.question}
+              options={lesson.options}
+              answer={lesson.answer}
+              explanation={lesson.explanation}
+            />
+          </div>
+          {lesson.available ? (
+            <section className="launch-card">
+              <span className="feature-icon mint">
+                <FlaskConical size={26} />
+              </span>
+              <div>
+                <h3>Now, make it happen.</h3>
+                <p>
+                  Break a payment handler. Then protect it with atomic
+                  idempotency.
+                </p>
+              </div>
+              <Button asChild>
+                <Link href="/sandbox/duplicate-payment">
+                  Launch sandbox <ArrowUpRight size={16} />
+                </Link>
+              </Button>
+            </section>
+          ) : (
+            <section className="unavailable-lab">
+              <LockKeyhole size={23} />
+              <div>
+                <h3>Interactive lab coming next</h3>
+                <p>
+                  The introduction and checkpoint are available. For a complete
+                  experiment, try the payment callback lab.
+                </p>
+                <Link className="text-link" href="/sandbox/duplicate-payment">
+                  Explore the available sandbox <ArrowRight size={15} />
+                </Link>
+              </div>
+            </section>
+          )}
+          <div className="lesson-pagination">
+            <Link
+              href={index > 0 ? `/lessons/${lessons[index - 1].id}` : pathHref}
+            >
+              ← {index > 0 ? "Previous lesson" : "Back to path"}
+            </Link>
+            {index < lessons.length - 1 && (
+              <Link href={`/lessons/${lessons[index + 1].id}`}>
+                Next: {lessons[index + 1].title} <ArrowRight size={14} />
+              </Link>
+            )}
+          </div>
+        </article>
+        <aside className="lesson-toc">
+          <span className="eyebrow muted">IN THIS LESSON</span>
+          <a href="#the-concept">
+            01 <span>The concept</span>
+          </a>
+          <a href="#try-it">
+            02 <span>See it happen</span>
+          </a>
+          <a href="#the-fix">
+            03 <span>The engineering idea</span>
+          </a>
+          <a href="#checkpoint">
+            04 <span>Check your understanding</span>
+          </a>
+          {lesson.available && (
+            <Button asChild variant="outline" size="sm">
+              <Link href="/sandbox/duplicate-payment">
+                Launch sandbox <ArrowUpRight size={14} />
+              </Link>
+            </Button>
+          )}
+        </aside>
+      </div>
+    </Workspace>
+  );
+}
+export function Challenges() {
+  return (
+    <Workspace>
+      <div className="breadcrumb">
+        Your workspace <ChevronRight size={13} /> Challenges
+      </div>
+      <div className="page-heading">
+        <div>
+          <span className="eyebrow">TEST YOUR MENTAL MODEL</span>
+          <h1>
+            A small challenge.
+            <br />A deeper understanding.
+          </h1>
+          <p>
+            Reason through the scenario. Every answer comes with an explanation.
+          </p>
+        </div>
+        <span className="feature-icon lavender">
+          <FlaskConical size={30} />
+        </span>
+      </div>
+      <div className="challenge-grid">
+        {lessons.map((l) => (
+          <div key={l.id}>
+            <div className="challenge-label">
+              <Badge tone="gray">{l.tag}</Badge>
+              <Link className="text-link small" href={`/lessons/${l.id}`}>
+                Read the lesson <ArrowUpRight size={13} />
+              </Link>
+            </div>
+            <Quiz
+              id={l.id}
+              question={l.question}
+              options={l.options}
+              answer={l.answer}
+              explanation={l.explanation}
+            />
+          </div>
+        ))}
+      </div>
+    </Workspace>
+  );
+}

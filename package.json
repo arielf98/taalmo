@@ -2,6 +2,7 @@
   "name": "taalmo",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",
     "build": "next build",
@@ -12,7 +13,7 @@
     "test:e2e": "playwright test"
   },
   "engines": {
-    "node": ">=20.9"
+    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.5.0",
