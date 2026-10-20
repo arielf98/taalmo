@@ -70,3 +70,23 @@ Atomic execution has seven events: first request obtains the row lock, second wa
 The diagram and inspector expose request read values, calculated/staged balances, committed balance, row-lock owner, and the committed write history. Timeline selection shows the corresponding immutable snapshot; the final evaluation is shown only in the current state.
 
 This represents row-lock coordination for a same-row UPDATE at Read Committed, not the complete PostgreSQL lock manager or MVCC implementation. A competing updater waits for the first transaction and applies its operation to the updated row, as described in [PostgreSQL’s Read Committed documentation](https://www.postgresql.org/docs/16/transaction-iso.html#XACT-READ-COMMITTED). Stricter isolation and serialization failures are outside this scenario. Atomic increment prevents this lost update but is not idempotent: retrying a business request still needs separate deduplication.
+
+## Deadlock scenario
+
+`deadlock.ts` models two row-locking transactions. X and Y each begin with 10000 cents. A transfers 1000 cents from X to Y, while B transfers 2000 cents from Y to X. Staged debits/credits stay private until atomic commit; rollback discards every staged change and releases every lock owned by the victim.
+
+### Opposite order
+
+A locks X and stages a debit. B locks Y and stages a debit. A then waits for Y and B waits for X. `waitForEdges` derives edges from actual waiting requests and lock owners. `deadlockCycle` detects A → B → A in this deliberately two-transaction graph; the result is not selected by the UI mode.
+
+The detector records the cycle. A configurable deterministic victim is aborted, its pending debit is discarded, and its locks are released. The survivor acquires the other row, stages its credit, and commits. Without retry, one transfer remains aborted. With retry enabled, a fresh transaction redoes the victim’s full operation once after the survivor commits. Its attempt counter becomes two; each logical transfer still has only one committed record.
+
+### Consistent order
+
+Both transactions lock X before Y. B can wait for X while A holds it, but A can acquire Y and proceed: the wait-for graph has one edge and no cycle. A commits and releases both locks; B acquires X and Y and applies its complete transfer. Both transfers commit, preserving the combined 20000-cent balance.
+
+### Scope and accuracy
+
+The diagram shows current wait-for edges, while the recorded detected cycle remains inspectable as historical information after recovery. Timeline selection updates lock ownership, staged values, committed balances, attempts, and transfer records together. Final evaluation appears only in the current state and derives completion, conservation, and recovery outcomes from records and transaction state.
+
+This is a fixed two-transaction educational schedule. Detection timing, lock queues, MVCC, real error codes, backoff, and PostgreSQL victim-selection rules are not simulated. Real PostgreSQL detects a deadlock and aborts a transaction; consistent resource ordering is a principal prevention strategy. See [PostgreSQL’s deadlock documentation](https://www.postgresql.org/docs/17/explicit-locking.html#LOCKING-DEADLOCKS). Recovery here retries the entire transaction with one retry, rather than only its last SQL statement.

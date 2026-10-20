@@ -40,6 +40,7 @@ export function Dashboard() {
   );
   const continueLab = !!readyLab;
   const focusLostUpdate = readyLab?.id === "lab-lost-update";
+  const focusDeadlock = readyLab?.id === "lab-deadlock";
   return (
     <Workspace>
       <div className="breadcrumb">
@@ -114,20 +115,38 @@ export function Dashboard() {
         </div>
         <div className="continue-art" aria-hidden="true">
           <div className="art-callback a">
-            {focusLostUpdate ? "request A" : "callback A"}{" "}
+            {focusDeadlock
+              ? "transaction A"
+              : focusLostUpdate
+                ? "request A"
+                : "callback A"}{" "}
             <ArrowRight size={18} />
           </div>
           <div className="art-callback b">
-            {focusLostUpdate ? "request B" : "callback B"}{" "}
+            {focusDeadlock
+              ? "transaction B"
+              : focusLostUpdate
+                ? "request B"
+                : "callback B"}{" "}
             <ArrowRight size={18} />
           </div>
           <div className="art-db">
             <Database size={40} />
-            <span>{focusLostUpdate ? "Both updates." : "One effect."}</span>
+            <span>
+              {focusDeadlock
+                ? "No cycle."
+                : focusLostUpdate
+                  ? "Both updates."
+                  : "One effect."}
+            </span>
           </div>
           <span className="art-stamp">
             <Check size={17} />{" "}
-            {focusLostUpdate ? "atomic increment" : "idempotent"}
+            {focusDeadlock
+              ? "consistent locks"
+              : focusLostUpdate
+                ? "atomic increment"
+                : "idempotent"}
           </span>
         </div>
       </section>
@@ -280,7 +299,7 @@ export function LearningPath() {
             <FlaskConical size={15} /> {labs.length} available labs
           </span>
           <span>
-            <Clock size={15} /> About 40 minutes
+            <Clock size={15} /> About 45 minutes
           </span>
         </div>
       </div>
@@ -519,7 +538,9 @@ export function Lesson({ slug }: { slug: string }) {
                 <p>
                   {slug === "lost-update"
                     ? "Make two requests compete for one balance. Then preserve both increments."
-                    : "Break a payment handler. Then protect it with atomic idempotency."}
+                    : slug === "deadlock"
+                      ? "Inspect a circular wait. Then prevent it with a consistent lock order."
+                      : "Break a payment handler. Then protect it with atomic idempotency."}
                 </p>
               </div>
               <Button asChild>
@@ -535,7 +556,7 @@ export function Lesson({ slug }: { slug: string }) {
                 <h3>Interactive lab coming next</h3>
                 <p>
                   The introduction and checkpoint are available. Explore the
-                  learning path for the two complete interactive labs.
+                  learning path for available interactive labs.
                 </p>
                 <Link className="text-link" href={pathHref}>
                   Explore the available labs <ArrowRight size={15} />

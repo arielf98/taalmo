@@ -25,12 +25,13 @@ Tidak memerlukan `.env`, database, akun, API key, Docker, atau layanan berbayar.
 - Landing page dengan preview simulator yang bisa dijalankan.
 - Dashboard, learning path Database Engineering, progres, aktivitas, dan rekomendasi belajar.
 - Lesson Lost Update, Duplicate Payment Callback, dan Deadlock, masing-masing dengan contoh interleaving dan checkpoint.
+- Lab Deadlock: wait-for graph, mode urutan lock berlawanan/konsisten, pilihan transaksi korban, rollback perubahan pending, dan satu retry penuh.
 - Lab Lost Update: mode unsafe dan atomic increment, pilihan urutan penulisan serta saldo awal, run/step/reset/replay, histori, inspector, dan kuis akhir.
 - Lab Duplicate Payment Callback: mode unsafe dan idempotent, run/step/reset/replay, histori, inspector, ledger, transactional outbox, dan opsi rollback sebelum commit.
 - Kuis akhir lab yang terbuka setelah kedua mode selesai dieksplorasi.
 - Progres lokal, tema terang/gelap, serta layout desktop, tablet, dan mobile.
 
-Dua lab tersedia: Lost Update dan Duplicate Payment Callback. Deadlock masih berupa pengantar dan checkpoint dengan status lab belum tersedia. Path memiliki lima milestone: tiga checkpoint lesson dan dua checkpoint lab. Progres payment lama tetap dipertahankan.
+Ketiga lesson memiliki lab: Lost Update, Duplicate Payment Callback, dan Deadlock. Path memiliki enam milestone: tiga checkpoint lesson dan tiga checkpoint lab. Progres dari dua lab sebelumnya tetap dipertahankan.
 
 ## Alur belajar pertama
 
@@ -48,6 +49,12 @@ Buka **Learn → Explore path → Lost Update → Launch sandbox**, atau langsun
 
 Progres eksperimen Lost Update terpisah dari payment. Kuis akhir baru terbuka setelah kedua strategi pada lab ini diselesaikan.
 
+## Mencoba Deadlock
+
+Buka **Learn → Explore path → Deadlock → Launch sandbox**, atau `/sandbox/deadlock`. Pada **Opposite order**, A menahan X dan menunggu Y, sementara B menahan Y dan menunggu X. Telusuri snapshot untuk melihat siklus A → B → A, lalu rollback korban dan pelepasan lock. Pilih korban A atau B untuk membandingkan state yang bertahan.
+
+Aktifkan **Retry the aborted transaction once** untuk memulai ulang seluruh transaksi korban sesudah survivor commit. Pada **Consistent order**, kedua transaksi selalu mengunci X sebelum Y; B dapat menunggu tanpa membentuk siklus. Kuis akhir memakai progres khusus Deadlock, terpisah dari dua lab lainnya.
+
 ## Struktur proyek
 
 ```text
@@ -55,7 +62,7 @@ src/app/                    Halaman App Router, metadata, dan CSS responsif
 src/components/             UI learning, sandbox, diagram, dan kuis
 src/components/ui/          Komponen UI dasar
 src/content/lessons.ts      Konten lesson dan checkpoint berbahasa Inggris
-src/lib/simulation/         Engine event deterministik, payment, dan Lost Update
+src/lib/simulation/         Engine event deterministik, payment, Lost Update, Deadlock
 src/lib/progress.ts         Penyimpanan serta validasi progres lokal
 docs/                       Arsitektur, penulisan skenario, dan roadmap
 AGENTS.md                   Aturan kerja agen pada repositori
@@ -77,7 +84,7 @@ Repositori memiliki test dari implementasi awal. Keberadaannya tidak memberikan 
 ## Keterbatasan
 
 - Database adalah model simulasi, bukan server PostgreSQL. Tidak ada SQL nyata, pembayaran nyata, atau arbitrary code execution.
-- Urutan event deterministik; waktu playback hanya untuk presentasi dan bukan metrik performa database.
+- Urutan event deterministik; waktu playback hanya untuk presentasi dan bukan metrik performa database. Deadlock memakai dua transaksi dan dua row; pemilihan korban adalah kontrol pengajaran, bukan algoritme pemilihan korban PostgreSQL. Retry dibatasi satu kali setelah survivor commit, tanpa simulasi backoff atau timeout.
 - Transactional outbox dimodelkan sampai penyimpanan event. Publisher, retry pengiriman, dan consumer tidak disimulasikan. Ini bukan jaminan exactly-once message delivery.
 - Progres tersimpan di browser ini saja. Menghapus storage menghapus progres; private browsing atau storage yang diblokir dapat menghalangi penyimpanan.
 - Tidak ada autentikasi, sinkronisasi lintas perangkat, atau infrastruktur produksi.

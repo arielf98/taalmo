@@ -7,11 +7,12 @@
 - Three transaction introductions and knowledge checkpoints.
 - Complete Duplicate Payment Callback sandbox: unsafe/protected modes, step/run/reset/replay, historical state, node inspection, committed records, rollback recovery, result evaluation, final quiz.
 - Complete Lost Update sandbox: stale reads and unsafe replacements versus row-locked atomic increments, configurable write order and initial balance, step/run/reset/replay, historical state, record inspection, and a separate final quiz.
-- Device-local progress for five milestones, light/dark themes, responsive layout. Existing tests come from the initial MVP; follow the no-test policy in `AGENTS.md` for subsequent work.
+- Complete Deadlock sandbox: two-transaction wait-for graph, opposite/consistent lock ordering, staged debit rollback, configurable victim, one bounded whole-transaction retry, and a dedicated final quiz.
+- Device-local progress for six milestones, light/dark themes, responsive layout. Existing tests come from the initial MVP; follow the no-test policy in `AGENTS.md` for subsequent work.
 
-## Recommended next milestone: Deadlock lab
+## Recommended next milestone: localization
 
-Implement a small wait-for graph, deterministic deadlock detection, consistent lock ordering, and a bounded whole-transaction retry example. Reuse the generic engine and register the new lab in the existing lesson/lab catalog. Keep simulation state and outcome evaluation independent from the UI.
+Extract interface strings into a small locale dictionary and provide reviewed Indonesian content alongside the existing English interface. Keep stable lesson, lab, and progress IDs so language changes do not reset learning progress. Do not add a content backend or paid translation service before it is needed.
 
 ## Later learning improvements
 

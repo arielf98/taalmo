@@ -173,6 +173,7 @@ test("dashboard continues into the lab and recognizes a completed path", async (
           "deadlock",
           "lab-payment",
           "lab-lost-update",
+          "lab-deadlock",
         ],
         activity: [],
         experiments: ["unsafe", "protected"],
@@ -218,7 +219,9 @@ test("mobile navigation, theme, and introductory lesson state", async ({
   await page.getByRole("link", { name: "Learn", exact: true }).click();
   await page.getByRole("link", { name: "Explore path" }).click();
   await page.getByRole("link", { name: /Deadlock/ }).click();
-  await expect(page.getByText("Interactive lab coming next")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Launch sandbox" }).first(),
+  ).toHaveAttribute("href", "/sandbox/deadlock");
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,

@@ -54,9 +54,9 @@ export const lessons = [
     number: "03",
     title: "Deadlock",
     subtitle: "When every request is waiting for the other.",
-    duration: "10 min",
+    duration: "15 min",
     tag: "Locking",
-    labHref: null,
+    labHref: "/sandbox/deadlock",
     intro:
       "Transaction A locks row 1 and needs row 2. Transaction B locks row 2 and needs row 1. Neither can continue: their waits form a cycle.",
     example:
@@ -89,6 +89,13 @@ export const labs = [
     title: "Lost Update lab",
     modes: ["lost-update:unsafe", "lost-update:atomic"],
   },
+  {
+    id: "lab-deadlock",
+    lessonId: "deadlock",
+    href: lessons[2].labHref,
+    title: "Deadlock lab",
+    modes: ["deadlock:opposite", "deadlock:ordered"],
+  },
 ] as const;
 export type ExperimentMode = (typeof labs)[number]["modes"][number];
 export const milestoneIds: readonly string[] = [
@@ -109,6 +116,18 @@ export const lostUpdateQuiz = {
   answer: 0,
   explanation:
     "The row lock serializes conflicting updates. The waiting UPDATE increments the updated row after the first commits. It does not reuse a replacement value computed from an earlier client-side read. This prevents lost updates, but does not make retries idempotent.",
+};
+export const deadlockQuiz = {
+  id: "lab-deadlock",
+  question: "What should you retry after a deadlock aborts a transaction?",
+  options: [
+    "Restart the whole transaction with a bounded retry",
+    "Retry only the SQL statement that was waiting",
+    "Keep the aborted transaction’s staged debit",
+  ],
+  answer: 0,
+  explanation:
+    "A deadlock victim loses its transaction’s uncommitted changes and locks. Start a fresh transaction for the entire business operation with bounded retries. Consistent lock ordering prevents this circular wait; retrying helps recover an abort but does not prevent deadlocks.",
 };
 export const labQuiz = {
   id: "lab-payment",
