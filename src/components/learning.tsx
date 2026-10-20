@@ -1,4 +1,6 @@
 "use client";
+import { useLocale } from "@/lib/locale";
+
 import Link from "next/link";
 import { useState } from "react";
 import {
@@ -23,6 +25,8 @@ import { Button } from "./ui/button";
 import { Quiz } from "./quiz";
 
 export function Dashboard() {
+  const { t, locale } = useLocale();
+
   const { progress } = useProgress();
   const count = progress.completed.length;
   const completedLabs = labs.filter((lab) =>
@@ -44,15 +48,20 @@ export function Dashboard() {
   return (
     <Workspace>
       <div className="breadcrumb">
-        Your workspace <ChevronRight size={13} /> My learning
+        {t("Your workspace ")}
+        <ChevronRight size={13} />
+        {t(" My learning")}
       </div>
       <div className="page-heading">
         <div>
-          <span className="eyebrow">A LITTLE CURIOSITY GOES A LONG WAY</span>
+          <span className="eyebrow">
+            {t("A LITTLE CURIOSITY GOES A LONG WAY")}
+          </span>
           <h1>
-            Welcome to your playground<span className="mint-text">.</span>
+            {t("Welcome to your playground")}
+            <span className="mint-text">.</span>
           </h1>
-          <p>Let’s turn one more concept into something that clicks.</p>
+          <p>{t("Let’s turn one more concept into something that clicks.")}</p>
         </div>
         <span className="welcome-spark">
           <Sparkles size={30} />
@@ -60,24 +69,34 @@ export function Dashboard() {
       </div>
       <section className="continue-card">
         <div>
-          <Badge>{pathComplete ? "PATH COMPLETE" : "CONTINUE LEARNING"}</Badge>
+          <Badge>
+            {pathComplete ? t("PATH COMPLETE") : t("CONTINUE LEARNING")}
+          </Badge>
           <h2>
             {pathComplete
-              ? "You’ve completed your first path."
+              ? t("You’ve completed your first path.")
               : continueLab
-                ? "Ready to put it to the test?"
+                ? t("Ready to put it to the test?")
                 : labDone
-                  ? "Keep your curiosity going."
-                  : "One payment. Two callbacks."}
+                  ? t("Keep your curiosity going.")
+                  : t("One payment. Two callbacks.")}
           </h2>
           <p>
             {pathComplete
-              ? "Keep experimenting: revisit the sandbox and explore what changes when a transaction fails."
+              ? t(
+                  "Keep experimenting: revisit the sandbox and explore what changes when a transaction fails.",
+                )
               : continueLab
-                ? "You’ve checked the concept. Run both modes and inspect how the database protects the business change."
+                ? t(
+                    "You’ve checked the concept. Run both modes and inspect how the database protects the business change.",
+                  )
                 : labDone
-                  ? "You’ve completed a lab. Explore another transaction concept."
-                  : "Discover how a tiny race condition can turn into a double payment."}
+                  ? t(
+                      "You’ve completed a lab. Explore another transaction concept.",
+                    )
+                  : t(
+                      "Discover how a tiny race condition can turn into a double payment.",
+                    )}
           </p>
           <Button asChild>
             <Link
@@ -90,25 +109,27 @@ export function Dashboard() {
               }
             >
               {pathComplete
-                ? "Revisit the sandbox"
+                ? t("Revisit the sandbox")
                 : continueLab
-                  ? "Continue to the lab"
+                  ? t("Continue to the lab")
                   : labDone
-                    ? "Explore a lesson"
-                    : "Pick up the lesson"}
+                    ? t("Explore a lesson")
+                    : t("Pick up the lesson")}
               <ArrowRight size={17} />
             </Link>
           </Button>
           <div className="continue-meta">
             {pathComplete ? (
               <>
-                <Check size={13} /> All {milestoneIds.length} milestones
-                complete
+                <Check size={13} />
+                {t(" All {0} milestones complete", [milestoneIds.length])}
               </>
             ) : (
               <>
-                <Clock size={13} /> About 15 minutes <span>•</span> Beginner
-                friendly
+                <Clock size={13} />
+                {t(" About 15 minutes ")}
+                <span>•</span>
+                {t(" Beginner friendly")}
               </>
             )}
           </div>
@@ -116,37 +137,37 @@ export function Dashboard() {
         <div className="continue-art" aria-hidden="true">
           <div className="art-callback a">
             {focusDeadlock
-              ? "transaction A"
+              ? t("transaction A")
               : focusLostUpdate
-                ? "request A"
-                : "callback A"}{" "}
+                ? t("request A")
+                : t("callback A")}{" "}
             <ArrowRight size={18} />
           </div>
           <div className="art-callback b">
             {focusDeadlock
-              ? "transaction B"
+              ? t("transaction B")
               : focusLostUpdate
-                ? "request B"
-                : "callback B"}{" "}
+                ? t("request B")
+                : t("callback B")}{" "}
             <ArrowRight size={18} />
           </div>
           <div className="art-db">
             <Database size={40} />
             <span>
               {focusDeadlock
-                ? "No cycle."
+                ? t("No cycle.")
                 : focusLostUpdate
-                  ? "Both updates."
-                  : "One effect."}
+                  ? t("Both updates.")
+                  : t("One effect.")}
             </span>
           </div>
           <span className="art-stamp">
             <Check size={17} />{" "}
             {focusDeadlock
-              ? "consistent locks"
+              ? t("consistent locks")
               : focusLostUpdate
-                ? "atomic increment"
-                : "idempotent"}
+                ? t("atomic increment")
+                : t("idempotent")}
           </span>
         </div>
       </section>
@@ -160,7 +181,7 @@ export function Dashboard() {
             }
             <span>/ {lessons.length}</span>
           </strong>
-          <span>Lessons completed</span>
+          <span>{t("Lessons completed")}</span>
         </div>
         <div>
           <FlaskConical size={20} />
@@ -168,7 +189,7 @@ export function Dashboard() {
             {completedLabs.length}
             <span>/ {labs.length}</span>
           </strong>
-          <span>Labs completed</span>
+          <span>{t("Labs completed")}</span>
         </div>
         <div>
           <GitBranch size={20} />
@@ -176,24 +197,25 @@ export function Dashboard() {
             {Math.round((count / milestoneIds.length) * 100)}
             <span>%</span>
           </strong>
-          <span>Path progress</span>
+          <span>{t("Path progress")}</span>
         </div>
       </div>
       <section>
         <div className="section-heading compact">
-          <h2>Your learning path</h2>
-          <span className="muted small">One good place to start</span>
+          <h2>{t("Your learning path")}</h2>
+          <span className="muted small">{t("One good place to start")}</span>
         </div>
         <div className="dashboard-path card">
           <span className="feature-icon mint">
             <Database size={26} />
           </span>
           <div>
-            <Badge tone="gray">DATABASE TRANSACTIONS</Badge>
-            <h3>Database Engineering</h3>
+            <Badge tone="gray">{t("DATABASE TRANSACTIONS")}</Badge>
+            <h3>{t("Database Engineering")}</h3>
             <p>
-              Concurrency, consistency, and the things that happen between
-              queries.
+              {t(
+                "Concurrency, consistency, and the things that happen between queries.",
+              )}
             </p>
             <div className="progress-track">
               <span
@@ -201,20 +223,24 @@ export function Dashboard() {
               />
             </div>
             <small>
-              {count} of {milestoneIds.length} milestones complete
+              {t("{0} of {1} milestones complete", [
+                count,
+                milestoneIds.length,
+              ])}
             </small>
           </div>
           <Button variant="outline" asChild>
             <Link href={pathHref}>
-              Explore path <ArrowUpRight size={16} />
+              {t("Explore path ")}
+              <ArrowUpRight size={16} />
             </Link>
           </Button>
         </div>
       </section>
       <section className="activity-section">
         <div className="section-heading compact">
-          <h2>Recent activity</h2>
-          <Badge tone="gray">ON THIS DEVICE</Badge>
+          <h2>{t("Recent activity")}</h2>
+          <Badge tone="gray">{t("ON THIS DEVICE")}</Badge>
         </div>
         {progress.activity.length ? (
           <div className="card activity-list">
@@ -231,14 +257,17 @@ export function Dashboard() {
                 </span>
                 <div>
                   <strong>
-                    {`${labs.find((lab) => lab.id === a.id)?.title ?? lessons.find((lesson) => lesson.id === a.id)?.title} completed`}
+                    {t("{0} completed", [
+                      labs.find((lab) => lab.id === a.id)?.title ??
+                        lessons.find((lesson) => lesson.id === a.id)?.title,
+                    ])}
                   </strong>
                   <p>
-                    {new Date(a.at).toLocaleDateString("en", {
+                    {new Date(a.at).toLocaleDateString(locale, {
                       month: "short",
                       day: "numeric",
                     })}{" "}
-                    · Keep building your understanding
+                    {t("· Keep building your understanding")}
                   </p>
                 </div>
                 <ChevronRight size={16} />
@@ -251,8 +280,12 @@ export function Dashboard() {
               <Lightbulb size={20} />
             </span>
             <div>
-              <strong>Your first “aha” goes here.</strong>
-              <p>Finish a checkpoint or a lab to start your learning story.</p>
+              <strong>{t("Your first “aha” goes here.")}</strong>
+              <p>
+                {t(
+                  "Finish a checkpoint or a lab to start your learning story.",
+                )}
+              </p>
             </div>
           </div>
         )}
@@ -260,53 +293,66 @@ export function Dashboard() {
       <div className="recommendation">
         <Lightbulb size={19} />
         <p>
-          <strong>A good next step:</strong>{" "}
+          <strong>{t("A good next step:")}</strong>{" "}
           {readyLab
-            ? `Continue with ${readyLab.title} and compare both execution strategies.`
+            ? t("Continue with {0} and compare both execution strategies.", [
+                readyLab.title,
+              ])
             : pathComplete
-              ? "Revisit Lost Update with a different write order, then compare the payment lab’s idempotency guarantee."
-              : "Complete a lesson checkpoint, then explore its interactive lab."}
+              ? t(
+                  "Revisit Lost Update with a different write order, then compare the payment lab’s idempotency guarantee.",
+                )
+              : t(
+                  "Complete a lesson checkpoint, then explore its interactive lab.",
+                )}
         </p>
       </div>
     </Workspace>
   );
 }
 export function LearningPath() {
+  const { t } = useLocale();
+
   const { progress } = useProgress();
   return (
     <Workspace>
       <div className="breadcrumb">
-        <Link href="/dashboard">My learning</Link>
+        <Link href="/dashboard">{t("My learning")}</Link>
         <ChevronRight size={13} />
-        Database Engineering
+        {t("Database Engineering")}
       </div>
       <div className="path-header">
         <span className="feature-icon mint">
           <Database size={28} />
         </span>
-        <Badge>LEARNING PATH · BEGINNER FRIENDLY</Badge>
-        <h1>Database Engineering</h1>
+        <Badge>{t("LEARNING PATH · BEGINNER FRIENDLY")}</Badge>
+        <h1>{t("Database Engineering")}</h1>
         <p>
-          Great systems start with trustworthy data. Explore what happens when
-          concurrent requests meet a database—and learn to make the outcome
-          predictable.
+          {t(
+            "Great systems start with trustworthy data. Explore what happens when concurrent requests meet a database—and learn to make the outcome predictable.",
+          )}
         </p>
         <div className="inline-meta">
           <span>
-            <BookOpen size={15} /> {lessons.length} lessons
+            <BookOpen size={15} /> {lessons.length}
+            {t(" lessons")}
           </span>
           <span>
-            <FlaskConical size={15} /> {labs.length} available labs
+            <FlaskConical size={15} /> {labs.length}
+            {t(" available labs")}
           </span>
           <span>
-            <Clock size={15} /> About 45 minutes
+            <Clock size={15} />
+            {t(" About 45 minutes")}
           </span>
         </div>
       </div>
       <div className="path-overview card">
         <div>
-          <strong>Database Transactions</strong>
-          <p>Your first chapter: concurrency, one experiment at a time.</p>
+          <strong>{t("Database Transactions")}</strong>
+          <p>
+            {t("Your first chapter: concurrency, one experiment at a time.")}
+          </p>
         </div>
         <div className="path-progress">
           <strong>
@@ -342,20 +388,20 @@ export function LearningPath() {
             </span>
             <div className="lesson-row-copy">
               <div className="lesson-tags">
-                <span className="eyebrow">{l.tag}</span>
-                {l.labHref && <Badge>INTERACTIVE LAB</Badge>}
+                <span className="eyebrow">{t(l.tag)}</span>
+                {l.labHref && <Badge>{t("INTERACTIVE LAB")}</Badge>}
               </div>
-              <h2>{l.title}</h2>
-              <p>{l.subtitle}</p>
+              <h2>{t(l.title)}</h2>
+              <p>{t(l.subtitle)}</p>
               <div className="lesson-meta">
                 <span>
                   <Clock size={13} />
-                  {l.duration}
+                  {t(l.duration)}
                 </span>
                 <span>
                   {l.labHref
-                    ? "Lesson + sandbox"
-                    : "Introduction · lab coming soon"}
+                    ? t("Lesson + sandbox")
+                    : t("Introduction · lab coming soon")}
                 </span>
               </div>
             </div>
@@ -367,16 +413,19 @@ export function LearningPath() {
         ))}
       </div>
       <div className="path-outcomes">
-        <h3>What you’ll walk away with</h3>
+        <h3>{t("What you’ll walk away with")}</h3>
         <div>
           <p>
-            <Check size={17} /> Spot race conditions hiding in everyday code
+            <Check size={17} />
+            {t(" Spot race conditions hiding in everyday code")}
           </p>
           <p>
-            <Check size={17} /> Explain what a transaction actually protects
+            <Check size={17} />
+            {t(" Explain what a transaction actually protects")}
           </p>
           <p>
-            <Check size={17} /> Design an idempotent payment handler
+            <Check size={17} />
+            {t(" Design an idempotent payment handler")}
           </p>
         </div>
       </div>
@@ -384,6 +433,8 @@ export function LearningPath() {
   );
 }
 function InteractiveExample({ slug }: { slug: string }) {
+  const { t } = useLocale();
+
   const [step, setStep] = useState(0);
   const content =
     slug === "lost-update"
@@ -413,7 +464,8 @@ function InteractiveExample({ slug }: { slug: string }) {
     <div className="interactive-example">
       <div className="example-top">
         <span className="eyebrow">
-          <FlaskConical size={15} /> FOLLOW THE INTERLEAVING
+          <FlaskConical size={15} />
+          {t(" FOLLOW THE INTERLEAVING")}
         </span>
         <span>
           {step + 1} / {content.length}
@@ -423,7 +475,7 @@ function InteractiveExample({ slug }: { slug: string }) {
         <span className="example-step">
           {String(step + 1).padStart(2, "0")}
         </span>
-        <p>{content[step]}</p>
+        <p>{t(content[step])}</p>
       </div>
       <div className="example-controls">
         <Button
@@ -432,89 +484,97 @@ function InteractiveExample({ slug }: { slug: string }) {
           onClick={() => setStep((s) => s + 1)}
           disabled={step === content.length - 1}
         >
-          Next step <ArrowRight size={14} />
+          {t("Next step ")}
+          <ArrowRight size={14} />
         </Button>
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setStep(0)}
-          aria-label="Reset example"
+          aria-label={t("Reset example")}
         >
           <RotateCcw size={15} />
-          Reset
+          {t("Reset")}
         </Button>
       </div>
     </div>
   );
 }
 export function Lesson({ slug }: { slug: string }) {
+  const { t } = useLocale();
+
   const index = lessons.findIndex((l) => l.id === slug);
   const lesson = lessons[index];
   if (!lesson) return null;
   return (
     <Workspace>
       <div className="breadcrumb">
-        <Link href={pathHref}>Database Transactions</Link>
+        <Link href={pathHref}>{t("Database Transactions")}</Link>
         <ChevronRight size={13} />
-        <span>Lesson {lesson.number}</span>
+        <span>
+          {t("Lesson ")}
+          {lesson.number}
+        </span>
       </div>
       <div className="lesson-layout">
         <article>
           <div className="lesson-heading">
-            <Badge>{lesson.tag.toUpperCase()}</Badge>
-            <h1>{lesson.title}</h1>
-            <p>{lesson.subtitle}</p>
+            <Badge>{t(lesson.tag).toUpperCase()}</Badge>
+            <h1>{t(lesson.title)}</h1>
+            <p>{t(lesson.subtitle)}</p>
             <div className="inline-meta">
               <span>
                 <Clock size={14} />
-                {lesson.duration}
+                {t(lesson.duration)}
               </span>
               <span>
-                <BookOpen size={14} /> Beginner friendly
+                <BookOpen size={14} />
+                {t(" Beginner friendly")}
               </span>
             </div>
           </div>
           <section className="lesson-section" id="the-concept">
-            <span className="eyebrow">01 · THE CONCEPT</span>
+            <span className="eyebrow">{t("01 · THE CONCEPT")}</span>
             <h2>
               {slug === "duplicate-payment"
-                ? "Retries are normal. Double payments aren’t."
+                ? t("Retries are normal. Double payments aren’t.")
                 : slug === "lost-update"
-                  ? "A read and a write leave room for a race."
-                  : "Two locks. One circular wait."}
+                  ? t("A read and a write leave room for a race.")
+                  : t("Two locks. One circular wait.")}
             </h2>
-            <p>{lesson.intro}</p>
+            <p>{t(lesson.intro)}</p>
             <div className="concept-callout">
               <Lightbulb size={20} />
-              <p>{lesson.example}</p>
+              <p>{t(lesson.example)}</p>
             </div>
           </section>
           <section className="lesson-section" id="try-it">
-            <span className="eyebrow">02 · SEE IT HAPPEN</span>
-            <h2>Slow things down. See the problem.</h2>
+            <span className="eyebrow">{t("02 · SEE IT HAPPEN")}</span>
+            <h2>{t("Slow things down. See the problem.")}</h2>
             <p>
-              Step through the requests to see where the two operations overlap.
+              {t(
+                "Step through the requests to see where the two operations overlap.",
+              )}
             </p>
             <InteractiveExample slug={slug} />
           </section>
           <section className="lesson-section" id="the-fix">
-            <span className="eyebrow">03 · THE ENGINEERING IDEA</span>
+            <span className="eyebrow">{t("03 · THE ENGINEERING IDEA")}</span>
             <h2>
               {slug === "duplicate-payment"
-                ? "Make the decision and the effect atomic."
-                : "Make concurrency part of the design."}
+                ? t("Make the decision and the effect atomic.")
+                : t("Make concurrency part of the design.")}
             </h2>
-            <p>{lesson.principle}</p>
+            <p>{t(lesson.principle)}</p>
             {slug === "duplicate-payment" && (
               <>
                 <pre className="code-block">
                   <code>{`BEGIN;\nINSERT INTO processed_payments (payment_id)\nVALUES ('pay_1042')\nON CONFLICT DO NOTHING\nRETURNING payment_id;\n\n-- Only when INSERT returns a row:\nINSERT INTO ledger (...);\nINSERT INTO outbox (...);\nCOMMIT;`}</code>
                 </pre>
                 <p className="small muted">
-                  Conceptual SQL. The unique constraint must be on payment_id.
-                  Only the transaction that claims the key makes the business
-                  writes. Outbox publication happens later, and delivery may
-                  repeat.
+                  {t(
+                    "Conceptual SQL. The unique constraint must be on payment_id. Only the transaction that claims the key makes the business writes. Outbox publication happens later, and delivery may repeat.",
+                  )}
                 </p>
               </>
             )}
@@ -534,18 +594,25 @@ export function Lesson({ slug }: { slug: string }) {
                 <FlaskConical size={26} />
               </span>
               <div>
-                <h3>Now, make it happen.</h3>
+                <h3>{t("Now, make it happen.")}</h3>
                 <p>
                   {slug === "lost-update"
-                    ? "Make two requests compete for one balance. Then preserve both increments."
+                    ? t(
+                        "Make two requests compete for one balance. Then preserve both increments.",
+                      )
                     : slug === "deadlock"
-                      ? "Inspect a circular wait. Then prevent it with a consistent lock order."
-                      : "Break a payment handler. Then protect it with atomic idempotency."}
+                      ? t(
+                          "Inspect a circular wait. Then prevent it with a consistent lock order.",
+                        )
+                      : t(
+                          "Break a payment handler. Then protect it with atomic idempotency.",
+                        )}
                 </p>
               </div>
               <Button asChild>
                 <Link href={lesson.labHref}>
-                  Launch sandbox <ArrowUpRight size={16} />
+                  {t("Launch sandbox ")}
+                  <ArrowUpRight size={16} />
                 </Link>
               </Button>
             </section>
@@ -553,13 +620,15 @@ export function Lesson({ slug }: { slug: string }) {
             <section className="unavailable-lab">
               <LockKeyhole size={23} />
               <div>
-                <h3>Interactive lab coming next</h3>
+                <h3>{t("Interactive lab coming next")}</h3>
                 <p>
-                  The introduction and checkpoint are available. Explore the
-                  learning path for available interactive labs.
+                  {t(
+                    "The introduction and checkpoint are available. Explore the learning path for available interactive labs.",
+                  )}
                 </p>
                 <Link className="text-link" href={pathHref}>
-                  Explore the available labs <ArrowRight size={15} />
+                  {t("Explore the available labs ")}
+                  <ArrowRight size={15} />
                 </Link>
               </div>
             </section>
@@ -568,33 +637,35 @@ export function Lesson({ slug }: { slug: string }) {
             <Link
               href={index > 0 ? `/lessons/${lessons[index - 1].id}` : pathHref}
             >
-              ← {index > 0 ? "Previous lesson" : "Back to path"}
+              ← {index > 0 ? t("Previous lesson") : t("Back to path")}
             </Link>
             {index < lessons.length - 1 && (
               <Link href={`/lessons/${lessons[index + 1].id}`}>
-                Next: {lessons[index + 1].title} <ArrowRight size={14} />
+                {t("Next: ")}
+                {t(lessons[index + 1].title)} <ArrowRight size={14} />
               </Link>
             )}
           </div>
         </article>
         <aside className="lesson-toc">
-          <span className="eyebrow muted">IN THIS LESSON</span>
+          <span className="eyebrow muted">{t("IN THIS LESSON")}</span>
           <a href="#the-concept">
-            01 <span>The concept</span>
+            01 <span>{t("The concept")}</span>
           </a>
           <a href="#try-it">
-            02 <span>See it happen</span>
+            02 <span>{t("See it happen")}</span>
           </a>
           <a href="#the-fix">
-            03 <span>The engineering idea</span>
+            03 <span>{t("The engineering idea")}</span>
           </a>
           <a href="#checkpoint">
-            04 <span>Check your understanding</span>
+            04 <span>{t("Check your understanding")}</span>
           </a>
           {lesson.labHref && (
             <Button asChild variant="outline" size="sm">
               <Link href={lesson.labHref}>
-                Launch sandbox <ArrowUpRight size={14} />
+                {t("Launch sandbox ")}
+                <ArrowUpRight size={14} />
               </Link>
             </Button>
           )}
@@ -604,20 +675,27 @@ export function Lesson({ slug }: { slug: string }) {
   );
 }
 export function Challenges() {
+  const { t } = useLocale();
+
   return (
     <Workspace>
       <div className="breadcrumb">
-        Your workspace <ChevronRight size={13} /> Challenges
+        {t("Your workspace ")}
+        <ChevronRight size={13} />
+        {t(" Challenges")}
       </div>
       <div className="page-heading">
         <div>
-          <span className="eyebrow">TEST YOUR MENTAL MODEL</span>
+          <span className="eyebrow">{t("TEST YOUR MENTAL MODEL")}</span>
           <h1>
-            A small challenge.
-            <br />A deeper understanding.
+            {t("A small challenge.")}
+            <br />
+            {t("A deeper understanding.")}
           </h1>
           <p>
-            Reason through the scenario. Every answer comes with an explanation.
+            {t(
+              "Reason through the scenario. Every answer comes with an explanation.",
+            )}
           </p>
         </div>
         <span className="feature-icon lavender">
@@ -628,9 +706,10 @@ export function Challenges() {
         {lessons.map((l) => (
           <div key={l.id}>
             <div className="challenge-label">
-              <Badge tone="gray">{l.tag}</Badge>
+              <Badge tone="gray">{t(l.tag)}</Badge>
               <Link className="text-link small" href={`/lessons/${l.id}`}>
-                Read the lesson <ArrowUpRight size={13} />
+                {t("Read the lesson ")}
+                <ArrowUpRight size={13} />
               </Link>
             </div>
             <Quiz

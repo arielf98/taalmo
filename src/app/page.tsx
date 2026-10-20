@@ -1,3 +1,5 @@
+"use client";
+import { useLocale } from "@/lib/locale";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -17,6 +19,8 @@ import { Button } from "@/components/ui/button";
 import { lessons, labs } from "@/content/lessons";
 import { ProductPreview } from "@/components/preview";
 export default function Home() {
+  const { t } = useLocale();
+
   return (
     <>
       <Header />
@@ -24,80 +28,85 @@ export default function Home() {
         <section className="hero page-width">
           <div className="hero-copy">
             <div className="hero-eyebrow">
-              <span className="status-dot" /> A playground for engineering minds{" "}
-              <Sparkles size={13} />
+              <span className="status-dot" />
+              {t(" A playground for engineering minds")} <Sparkles size={13} />
             </div>
             <h1>
-              Don’t just learn it.
+              {t("Don’t just learn it.")}
               <br />
-              <span>Make it happen.</span>
+              <span>{t("Make it happen.")}</span>
             </h1>
             <p className="hero-description">
-              The best way to understand a system?
+              {t("The best way to understand a system?")}
               <br />
-              Get your hands on it. Explore, experiment, and turn
-              <br className="desktop-break" /> complex concepts into your next{" "}
-              <em>aha</em> moment.
+              {t(
+                "Get your hands on it. Explore, experiment, and turn complex concepts into your next aha moment.",
+              )}
             </p>
             <div className="hero-actions">
               <Button asChild>
                 <Link href="/dashboard">
-                  Start learning <ArrowRight size={17} />
+                  {t("Start learning ")}
+                  <ArrowRight size={17} />
                 </Link>
               </Button>
               <Link className="text-link" href="/sandbox/duplicate-payment">
-                <FlaskConical size={18} /> Explore the sandbox{" "}
-                <ArrowUpRight size={15} />
+                <FlaskConical size={18} />
+                {t(" Explore the sandbox")} <ArrowUpRight size={15} />
               </Link>
             </div>
             <div className="hero-notes">
               <span>
-                <Check size={14} /> Learn by doing
+                <Check size={14} />
+                {t(" Learn by doing")}
               </span>
               <span>
-                <Check size={14} /> No setup needed
+                <Check size={14} />
+                {t(" No setup needed")}
               </span>
               <span>
-                <Check size={14} /> Free to explore
+                <Check size={14} />
+                {t(" Free to explore")}
               </span>
             </div>
           </div>
           <div className="hero-visual">
             <div className="floating-note">
-              <span>less watching,</span>
-              <strong>more “oh, that’s why.”</strong>
+              <span>{t("less watching,")}</span>
+              <strong>{t("more “oh, that’s why.”")}</strong>
               <MoveUpRight size={26} />
             </div>
             <ProductPreview />
           </div>
         </section>
         <div className="philosophy-strip">
-          <span>Built for the way engineers actually learn.</span>
+          <span>{t("Built for the way engineers actually learn.")}</span>
           <div>
-            <span>Learn</span>
+            <span>{t("Learn")}</span>
             <ArrowRight />
-            <span>Experiment</span>
+            <span>{t("Experiment")}</span>
             <ArrowRight />
-            <span>Break</span>
+            <span>{t("Break")}</span>
             <ArrowRight />
-            <span>Fix</span>
+            <span>{t("Fix")}</span>
             <ArrowRight />
-            <strong>Understand.</strong>
+            <strong>{t("Understand.")}</strong>
           </div>
         </div>
         <section className="how-section page-width" id="how-it-works">
           <div className="section-heading">
             <div>
-              <span className="eyebrow">UNDERSTANDING, UNLOCKED</span>
+              <span className="eyebrow">{t("UNDERSTANDING, UNLOCKED")}</span>
               <h2>
-                From “I’ve read about it”
+                {t("From “I’ve read about it”")}
                 <br />
-                to “I know how it works.”
+                {t("to “I know how it works.”")}
               </h2>
             </div>
             <p>
-              Short lessons. Real engineering problems.
-              <br />A safe space to try things and get them wrong.
+              {t("Short lessons. Real engineering problems.")}
+              <br />
+              {t("A safe space to try things and get them wrong.")}
             </p>
           </div>
           <div className="how-grid">
@@ -129,8 +138,8 @@ export default function Home() {
                   <item.Icon size={23} />
                 </div>
                 <span className="step-number">{item.n}</span>
-                <h3>{item.title}</h3>
-                <p>{item.text}</p>
+                <h3>{t(item.title)}</h3>
+                <p>{t(item.text)}</p>
               </div>
             ))}
           </div>
@@ -138,11 +147,12 @@ export default function Home() {
         <section className="paths-section page-width">
           <div className="section-heading">
             <div>
-              <span className="eyebrow">FOLLOW YOUR CURIOSITY</span>
-              <h2>Big ideas. Small steps.</h2>
+              <span className="eyebrow">{t("FOLLOW YOUR CURIOSITY")}</span>
+              <h2>{t("Big ideas. Small steps.")}</h2>
             </div>
             <Link className="text-link" href="/learn/database-transactions">
-              Explore learning paths <ArrowUpRight size={16} />
+              {t("Explore learning paths ")}
+              <ArrowUpRight size={16} />
             </Link>
           </div>
           <div className="path-preview-grid">
@@ -154,16 +164,20 @@ export default function Home() {
                 <span className="feature-icon mint">
                   <Database size={23} />
                 </span>
-                <Badge>START HERE</Badge>
+                <Badge>{t("START HERE")}</Badge>
               </div>
-              <h3>Database Engineering</h3>
+              <h3>{t("Database Engineering")}</h3>
               <p>
-                Go beyond queries. Understand what happens when data meets the
-                real world.
+                {t(
+                  "Go beyond queries. Understand what happens when data meets the real world.",
+                )}
               </p>
               <div className="path-card-bottom">
                 <span>
-                  {lessons.length} lessons · {labs.length} interactive labs
+                  {lessons.length}
+                  {t(" lessons · ")}
+                  {labs.length}
+                  {t(" interactive labs")}
                 </span>
                 <ArrowUpRight size={22} />
               </div>
@@ -173,15 +187,16 @@ export default function Home() {
                 <span className="feature-icon lavender">
                   <Network size={23} />
                 </span>
-                <Badge tone="gray">ON THE HORIZON</Badge>
+                <Badge tone="gray">{t("ON THE HORIZON")}</Badge>
               </div>
-              <h3>System Design</h3>
+              <h3>{t("System Design")}</h3>
               <p>
-                Explore the trade-offs behind systems that scale, bend, and
-                sometimes break.
+                {t(
+                  "Explore the trade-offs behind systems that scale, bend, and sometimes break.",
+                )}
               </p>
               <div className="path-card-bottom">
-                <span>In the learning roadmap</span>
+                <span>{t("In the learning roadmap")}</span>
               </div>
             </div>
             <div className="path-preview coming-soon">
@@ -189,29 +204,31 @@ export default function Home() {
                 <span className="feature-icon peach">
                   <Braces size={23} />
                 </span>
-                <Badge tone="gray">ON THE HORIZON</Badge>
+                <Badge tone="gray">{t("ON THE HORIZON")}</Badge>
               </div>
-              <h3>Backend Foundations</h3>
+              <h3>{t("Backend Foundations")}</h3>
               <p>
-                Follow a request from the API to the queue, and every
-                interesting stop in between.
+                {t(
+                  "Follow a request from the API to the queue, and every interesting stop in between.",
+                )}
               </p>
               <div className="path-card-bottom">
-                <span>In the learning roadmap</span>
+                <span>{t("In the learning roadmap")}</span>
               </div>
             </div>
           </div>
         </section>
         <section className="landing-cta page-width">
-          <span className="eyebrow">CURIOSITY IS ALL YOU NEED</span>
-          <h2>Your next “aha” is waiting.</h2>
-          <p>Start with one lesson. Leave with a better mental model.</p>
+          <span className="eyebrow">{t("CURIOSITY IS ALL YOU NEED")}</span>
+          <h2>{t("Your next “aha” is waiting.")}</h2>
+          <p>{t("Start with one lesson. Leave with a better mental model.")}</p>
           <Button asChild>
             <Link href="/dashboard">
-              Let’s learn something <ArrowRight size={17} />
+              {t("Let’s learn something ")}
+              <ArrowRight size={17} />
             </Link>
           </Button>
-          <span className="cta-scribble">Make learning come alive.</span>
+          <span className="cta-scribble">{t("Make learning come alive.")}</span>
         </section>
       </main>
       <Footer />

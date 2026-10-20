@@ -1,4 +1,6 @@
 "use client";
+import { useLocale, localizedFlowLabels } from "@/lib/locale";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
@@ -47,82 +49,89 @@ const money = (value: number) =>
   );
 
 export function LostUpdateSandbox() {
+  const { t } = useLocale();
+
   const [mode, setMode] = useState<LostUpdateConfig["mode"]>("unsafe");
   const [order, setOrder] = useState<LostUpdateConfig["order"]>("A-first");
   const [initialBalance, setInitialBalance] = useState(10000);
   return (
     <Workspace wide>
       <div className="breadcrumb">
-        <Link href={pathHref}>Database Transactions</Link>
+        <Link href={pathHref}>{t("Database Transactions")}</Link>
         <ChevronRight size={13} />
-        <Link href="/lessons/lost-update">Lost Update</Link>
+        <Link href="/lessons/lost-update">{t("Lost Update")}</Link>
         <ChevronRight size={13} />
-        Sandbox
+        {t("Sandbox")}
       </div>
       <div className="sandbox-heading">
         <div>
           <div className="inline-meta">
             <Badge>
-              <FlaskConical size={12} /> INTERACTIVE LAB
+              <FlaskConical size={12} />
+              {t(" INTERACTIVE LAB")}
             </Badge>
-            <span className="small muted">Experiment 02</span>
+            <span className="small muted">{t("Experiment 02")}</span>
           </div>
-          <h1>Two updates. One missing change.</h1>
+          <h1>{t("Two updates. One missing change.")}</h1>
           <p>
-            Request A adds $20. Request B adds $30. Will both changes survive?
+            {t(
+              "Request A adds $20. Request B adds $30. Will both changes survive?",
+            )}
           </p>
         </div>
         <Link className="text-link small" href="/lessons/lost-update">
           <BookOpen size={16} />
-          Back to lesson
+          {t("Back to lesson")}
         </Link>
       </div>
       <div className="simulation-notice">
         <Info size={16} />
         <span>
-          This deterministic simulation models same-row updates at Read
-          Committed. Balances use integer cents; no real PostgreSQL server,
-          money movement, or measured runtime performance is involved.
+          {t(
+            "This deterministic simulation models same-row updates at Read Committed. Balances use integer cents; no real PostgreSQL server, money movement, or measured runtime performance is involved.",
+          )}
         </span>
       </div>
       <div className="experiment-config">
         <div>
-          <span className="control-label">UPDATE STRATEGY</span>
+          <span className="control-label">{t("UPDATE STRATEGY")}</span>
           <div className="mode-toggle light">
             <button
               aria-pressed={mode === "unsafe"}
               onClick={() => setMode("unsafe")}
             >
-              <AlertTriangle size={15} /> Unsafe
+              <AlertTriangle size={15} />
+              {t(" Unsafe")}
             </button>
             <button
               aria-pressed={mode === "atomic"}
               onClick={() => setMode("atomic")}
             >
-              <ShieldCheck size={15} /> Atomic increment
+              <ShieldCheck size={15} />
+              {t(" Atomic increment")}
             </button>
           </div>
         </div>
         <label className="amount-control">
-          <span className="control-label">INITIAL BALANCE</span>
+          <span className="control-label">{t("INITIAL BALANCE")}</span>
           <select
             value={initialBalance}
             onChange={(e) => setInitialBalance(Number(e.target.value))}
           >
-            <option value={10000}>$100.00 USD</option>
-            <option value={20000}>$200.00 USD</option>
+            <option value={10000}>{t("$100.00 USD")}</option>
+            <option value={20000}>{t("$200.00 USD")}</option>
           </select>
         </label>
         <label className="amount-control">
-          <span className="control-label">WRITE ORDER</span>
+          <span className="control-label">{t("WRITE ORDER")}</span>
           <select
             value={order}
             onChange={(e) =>
               setOrder(e.target.value as LostUpdateConfig["order"])
             }
           >
-            <option value="A-first">A then B</option>
-            <option value="B-first">B then A</option>
+            <option value="A-first">{t("A then B")}</option>
+            <option value="B-first">{t("B then A")}</option>
           </select>
         </label>
       </div>
@@ -149,12 +158,14 @@ function LostUpdateDiagram({
   onSelect: (id: string) => void;
   active?: RequestId;
 }) {
+  const { t } = useLocale();
+
   const requests: Node[] = (["A", "B"] as const).map((id, index) => ({
     id,
     position: { x: 0, y: index * 230 },
     sourcePosition: Position.Right,
     draggable: false,
-    ariaLabel: `Inspect request ${id}`,
+    ariaLabel: t("Inspect request {0}", [id]),
     className: `system-node ${selected === id ? "node-selected" : ""}`,
     data: {
       label: (
@@ -162,14 +173,20 @@ function LostUpdateDiagram({
           <div className="node-icon node-icon-api">
             <Server size={23} />
           </div>
-          <strong>Request {id}</strong>
-          <span>Add {id === "A" ? "$20.00" : "$30.00"}</span>
+          <strong>
+            {t("Request ")}
+            {id}
+          </strong>
+          <span>
+            {t("Add ")}
+            {id === "A" ? "$20.00" : "$30.00"}
+          </span>
           <small>
-            {state.requests[id].status}
+            {t(state.requests[id].status)}
             <br />
-            read:{" "}
+            {t("read:")}{" "}
             {state.requests[id].readBalance === null
-              ? "not read"
+              ? t("not read")
               : money(state.requests[id].readBalance)}
           </small>
         </div>
@@ -181,7 +198,7 @@ function LostUpdateDiagram({
     position: { x: 320, y: 115 },
     targetPosition: Position.Left,
     draggable: false,
-    ariaLabel: "Inspect account row",
+    ariaLabel: t("Inspect account row"),
     className: `system-node ${selected === "row" ? "node-selected" : ""}`,
     data: {
       label: (
@@ -189,12 +206,15 @@ function LostUpdateDiagram({
           <div className="node-icon">
             <Database size={23} />
           </div>
-          <strong>Account row</strong>
-          <span>Committed balance: {money(state.balance)}</span>
+          <strong>{t("Account row")}</strong>
+          <span>
+            {t("Committed balance: ")}
+            {money(state.balance)}
+          </span>
           <small>
             {state.lockOwner
-              ? `Lock held by ${state.lockOwner}`
-              : "No row lock held"}
+              ? t("Lock held by {0}", [state.lockOwner])
+              : t("No row lock held")}
           </small>
         </div>
       ),
@@ -206,7 +226,7 @@ function LostUpdateDiagram({
     target: "row",
     type: "smoothstep",
     animated: active === id,
-    label: `request ${id}`,
+    label: t("request {0}", [id]),
     style: { stroke: active === id ? "#9de9d8" : "#637a7b", strokeWidth: 1.5 },
     labelStyle: { fill: "#b7c9c4", fontSize: 11 },
     labelBgStyle: { fill: "#172d35" },
@@ -215,9 +235,10 @@ function LostUpdateDiagram({
     <div
       className="architecture"
       role="region"
-      aria-label="Interactive account update architecture"
+      aria-label={t("Interactive account update architecture")}
     >
       <ReactFlow
+        ariaLabelConfig={localizedFlowLabels(t)}
         nodes={[...requests, row]}
         edges={edges}
         fitView
@@ -238,12 +259,15 @@ function LostUpdateDiagram({
         <Controls showInteractive={false} />
       </ReactFlow>
       <div className="diagram-caption">
-        <span className="status-dot" /> SIMULATED ENVIRONMENT
+        <span className="status-dot" />
+        {t(" SIMULATED ENVIRONMENT")}
       </div>
     </div>
   );
 }
 function LostUpdateExperiment({ config }: { config: LostUpdateConfig }) {
+  const { t } = useLocale();
+
   const [sim, setSim] = useState(() =>
     createSimulation(lostUpdateScenario(config)),
   );
@@ -300,12 +324,12 @@ function LostUpdateExperiment({ config }: { config: LostUpdateConfig }) {
           <div className="panel-heading">
             <div>
               <span className="status-dot" />
-              <h2>Concurrent account updates</h2>
+              <h2>{t("Concurrent account updates")}</h2>
             </div>
             <Badge tone="gray">
               {historyStep === null
-                ? "LIVE STATE"
-                : `HISTORY · STEP ${historyStep}`}
+                ? t("LIVE STATE")
+                : t("HISTORY · STEP {0}", [historyStep])}
             </Badge>
           </div>
           <LostUpdateDiagram
@@ -321,7 +345,7 @@ function LostUpdateExperiment({ config }: { config: LostUpdateConfig }) {
                 disabled={finished || playing}
               >
                 <Play size={15} fill="currentColor" />
-                Run simulation
+                {t("Run simulation")}
               </Button>
               <Button
                 variant="outline"
@@ -330,7 +354,7 @@ function LostUpdateExperiment({ config }: { config: LostUpdateConfig }) {
                 disabled={finished || playing}
               >
                 <SkipForward size={16} />
-                Step forward
+                {t("Step forward")}
               </Button>
               {playing && (
                 <Button
@@ -339,7 +363,7 @@ function LostUpdateExperiment({ config }: { config: LostUpdateConfig }) {
                   onClick={() => setPlaying(false)}
                 >
                   <Square size={14} />
-                  Pause
+                  {t("Pause")}
                 </Button>
               )}
             </div>
@@ -347,8 +371,8 @@ function LostUpdateExperiment({ config }: { config: LostUpdateConfig }) {
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="Replay execution"
-                title="Replay execution"
+                aria-label={t("Replay execution")}
+                title={t("Replay execution")}
                 onClick={replay}
                 disabled={playing || sim.cursor === 0}
               >
@@ -357,8 +381,8 @@ function LostUpdateExperiment({ config }: { config: LostUpdateConfig }) {
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="Reset experiment"
-                title="Reset experiment"
+                aria-label={t("Reset experiment")}
+                title={t("Reset experiment")}
                 onClick={reset}
               >
                 <RotateCcw size={17} />
@@ -374,18 +398,22 @@ function LostUpdateExperiment({ config }: { config: LostUpdateConfig }) {
               />
             </div>
             <span>
-              {sim.cursor} / {sim.scenario.events.length} events
+              {sim.cursor} / {sim.scenario.events.length}
+              {t(" events")}
             </span>
           </div>
           <div className="callback-strip">
             {(["A", "B"] as const).map((id) => (
               <div key={id}>
                 <span className={`callback-tag callback-${id}`}>{id}</span>
-                <span>Request {id}</span>
+                <span>
+                  {t("Request ")}
+                  {id}
+                </span>
                 <strong
                   className={`callback-status status-${state.requests[id].status}`}
                 >
-                  {state.requests[id].status}
+                  {t(state.requests[id].status)}
                 </strong>
               </div>
             ))}
@@ -393,52 +421,62 @@ function LostUpdateExperiment({ config }: { config: LostUpdateConfig }) {
           <div className="node-inspector">
             <div>
               <span className="eyebrow">
-                <Database size={14} /> INSPECT:{" "}
-                {selected === "row" ? "ACCOUNT ROW" : `REQUEST ${selected}`}
+                <Database size={14} />
+                {t(" INSPECT:")}{" "}
+                {selected === "row"
+                  ? t("ACCOUNT ROW")
+                  : t("REQUEST {0}", [selected])}
               </span>
               <select
-                aria-label="Inspect system component"
+                aria-label={t("Inspect system component")}
                 value={selected}
                 onChange={(e) => setSelected(e.target.value)}
               >
-                <option value="row">Account row</option>
-                <option value="A">Request A</option>
-                <option value="B">Request B</option>
+                <option value="row">{t("Account row")}</option>
+                <option value="A">{t("Request A")}</option>
+                <option value="B">{t("Request B")}</option>
               </select>
             </div>
             <p>
               {selected === "row"
-                ? "Only committed writes change the shared balance below. In atomic mode a waiting request cannot increment the row until the current lock owner commits."
-                : "Compare the value this request read with the current committed balance. A replacement computed from an old read can discard another request’s increment."}
+                ? t(
+                    "Only committed writes change the shared balance below. In atomic mode a waiting request cannot increment the row until the current lock owner commits.",
+                  )
+                : t(
+                    "Compare the value this request read with the current committed balance. A replacement computed from an old read can discard another request’s increment.",
+                  )}
             </p>
             <dl className="state-values">
               <div>
-                <dt>committed balance</dt>
+                <dt>{t("committed balance")}</dt>
                 <dd>{money(state.balance)}</dd>
               </div>
               <div>
-                <dt>lock owner</dt>
-                <dd>{state.lockOwner ?? "none"}</dd>
+                <dt>{t("lock owner")}</dt>
+                <dd>{state.lockOwner ?? t("none")}</dd>
               </div>
               {request && (
                 <>
                   <div>
-                    <dt>value read by {selected}</dt>
+                    <dt>
+                      {t("value read by ")}
+                      {selected}
+                    </dt>
                     <dd>
                       {request.readBalance === null
-                        ? "not read"
+                        ? t("not read")
                         : money(request.readBalance)}
                     </dd>
                   </div>
                   <div>
                     <dt>
                       {request.status === "staged"
-                        ? "uncommitted balance"
-                        : "calculated replacement"}
+                        ? t("uncommitted balance")
+                        : t("calculated replacement")}
                     </dt>
                     <dd>
                       {request.proposedBalance === null
-                        ? "not calculated"
+                        ? t("not calculated")
                         : money(request.proposedBalance)}
                     </dd>
                   </div>
@@ -451,28 +489,32 @@ function LostUpdateExperiment({ config }: { config: LostUpdateConfig }) {
           <div className="panel-heading">
             <div>
               <Terminal size={16} />
-              <h2>Execution timeline</h2>
+              <h2>{t("Execution timeline")}</h2>
             </div>
-            <span className="small muted">Logical order</span>
+            <span className="small muted">{t("Logical order")}</span>
           </div>
           {sim.cursor === 0 ? (
             <div className="timeline-empty">
               <span className="feature-icon mint">
                 <Play size={22} />
               </span>
-              <h3>Watch the overlap.</h3>
+              <h3>{t("Watch the overlap.")}</h3>
               <p>
-                Step through both requests. Compare their read values before
-                either writes.
+                {t(
+                  "Step through both requests. Compare their read values before either writes.",
+                )}
               </p>
-              <span className="code-hint">account_id: acct_01</span>
+              <span className="code-hint">{t("account_id: acct_01")}</span>
             </div>
           ) : (
             <ol className="timeline-list">
               {sim.history.slice(1).map((snapshot) => (
                 <li key={snapshot.step}>
                   <button
-                    aria-label={`Inspect step ${snapshot.step}: ${snapshot.event!.label}`}
+                    aria-label={t("Inspect step {0}: {1}", [
+                      snapshot.step,
+                      snapshot.event!.label,
+                    ])}
                     aria-pressed={view.step === snapshot.step}
                     className={view.step === snapshot.step ? "selected" : ""}
                     onClick={() => setHistoryStep(snapshot.step)}
@@ -482,14 +524,14 @@ function LostUpdateExperiment({ config }: { config: LostUpdateConfig }) {
                     </span>
                     <div>
                       <div className="timeline-item-title">
-                        <strong>{snapshot.event!.label}</strong>
+                        <strong>{t(snapshot.event!.label)}</strong>
                         <span
                           className={`callback-tag callback-${snapshot.event!.request}`}
                         >
                           {snapshot.event!.request}
                         </span>
                       </div>
-                      <p>{snapshot.event!.detail}</p>
+                      <p>{t(snapshot.event!.detail)}</p>
                     </div>
                   </button>
                 </li>
@@ -501,7 +543,8 @@ function LostUpdateExperiment({ config }: { config: LostUpdateConfig }) {
               className="return-live"
               onClick={() => setHistoryStep(null)}
             >
-              Return to current state <ArrowRight size={14} />
+              {t("Return to current state ")}
+              <ArrowRight size={14} />
             </button>
           )}
         </section>
@@ -509,24 +552,28 @@ function LostUpdateExperiment({ config }: { config: LostUpdateConfig }) {
       <section className="state-section">
         <div className="section-heading compact">
           <div>
-            <span className="eyebrow">READS, WRITES, AND WHAT SURVIVES</span>
-            <h2>Follow the balance.</h2>
+            <span className="eyebrow">
+              {t("READS, WRITES, AND WHAT SURVIVES")}
+            </span>
+            <h2>{t("Follow the balance.")}</h2>
           </div>
           <div className="mode-toggle light small-tabs">
             <button aria-pressed={!raw} onClick={() => setRaw(false)}>
               <Database size={14} />
-              Records
+              {t("Records")}
             </button>
             <button aria-pressed={raw} onClick={() => setRaw(true)}>
               <Code2 size={15} />
-              Raw state
+              {t("Raw state")}
             </button>
           </div>
         </div>
         {historyStep !== null && (
           <p className="history-notice">
             <Info size={15} />
-            Inspecting step {historyStep}. These are historical values.
+            {t("Inspecting step ")}
+            {historyStep}
+            {t(". These are historical values.")}
           </p>
         )}
         {raw ? (
@@ -539,43 +586,44 @@ function LostUpdateExperiment({ config }: { config: LostUpdateConfig }) {
               <div className="panel-heading">
                 <div>
                   <Database size={17} />
-                  <h3>Shared account</h3>
+                  <h3>{t("Shared account")}</h3>
                 </div>
-                <Badge tone="gray">acct_01</Badge>
+                <Badge tone="gray">{t("acct_01")}</Badge>
               </div>
               <dl className="balance-summary">
                 <div>
-                  <dt>Current committed balance</dt>
+                  <dt>{t("Current committed balance")}</dt>
                   <dd>{money(state.balance)}</dd>
                 </div>
                 <div>
-                  <dt>Expected after both increments</dt>
+                  <dt>{t("Expected after both increments")}</dt>
                   <dd>{money(expected)}</dd>
                 </div>
               </dl>
               <div className="table-footer">
-                Initial balance <strong>{money(config.initialBalance)}</strong>
+                {t("Initial balance ")}
+                <strong>{money(config.initialBalance)}</strong>
               </div>
             </div>
             <div className="record-panel card">
               <div className="panel-heading">
                 <div>
                   <BookOpen size={17} />
-                  <h3>Committed writes</h3>
+                  <h3>{t("Committed writes")}</h3>
                 </div>
                 <span className="record-count">{state.writes.length}</span>
               </div>
               <div className="table-scroll">
                 <table>
                   <caption className="sr-only">
-                    Committed account updates
+                    {t("Committed account updates")}
                   </caption>
                   <thead>
                     <tr>
-                      <th>REQUEST</th>
-                      <th>BEFORE</th>
-                      <th>AFTER</th>
-                      <th>INTENDED ADD</th>
+                      <th>{t("REQUEST")}</th>
+                      <th>{t("BEFORE")}</th>
+                      <th>{t("AFTER")}</th>
+                      <th>{t("INTENDED ADD")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -597,10 +645,10 @@ function LostUpdateExperiment({ config }: { config: LostUpdateConfig }) {
                 </table>
               </div>
               {!state.writes.length && (
-                <p className="table-empty">No committed writes yet.</p>
+                <p className="table-empty">{t("No committed writes yet.")}</p>
               )}
               <div className="table-footer">
-                Two successful writes can still lose an update.
+                {t("Two successful writes can still lose an update.")}
               </div>
             </div>
           </div>
@@ -620,26 +668,30 @@ function LostUpdateExperiment({ config }: { config: LostUpdateConfig }) {
           </span>
           <div>
             <span className="eyebrow">
-              EXPERIMENT RESULT · {config.mode.toUpperCase()}
+              {t("EXPERIMENT RESULT · ")}
+              {t(config.mode).toUpperCase()}
             </span>
             <h2>
               {sim.result.outcome === "safe"
-                ? "Both updates preserved."
-                : "An update was lost."}
+                ? t("Both updates preserved.")
+                : t("An update was lost.")}
             </h2>
             <p>
               <strong>
-                Expected {money(sim.result.expected)}. Actual{" "}
-                {money(sim.result.actual)}.
+                {t("Expected ")}
+                {money(sim.result.expected)}
+                {t(". Actual")} {money(sim.result.actual)}.
               </strong>
               {sim.result.lostAmount > 0 &&
-                ` Missing increment: ${money(sim.result.lostAmount)}.`}
+                t(" Missing increment: {0}.", [money(sim.result.lostAmount)])}
             </p>
-            <p>{sim.result.explanation}</p>
+            <p>{t(sim.result.explanation)}</p>
             {config.mode === "unsafe" && (
               <p className="result-next">
                 <ArrowRight size={16} />
-                Reverse the write order, then try Atomic increment and compare.
+                {t(
+                  "Reverse the write order, then try Atomic increment and compare.",
+                )}
               </p>
             )}
           </div>
@@ -647,17 +699,19 @@ function LostUpdateExperiment({ config }: { config: LostUpdateConfig }) {
       )}
       {saveError && (
         <p className="save-error" role="alert">
-          Your browser could not save this experiment. Enable local storage to
-          retain progress.
+          {t(
+            "Your browser could not save this experiment. Enable local storage to retain progress.",
+          )}
         </p>
       )}
       <section className="lab-reflection">
         <div>
-          <span className="eyebrow">FROM REPLACEMENT TO OPERATION</span>
-          <h2>Let the database do the addition.</h2>
+          <span className="eyebrow">{t("FROM REPLACEMENT TO OPERATION")}</span>
+          <h2>{t("Let the database do the addition.")}</h2>
           <p>
-            An atomic UPDATE changes the current row. A stale replacement just
-            repeats a calculation made earlier.
+            {t(
+              "An atomic UPDATE changes the current row. A stale replacement just repeats a calculation made earlier.",
+            )}
           </p>
           <pre className="code-block">
             <code>
@@ -667,12 +721,13 @@ function LostUpdateExperiment({ config }: { config: LostUpdateConfig }) {
             </code>
           </pre>
           <p className="small">
-            Conceptual SQL for request A. Atomic increments prevent lost
-            updates; deduplicating retries is a separate problem.
+            {t(
+              "Conceptual SQL for request A. Atomic increments prevent lost updates; deduplicating retries is a separate problem.",
+            )}
           </p>
           <Link className="text-link small" href="/lessons/lost-update">
             <ArrowLeft size={14} />
-            Revisit the concept
+            {t("Revisit the concept")}
           </Link>
         </div>
         {learnedBoth ? (
@@ -680,10 +735,11 @@ function LostUpdateExperiment({ config }: { config: LostUpdateConfig }) {
         ) : (
           <div className="quiz-unlock card">
             <ShieldCheck size={28} />
-            <h3>Explore both update strategies.</h3>
+            <h3>{t("Explore both update strategies.")}</h3>
             <p>
-              Finish an unsafe run and an atomic increment run in this lab to
-              unlock the final checkpoint.
+              {t(
+                "Finish an unsafe run and an atomic increment run in this lab to unlock the final checkpoint.",
+              )}
             </p>
             <div>
               <span>
@@ -692,7 +748,7 @@ function LostUpdateExperiment({ config }: { config: LostUpdateConfig }) {
                 ) : (
                   <span className="empty-check" />
                 )}{" "}
-                Unsafe experiment
+                {t("Unsafe experiment")}
               </span>
               <span>
                 {progress.experiments.includes("lost-update:atomic") ? (
@@ -700,7 +756,7 @@ function LostUpdateExperiment({ config }: { config: LostUpdateConfig }) {
                 ) : (
                   <span className="empty-check" />
                 )}{" "}
-                Atomic increment experiment
+                {t("Atomic increment experiment")}
               </span>
             </div>
           </div>

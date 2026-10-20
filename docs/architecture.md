@@ -1,11 +1,11 @@
 # Architecture
 
-Taalmo is a single Next.js application. Pages are server entry points with interactive client components. The domain engine imports no React, browser, network, or database code.
+Taalmo is a single Next.js application. Route metadata stays on server entry points; localized screens use client components. The domain engine imports no React, browser, network, or database code.
 
 ## Boundaries
 
 - **Routing:** `/`, `/dashboard`, `/learn/database-transactions`, `/lessons/[slug]`, `/challenges`, `/sandbox/duplicate-payment`, `/sandbox/lost-update`, `/sandbox/deadlock`. Unknown lessons return 404.
-- **Content:** `src/content/lessons.ts` defines stable lesson IDs, concept text, examples, quiz options, answers, explanations, and per-lesson lab routes and a catalog of lab milestones. Interface copy is in components; a full translation dictionary is a later milestone.
+- **Content:** `src/content/lessons.ts` defines stable lesson IDs, concept text, examples, quiz options, answers, explanations, and per-lesson lab routes and a catalog of lab milestones. English source copy stays in content, components, and deterministic scenario definitions. `src/content/messages/` provides Indonesian dictionaries; `messages.ts` handles translation and placeholder interpolation at render time.
 - **Simulation:** `src/lib/simulation/engine.ts` handles step/run/history. `payment.ts`, `lost-update.ts`, and `deadlock.ts` define scenario schedules, transitions, configuration validation, and evaluation.
 - **UI:** `Architecture` maps explicit state to React Flow nodes. `Experiment` controls execution, historical inspection, and replay. Tables display committed rows only; staged writes are visible separately in the inspector and raw state.
 - **Persistence:** `progressRepository` owns localStorage access. `useProgress` subscribes via `useSyncExternalStore` for consistent browser/server rendering and updates across tabs. Stored content is parsed and validated. Reads recover from corrupt data; writes return success/failure and the UI reports failures.
@@ -16,13 +16,19 @@ The versioned key `taalmo.progress.v1` stores checkpoint IDs, recent completion 
 
 An eventual PostgreSQL repository must associate records with authenticated users and support asynchronous loading, conflict resolution, migrations, and server-side validation. The current repository boundary is deliberately small; it does not pretend a localStorage API can drop into a remote database unchanged.
 
+## Localization
+
+`useLocale` subscribes through `useSyncExternalStore` to a validated `en` / `id` preference stored separately at `taalmo.locale.v1`. It handles same-tab and cross-tab updates, storage removal, and an in-memory fallback when persistence is blocked. `LocaleDocument` updates the document language. English server snapshots match initial hydration; browser preferences apply afterward. Static metadata remains English; there are no locale-specific routes.
+
+Components translate display copy without changing keys, progress IDs, quiz answer indexes, or simulation state. English event labels/details remain in historical snapshots: the translator matches authored placeholder templates when rendering dynamic event messages. New source copy falls back to English until a dictionary entry is supplied. SQL, raw state, identifiers, and fixed USD examples retain their original representation. Native language controls, diagram controls, accessible labels, and activity dates follow the preference.
+
 ## Add a lesson
 
 1. Add a stable ID and English content to `lessons.ts`; set `labHref` to a working lab route or `null`.
 2. Register an available lab in `labs` with its completion ID, lesson ID, route, title, and experiment-mode IDs. Progress validation and milestone totals derive from this catalog.
 3. Add the interleaving example to `InteractiveExample`, or provide a dedicated example when it needs different controls.
 4. Available labs need an explicit route/action. Do not mark a lab available until implemented.
-5. Add a knowledge question with feedback and review navigation and new stateful behavior in code, following `AGENTS.md`.
+5. Add a knowledge question with feedback and Indonesian dictionary entries for new learner-facing copy, including event templates with numbered placeholders. Review navigation and new stateful behavior in code, following `AGENTS.md`.
 
 `generateStaticParams` includes content IDs automatically. Launch actions use each lesson’s `labHref`. The dashboard continues to an incomplete lab whose lesson checkpoint has been completed, then to other lessons.
 

@@ -1,4 +1,6 @@
 "use client";
+import { useLocale } from "@/lib/locale";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSyncExternalStore } from "react";
@@ -21,7 +23,31 @@ const themeSubscribe = (fn: () => void) => {
   window.addEventListener("taalmo-theme", fn);
   return () => window.removeEventListener("taalmo-theme", fn);
 };
+function LanguageSelect() {
+  const { locale, t, setLocale } = useLocale();
+  return (
+    <label className="language-control">
+      <span className="sr-only">{t("Choose language")}</span>
+      <select
+        value={locale}
+        onChange={(event) => {
+          const next = event.target.value;
+          if (next === "en" || next === "id") setLocale(next);
+        }}
+      >
+        <option value="en" lang="en">
+          English
+        </option>
+        <option value="id" lang="id">
+          Indonesia
+        </option>
+      </select>
+    </label>
+  );
+}
 export function ThemeToggle() {
+  const { t } = useLocale();
+
   const theme = useSyncExternalStore(
     themeSubscribe,
     () => document.documentElement.dataset.theme ?? "light",
@@ -31,7 +57,7 @@ export function ThemeToggle() {
     <Button
       variant="ghost"
       size="icon"
-      aria-label="Toggle theme"
+      aria-label={t("Toggle theme")}
       onClick={() => {
         const next = theme === "dark" ? "light" : "dark";
         document.documentElement.dataset.theme = next;
@@ -46,46 +72,53 @@ export function ThemeToggle() {
   );
 }
 export function Logo() {
+  const { t } = useLocale();
+
   return (
-    <Link href="/" className="logo" aria-label="Taalmo home">
+    <Link href="/" className="logo" aria-label={t("Taalmo home")}>
       <span className="logo-mark">
         <Sprout size={24} strokeWidth={2.3} />
       </span>
-      taalmo<span className="logo-dot">.</span>
+      {t("taalmo")}
+      <span className="logo-dot">.</span>
     </Link>
   );
 }
 export function Header() {
+  const { t } = useLocale();
+
   const pathname = usePathname();
   return (
     <header className="site-header">
       <div className="header-inner">
         <Logo />
-        <nav aria-label="Main navigation">
+        <nav aria-label={t("Main navigation")}>
           <Link
             className={pathname === "/dashboard" ? "active" : ""}
             href="/dashboard"
           >
-            Learn
+            {t("Learn")}
           </Link>
           <Link
             className={pathname.startsWith("/challenges") ? "active" : ""}
             href="/challenges"
           >
-            Challenges
+            {t("Challenges")}
           </Link>
           <Link
             className={pathname.startsWith("/sandbox") ? "active" : ""}
             href="/sandbox/duplicate-payment"
           >
-            Sandbox
+            {t("Sandbox")}
           </Link>
         </nav>
         <div className="header-actions">
+          <LanguageSelect />
           <ThemeToggle />
           <Button asChild size="sm">
             <Link href="/dashboard">
-              Start learning <ArrowUpRight size={15} />
+              {t("Start learning ")}
+              <ArrowUpRight size={15} />
             </Link>
           </Button>
         </div>
@@ -100,6 +133,8 @@ export function Workspace({
   children: React.ReactNode;
   wide?: boolean;
 }) {
+  const { t } = useLocale();
+
   const path = usePathname();
   const { progress } = useProgress();
   const links = [
@@ -116,8 +151,8 @@ export function Workspace({
       <Header />
       <div className={`workspace ${wide ? "workspace-wide" : ""}`}>
         <aside className="sidebar">
-          <div className="eyebrow muted">YOUR WORKSPACE</div>
-          <nav aria-label="Workspace">
+          <div className="eyebrow muted">{t("YOUR WORKSPACE")}</div>
+          <nav aria-label={t("Workspace")}>
             {links.map((l) => (
               <Link
                 className={path === l.href ? "selected" : ""}
@@ -125,19 +160,15 @@ export function Workspace({
                 href={l.href}
               >
                 <l.icon size={18} />
-                {l.label}
+                {t(l.label)}
               </Link>
             ))}
           </nav>
           <div className="sidebar-section">
-            <div className="eyebrow muted">CURRENT PATH</div>
+            <div className="eyebrow muted">{t("CURRENT PATH")}</div>
             <Link className="sidebar-path" href="/learn/database-transactions">
               <Database size={19} />
-              <span>
-                Database
-                <br />
-                Engineering
-              </span>
+              <span>{t("Database Engineering")}</span>
               <ChevronRight size={14} />
             </Link>
             <div className="progress-track">
@@ -148,21 +179,24 @@ export function Workspace({
               />
             </div>
             <small>
-              {progress.completed.length} of {milestoneIds.length} milestones
-              complete
+              {t("{0} of {1} milestones complete", [
+                progress.completed.length,
+                milestoneIds.length,
+              ])}
             </small>
           </div>
           <div className="sidebar-note">
             <Sprout size={22} />
             <strong>
-              Small steps.
+              {t("Small steps.")}
               <br />
-              Deeper understanding.
+              {t("Deeper understanding.")}
             </strong>
-            <p>Your next “aha” moment is one experiment away.</p>
+            <p>{t("Your next “aha” moment is one experiment away.")}</p>
           </div>
           <div className="local-status">
-            <span className="status-dot" /> Progress stays on this device
+            <span className="status-dot" />
+            {t(" Progress stays on this device")}
           </div>
         </aside>
         <main className="workspace-content" id="main-content">
@@ -182,20 +216,25 @@ export function Badge({
   return <span className={`badge badge-${tone}`}>{children}</span>;
 }
 export function Completion({ done }: { done: boolean }) {
+  const { t } = useLocale();
+
   return done ? (
     <span className="completion">
-      <Check size={15} /> Complete
+      <Check size={15} />
+      {t(" Complete")}
     </span>
   ) : (
-    <span className="muted">Not started</span>
+    <span className="muted">{t("Not started")}</span>
   );
 }
 export function Footer() {
+  const { t } = useLocale();
+
   return (
     <footer className="site-footer">
       <Logo />
-      <span>Make learning come alive.</span>
-      <span>Built for curious minds.</span>
+      <span>{t("Make learning come alive.")}</span>
+      <span>{t("Built for curious minds.")}</span>
     </footer>
   );
 }

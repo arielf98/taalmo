@@ -1,4 +1,6 @@
 "use client";
+import { useLocale } from "@/lib/locale";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
@@ -39,73 +41,82 @@ const money = (amount: number) =>
   );
 
 export function Sandbox() {
+  const { t } = useLocale();
+
   const [mode, setMode] = useState<Mode>("unsafe");
   const [amount, setAmount] = useState(4900);
   const [failure, setFailure] = useState(false);
   return (
     <Workspace wide>
       <div className="breadcrumb">
-        <Link href="/learn/database-transactions">Database Transactions</Link>
-        <ChevronRight size={13} />
-        <Link href="/lessons/duplicate-payment">
-          Duplicate Payment Callback
+        <Link href="/learn/database-transactions">
+          {t("Database Transactions")}
         </Link>
         <ChevronRight size={13} />
-        Sandbox
+        <Link href="/lessons/duplicate-payment">
+          {t("Duplicate Payment Callback")}
+        </Link>
+        <ChevronRight size={13} />
+        {t("Sandbox")}
       </div>
       <div className="sandbox-heading">
         <div>
           <div className="inline-meta">
             <Badge>
-              <FlaskConical size={12} /> INTERACTIVE LAB
+              <FlaskConical size={12} />
+              {t(" INTERACTIVE LAB")}
             </Badge>
-            <span className="small muted">Experiment 01</span>
+            <span className="small muted">{t("Experiment 01")}</span>
           </div>
-          <h1>One payment. Two callbacks.</h1>
+          <h1>{t("One payment. Two callbacks.")}</h1>
           <p>
-            A payment gateway retries the same notification. Can your system
-            handle it?
+            {t(
+              "A payment gateway retries the same notification. Can your system handle it?",
+            )}
           </p>
         </div>
         <Link className="text-link small" href="/lessons/duplicate-payment">
           <BookOpen size={16} />
-          Back to lesson
+          {t("Back to lesson")}
         </Link>
       </div>
       <div className="simulation-notice">
         <Info size={16} />
         <span>
-          This lab uses a deterministic, simulated database model. No real
-          PostgreSQL server, payments, or measured runtime metrics.
+          {t(
+            "This lab uses a deterministic, simulated database model. No real PostgreSQL server, payments, or measured runtime metrics.",
+          )}
         </span>
       </div>
       <div className="experiment-config">
         <div>
-          <span className="control-label">PROCESSING MODE</span>
+          <span className="control-label">{t("PROCESSING MODE")}</span>
           <div className="mode-toggle light">
             <button
               aria-pressed={mode === "unsafe"}
               onClick={() => setMode("unsafe")}
             >
-              <AlertTriangle size={15} /> Unsafe
+              <AlertTriangle size={15} />
+              {t(" Unsafe")}
             </button>
             <button
               aria-pressed={mode === "protected"}
               onClick={() => setMode("protected")}
             >
-              <ShieldCheck size={15} /> Idempotent
+              <ShieldCheck size={15} />
+              {t(" Idempotent")}
             </button>
           </div>
         </div>
         <label className="amount-control">
-          <span className="control-label">PAYMENT AMOUNT</span>
+          <span className="control-label">{t("PAYMENT AMOUNT")}</span>
           <select
             value={amount}
             onChange={(e) => setAmount(Number(e.target.value))}
           >
-            <option value={4900}>$49.00 USD</option>
-            <option value={9900}>$99.00 USD</option>
-            <option value={14900}>$149.00 USD</option>
+            <option value={4900}>{t("$49.00 USD")}</option>
+            <option value={9900}>{t("$99.00 USD")}</option>
+            <option value={14900}>{t("$149.00 USD")}</option>
           </select>
         </label>
         <label
@@ -118,11 +129,11 @@ export function Sandbox() {
             onChange={(e) => setFailure(e.target.checked)}
           />
           <span>
-            Fail callback A before commit
+            {t("Fail callback A before commit")}
             <small>
               {mode === "unsafe"
-                ? "Available in idempotent mode"
-                : "Observe rollback and callback B recovery"}
+                ? t("Available in idempotent mode")
+                : t("Observe rollback and callback B recovery")}
             </small>
           </span>
         </label>
@@ -139,6 +150,8 @@ export function Sandbox() {
   );
 }
 function Experiment({ config }: { config: PaymentConfig }) {
+  const { t } = useLocale();
+
   const [sim, setSim] = useState(() =>
     createSimulation(paymentScenario(config)),
   );
@@ -200,12 +213,12 @@ function Experiment({ config }: { config: PaymentConfig }) {
           <div className="panel-heading">
             <div>
               <span className="status-dot" />
-              <h2>System architecture</h2>
+              <h2>{t("System architecture")}</h2>
             </div>
             <Badge tone="gray">
               {historyStep === null
-                ? "LIVE STATE"
-                : `HISTORY · STEP ${historyStep}`}
+                ? t("LIVE STATE")
+                : t("HISTORY · STEP {0}", [historyStep])}
             </Badge>
           </div>
           <Architecture
@@ -218,7 +231,7 @@ function Experiment({ config }: { config: PaymentConfig }) {
             <div className="run-controls">
               <Button onClick={run} disabled={finished || playing}>
                 <Play size={15} fill="currentColor" />
-                Run simulation
+                {t("Run simulation")}
               </Button>
               <Button
                 variant="outline"
@@ -230,7 +243,7 @@ function Experiment({ config }: { config: PaymentConfig }) {
                 disabled={finished || playing}
               >
                 <SkipForward size={16} />
-                Step forward
+                {t("Step forward")}
               </Button>
               {playing && (
                 <Button
@@ -239,7 +252,7 @@ function Experiment({ config }: { config: PaymentConfig }) {
                   onClick={() => setPlaying(false)}
                 >
                   <Square size={14} />
-                  Pause
+                  {t("Pause")}
                 </Button>
               )}
             </div>
@@ -247,8 +260,8 @@ function Experiment({ config }: { config: PaymentConfig }) {
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="Replay execution"
-                title="Replay execution"
+                aria-label={t("Replay execution")}
+                title={t("Replay execution")}
                 onClick={replay}
                 disabled={playing || sim.cursor === 0}
               >
@@ -257,8 +270,8 @@ function Experiment({ config }: { config: PaymentConfig }) {
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="Reset experiment"
-                title="Reset experiment"
+                aria-label={t("Reset experiment")}
+                title={t("Reset experiment")}
                 onClick={reset}
               >
                 <RotateCcw size={17} />
@@ -274,18 +287,22 @@ function Experiment({ config }: { config: PaymentConfig }) {
               />
             </div>
             <span>
-              {sim.cursor} / {sim.scenario.events.length} events
+              {sim.cursor} / {sim.scenario.events.length}
+              {t(" events")}
             </span>
           </div>
           <div className="callback-strip">
             {(["A", "B"] as const).map((id) => (
               <div key={id}>
                 <span className={`callback-tag callback-${id}`}>{id}</span>
-                <span>Callback {id}</span>
+                <span>
+                  {t("Callback ")}
+                  {id}
+                </span>
                 <strong
                   className={`callback-status status-${state.callbacks[id].status}`}
                 >
-                  {state.callbacks[id].status}
+                  {t(state.callbacks[id].status)}
                 </strong>
               </div>
             ))}
@@ -293,41 +310,42 @@ function Experiment({ config }: { config: PaymentConfig }) {
           <div className="node-inspector">
             <div>
               <span className="eyebrow">
-                <Database size={14} /> INSPECT:{" "}
+                <Database size={14} />
+                {t(" INSPECT:")}{" "}
                 {selectedNode === "database"
-                  ? "POSTGRESQL"
-                  : selectedNode.toUpperCase()}
+                  ? t("POSTGRESQL")
+                  : t(selectedNode).toUpperCase()}
               </span>
               <select
-                aria-label="Inspect system component"
+                aria-label={t("Inspect system component")}
                 value={selectedNode}
                 onChange={(e) => setSelectedNode(e.target.value)}
               >
-                <option value="database">PostgreSQL</option>
-                <option value="gateway">Payment Gateway</option>
-                <option value="api">Backend API</option>
-                <option value="ledger">Ledger</option>
-                <option value="outbox">Transactional Outbox</option>
+                <option value="database">{t("PostgreSQL")}</option>
+                <option value="gateway">{t("Payment Gateway")}</option>
+                <option value="api">{t("Backend API")}</option>
+                <option value="ledger">{t("Ledger")}</option>
+                <option value="outbox">{t("Transactional Outbox")}</option>
               </select>
             </div>
-            <p>{nodeDescriptions[selectedNode]}</p>
+            <p>{t(nodeDescriptions[selectedNode])}</p>
             {selectedNode === "database" && (
               <dl className="state-values">
                 <div>
-                  <dt>processed</dt>
+                  <dt>{t("processed")}</dt>
                   <dd>{String(state.processed)}</dd>
                 </div>
                 <div>
-                  <dt>lock owner</dt>
-                  <dd>{state.lockOwner ?? "none"}</dd>
+                  <dt>{t("lock owner")}</dt>
+                  <dd>{state.lockOwner ?? t("none")}</dd>
                 </div>
                 <div>
-                  <dt>unique key</dt>
-                  <dd>{state.keys[0] ?? "not committed"}</dd>
+                  <dt>{t("unique key")}</dt>
+                  <dd>{state.keys[0] ?? t("not committed")}</dd>
                 </div>
                 <div>
-                  <dt>staged transaction</dt>
-                  <dd>{Object.keys(state.staged).join(", ") || "none"}</dd>
+                  <dt>{t("staged transaction")}</dt>
+                  <dd>{Object.keys(state.staged).join(", ") || t("none")}</dd>
                 </div>
               </dl>
             )}
@@ -337,21 +355,22 @@ function Experiment({ config }: { config: PaymentConfig }) {
           <div className="panel-heading">
             <div>
               <Terminal size={16} />
-              <h2>Execution timeline</h2>
+              <h2>{t("Execution timeline")}</h2>
             </div>
-            <span className="small muted">Logical order</span>
+            <span className="small muted">{t("Logical order")}</span>
           </div>
           {sim.cursor === 0 ? (
             <div className="timeline-empty">
               <span className="feature-icon mint">
                 <Play size={22} />
               </span>
-              <h3>Ready when you are.</h3>
+              <h3>{t("Ready when you are.")}</h3>
               <p>
-                Run the simulation or move one event at a time. Every state
-                change will appear here.
+                {t(
+                  "Run the simulation or move one event at a time. Every state change will appear here.",
+                )}
               </p>
-              <span className="code-hint">payment_id: pay_1042</span>
+              <span className="code-hint">{t("payment_id: pay_1042")}</span>
             </div>
           ) : (
             <ol className="timeline-list">
@@ -359,7 +378,10 @@ function Experiment({ config }: { config: PaymentConfig }) {
                 <li key={snapshot.step}>
                   <button
                     className={view.step === snapshot.step ? "selected" : ""}
-                    aria-label={`Inspect step ${snapshot.step}: ${snapshot.event!.label}`}
+                    aria-label={t("Inspect step {0}: {1}", [
+                      snapshot.step,
+                      snapshot.event!.label,
+                    ])}
                     aria-pressed={view.step === snapshot.step}
                     onClick={() => setHistoryStep(snapshot.step)}
                   >
@@ -368,14 +390,14 @@ function Experiment({ config }: { config: PaymentConfig }) {
                     </span>
                     <div>
                       <div className="timeline-item-title">
-                        <strong>{snapshot.event!.label}</strong>
+                        <strong>{t(snapshot.event!.label)}</strong>
                         <span
                           className={`callback-tag callback-${snapshot.event!.callback}`}
                         >
                           {snapshot.event!.callback}
                         </span>
                       </div>
-                      <p>{snapshot.event!.detail}</p>
+                      <p>{t(snapshot.event!.detail)}</p>
                     </div>
                   </button>
                 </li>
@@ -387,7 +409,8 @@ function Experiment({ config }: { config: PaymentConfig }) {
               className="return-live"
               onClick={() => setHistoryStep(null)}
             >
-              Return to current state <ArrowRight size={14} />
+              {t("Return to current state ")}
+              <ArrowRight size={14} />
             </button>
           )}
         </section>
@@ -395,8 +418,10 @@ function Experiment({ config }: { config: PaymentConfig }) {
       <section className="state-section">
         <div className="section-heading compact">
           <div>
-            <span className="eyebrow">NOTHING HIDDEN UNDER THE HOOD</span>
-            <h2>Inspect the evidence.</h2>
+            <span className="eyebrow">
+              {t("NOTHING HIDDEN UNDER THE HOOD")}
+            </span>
+            <h2>{t("Inspect the evidence.")}</h2>
           </div>
           <div className="mode-toggle light small-tabs">
             <button
@@ -404,19 +429,20 @@ function Experiment({ config }: { config: PaymentConfig }) {
               onClick={() => setTab("records")}
             >
               <Database size={14} />
-              Records
+              {t("Records")}
             </button>
             <button aria-pressed={tab === "raw"} onClick={() => setTab("raw")}>
               <Code2 size={15} />
-              Raw state
+              {t("Raw state")}
             </button>
           </div>
         </div>
         {historyStep !== null && (
           <p className="history-notice">
             <Info size={15} />
-            Inspecting step {historyStep}. Tables show the state at that point
-            in the execution.
+            {t("Inspecting step ")}
+            {historyStep}
+            {t(". Tables show the state at that point in the execution.")}
           </p>
         )}
         {tab === "raw" ? (
@@ -429,7 +455,7 @@ function Experiment({ config }: { config: PaymentConfig }) {
               <div className="panel-heading">
                 <div>
                   <BookOpen size={17} />
-                  <h3>Ledger entries</h3>
+                  <h3>{t("Ledger entries")}</h3>
                 </div>
                 <span
                   data-testid="ledger-count"
@@ -441,14 +467,14 @@ function Experiment({ config }: { config: PaymentConfig }) {
               <div className="table-scroll">
                 <table>
                   <caption className="sr-only">
-                    Committed ledger entries
+                    {t("Committed ledger entries")}
                   </caption>
                   <thead>
                     <tr>
-                      <th>ENTRY</th>
-                      <th>PAYMENT</th>
-                      <th>AMOUNT</th>
-                      <th>VIA</th>
+                      <th>{t("ENTRY")}</th>
+                      <th>{t("PAYMENT")}</th>
+                      <th>{t("AMOUNT")}</th>
+                      <th>{t("VIA")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -470,10 +496,10 @@ function Experiment({ config }: { config: PaymentConfig }) {
                 </table>
               </div>
               {!state.ledger.length && (
-                <p className="table-empty">No committed entries yet.</p>
+                <p className="table-empty">{t("No committed entries yet.")}</p>
               )}
               <div className="table-footer">
-                Total credited{" "}
+                {t("Total credited")}{" "}
                 <strong>
                   {money(state.ledger.reduce((n, e) => n + e.amount, 0))}
                 </strong>
@@ -483,7 +509,7 @@ function Experiment({ config }: { config: PaymentConfig }) {
               <div className="panel-heading">
                 <div>
                   <Send size={17} />
-                  <h3>Outbox events</h3>
+                  <h3>{t("Outbox events")}</h3>
                 </div>
                 <span className="record-count" data-testid="outbox-count">
                   {state.outbox.length}
@@ -491,12 +517,14 @@ function Experiment({ config }: { config: PaymentConfig }) {
               </div>
               <div className="table-scroll">
                 <table>
-                  <caption className="sr-only">Committed outbox events</caption>
+                  <caption className="sr-only">
+                    {t("Committed outbox events")}
+                  </caption>
                   <thead>
                     <tr>
-                      <th>EVENT</th>
-                      <th>TYPE</th>
-                      <th>VIA</th>
+                      <th>{t("EVENT")}</th>
+                      <th>{t("TYPE")}</th>
+                      <th>{t("VIA")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -517,10 +545,11 @@ function Experiment({ config }: { config: PaymentConfig }) {
                 </table>
               </div>
               {!state.outbox.length && (
-                <p className="table-empty">No committed events yet.</p>
+                <p className="table-empty">{t("No committed events yet.")}</p>
               )}
               <div className="table-footer">
-                Delivery <span>Not simulated · pending publisher</span>
+                {t("Delivery ")}
+                <span>{t("Not simulated · pending publisher")}</span>
               </div>
             </div>
           </div>
@@ -540,14 +569,15 @@ function Experiment({ config }: { config: PaymentConfig }) {
             </span>
             <div>
               <span className="eyebrow">
-                EXPERIMENT RESULT · {config.mode.toUpperCase()}
+                {t("EXPERIMENT RESULT · ")}
+                {t(config.mode).toUpperCase()}
               </span>
               <h2>
                 {sim.result.outcome === "safe"
-                  ? "One payment. One effect."
-                  : "Duplicate payment detected"}
+                  ? t("One payment. One effect.")
+                  : t("Duplicate payment detected")}
               </h2>
-              <p>{sim.result.explanation}</p>
+              <p>{t(sim.result.explanation)}</p>
               <div className="result-checks">
                 <span>
                   {state.ledger.length === 1 ? (
@@ -555,7 +585,7 @@ function Experiment({ config }: { config: PaymentConfig }) {
                   ) : (
                     <X size={15} />
                   )}{" "}
-                  One ledger entry
+                  {t("One ledger entry")}
                 </span>
                 <span>
                   {state.outbox.length === 1 ? (
@@ -563,7 +593,7 @@ function Experiment({ config }: { config: PaymentConfig }) {
                   ) : (
                     <X size={15} />
                   )}{" "}
-                  One outbox event
+                  {t("One outbox event")}
                 </span>
                 <span>
                   {state.keys.length === 1 ? (
@@ -571,13 +601,15 @@ function Experiment({ config }: { config: PaymentConfig }) {
                   ) : (
                     <X size={15} />
                   )}{" "}
-                  Atomic idempotency key
+                  {t("Atomic idempotency key")}
                 </span>
               </div>
               {config.mode === "unsafe" && (
                 <p className="result-next">
-                  <ArrowRight size={16} /> Switch to Idempotent above, then run
-                  the same experiment.
+                  <ArrowRight size={16} />
+                  {t(
+                    " Switch to Idempotent above, then run the same experiment.",
+                  )}
                 </p>
               )}
             </div>
@@ -586,25 +618,30 @@ function Experiment({ config }: { config: PaymentConfig }) {
       </div>
       {saveError && (
         <p className="save-error" role="alert">
-          Your browser could not save this experiment. Enable local storage to
-          retain your progress.
+          {t(
+            "Your browser could not save this experiment. Enable local storage to retain your progress.",
+          )}
         </p>
       )}
       <section className="lab-reflection">
         <div>
-          <span className="eyebrow">MAKE THE UNDERSTANDING STICK</span>
-          <h2>What changed?</h2>
+          <span className="eyebrow">{t("MAKE THE UNDERSTANDING STICK")}</span>
+          <h2>{t("What changed?")}</h2>
           <p>
-            Compare both processing modes, then explain why the protected
-            version works.
+            {t(
+              "Compare both processing modes, then explain why the protected version works.",
+            )}
           </p>
           <ul>
-            <li>Where did the unsafe callbacks read the same old state?</li>
-            <li>What happens to the competing unique-key insert?</li>
-            <li>What survives when a transaction rolls back?</li>
+            <li>
+              {t("Where did the unsafe callbacks read the same old state?")}
+            </li>
+            <li>{t("What happens to the competing unique-key insert?")}</li>
+            <li>{t("What survives when a transaction rolls back?")}</li>
           </ul>
           <Link className="text-link small" href="/lessons/duplicate-payment">
-            <ArrowLeft size={14} /> Revisit the concept
+            <ArrowLeft size={14} />
+            {t(" Revisit the concept")}
           </Link>
         </div>
         {learnedBoth ? (
@@ -612,10 +649,11 @@ function Experiment({ config }: { config: PaymentConfig }) {
         ) : (
           <div className="quiz-unlock card">
             <ShieldCheck size={28} />
-            <h3>Explore both sides first.</h3>
+            <h3>{t("Explore both sides first.")}</h3>
             <p>
-              Complete an unsafe run and an idempotent run to unlock your final
-              checkpoint.
+              {t(
+                "Complete an unsafe run and an idempotent run to unlock your final checkpoint.",
+              )}
             </p>
             <div>
               <span>
@@ -624,7 +662,7 @@ function Experiment({ config }: { config: PaymentConfig }) {
                 ) : (
                   <span className="empty-check" />
                 )}{" "}
-                Unsafe experiment
+                {t("Unsafe experiment")}
               </span>
               <span>
                 {progress.experiments.includes("protected") ? (
@@ -632,7 +670,7 @@ function Experiment({ config }: { config: PaymentConfig }) {
                 ) : (
                   <span className="empty-check" />
                 )}{" "}
-                Idempotent experiment
+                {t("Idempotent experiment")}
               </span>
             </div>
           </div>

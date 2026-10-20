@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { LocaleDocument, SkipLink } from "@/lib/locale";
 import "./globals.css";
 import "@xyflow/react/dist/style.css";
 export const metadata: Metadata = {
@@ -19,9 +20,8 @@ export default function RootLayout({
     <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning>
       <body>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-        <a className="skip-link" href="#main-content">
-          Skip to content
-        </a>
+        <LocaleDocument />
+        <SkipLink />
         {children}
       </body>
     </html>

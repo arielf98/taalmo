@@ -1,4 +1,6 @@
 "use client";
+import { useLocale } from "@/lib/locale";
+
 import { useState } from "react";
 import {
   Play,
@@ -12,6 +14,8 @@ import { createSimulation, runToEnd } from "@/lib/simulation/engine";
 import { paymentScenario, type Mode } from "@/lib/simulation/payment";
 import { Button } from "./ui/button";
 export function ProductPreview() {
+  const { t } = useLocale();
+
   const [mode, setMode] = useState<Mode>("unsafe");
   const [sim, setSim] = useState(() =>
     createSimulation(paymentScenario({ mode: "unsafe", amount: 4900 })),
@@ -28,16 +32,19 @@ export function ProductPreview() {
           <i />
           <i />
         </div>
-        <span>duplicate-payment.lab</span>
+        <span>{t("duplicate-payment.lab")}</span>
         <span className="preview-live">
-          <span className="status-dot" /> Interactive preview
+          <span className="status-dot" />
+          {t(" Interactive preview")}
         </span>
       </div>
       <div className="preview-body">
         <div className="preview-title">
-          <span className="eyebrow">DATABASE TRANSACTIONS</span>
-          <h3>One payment. Two callbacks.</h3>
-          <p>What happens when your system gets the same request twice?</p>
+          <span className="eyebrow">{t("DATABASE TRANSACTIONS")}</span>
+          <h3>{t("One payment. Two callbacks.")}</h3>
+          <p>
+            {t("What happens when your system gets the same request twice?")}
+          </p>
         </div>
         <Architecture
           state={sim.current}
@@ -50,21 +57,22 @@ export function ProductPreview() {
               aria-pressed={mode === "unsafe"}
               onClick={() => reset("unsafe")}
             >
-              Unsafe
+              {t("Unsafe")}
             </button>
             <button
               aria-pressed={mode === "protected"}
               onClick={() => reset("protected")}
             >
-              Idempotent
+              {t("Idempotent")}
             </button>
           </div>
           <Button size="sm" onClick={() => setSim(runToEnd(sim))}>
-            <Play size={13} fill="currentColor" /> Try it live
+            <Play size={13} fill="currentColor" />
+            {t(" Try it live")}
           </Button>
           <button
             className="icon-button"
-            aria-label="Reset preview"
+            aria-label={t("Reset preview")}
             onClick={() => reset(mode)}
           >
             <RotateCcw size={16} />
@@ -83,19 +91,23 @@ export function ProductPreview() {
               )}
               <span>
                 <strong>
-                  {sim.current.ledger.length} ledger{" "}
-                  {sim.current.ledger.length === 1 ? "entry" : "entries"}.
+                  {t(
+                    sim.current.ledger.length === 1
+                      ? "{0} ledger entry."
+                      : "{0} ledger entries.",
+                    [sim.current.ledger.length],
+                  )}
                 </strong>{" "}
                 {sim.result.outcome === "safe"
-                  ? "Duplicate safely skipped."
-                  : "One payment credited twice. Now try idempotent mode."}
+                  ? t("Duplicate safely skipped.")
+                  : t("One payment credited twice. Now try idempotent mode.")}
               </span>
             </>
           ) : (
             <>
               <span className="code-marker">↳</span>
               <span>
-                Change the mode. Run the experiment. See for yourself.
+                {t("Change the mode. Run the experiment. See for yourself.")}
               </span>
               <ArrowRight size={15} />
             </>

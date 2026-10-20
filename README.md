@@ -29,6 +29,7 @@ Tidak memerlukan `.env`, database, akun, API key, Docker, atau layanan berbayar.
 - Lab Lost Update: mode unsafe dan atomic increment, pilihan urutan penulisan serta saldo awal, run/step/reset/replay, histori, inspector, dan kuis akhir.
 - Lab Duplicate Payment Callback: mode unsafe dan idempotent, run/step/reset/replay, histori, inspector, ledger, transactional outbox, dan opsi rollback sebelum commit.
 - Kuis akhir lab yang terbuka setelah kedua mode selesai dieksplorasi.
+- Pilihan bahasa Inggris–Indonesia untuk antarmuka, lesson, kuis, timeline, dan penjelasan simulasi.
 - Progres lokal, tema terang/gelap, serta layout desktop, tablet, dan mobile.
 
 Ketiga lesson memiliki lab: Lost Update, Duplicate Payment Callback, dan Deadlock. Path memiliki enam milestone: tiga checkpoint lesson dan tiga checkpoint lab. Progres dari dua lab sebelumnya tetap dipertahankan.
@@ -55,13 +56,22 @@ Buka **Learn → Explore path → Deadlock → Launch sandbox**, atau `/sandbox/
 
 Aktifkan **Retry the aborted transaction once** untuk memulai ulang seluruh transaksi korban sesudah survivor commit. Pada **Consistent order**, kedua transaksi selalu mengunci X sebelum Y; B dapat menunggu tanpa membentuk siklus. Kuis akhir memakai progres khusus Deadlock, terpisah dari dua lab lainnya.
 
+## Pilihan bahasa
+
+Gunakan pemilih **English / Indonesia** di header. Pilihan disimpan pada `taalmo.locale.v1` di browser dan origin yang sama; perubahan bahasa di tab lain ikut diterapkan. Jika storage diblokir, pilihan tetap aktif pada tab saat ini tetapi mungkin tidak bertahan setelah refresh.
+
+Bahasa tidak mengubah ID lesson/lab, progres `taalmo.progress.v1`, jawaban kuis yang sedang dipilih, atau state simulasi. Tanggal aktivitas mengikuti bahasa pilihan. Contoh saldo tetap memakai USD; SQL, raw state, nama produk, dan identifier teknis dipertahankan. Konten awal dari server dan metadata halaman berbahasa Inggris, lalu preferensi browser diterapkan sesudah hydration; belum ada URL khusus bahasa.
+
 ## Struktur proyek
 
 ```text
 src/app/                    Halaman App Router, metadata, dan CSS responsif
 src/components/             UI learning, sandbox, diagram, dan kuis
 src/components/ui/          Komponen UI dasar
-src/content/lessons.ts      Konten lesson dan checkpoint berbahasa Inggris
+src/content/lessons.ts       Konten sumber lesson dan checkpoint berbahasa Inggris
+src/content/messages/       Kamus terjemahan bahasa Indonesia
+src/content/messages.ts     Pemilihan terjemahan dan interpolasi teks
+src/lib/locale.tsx          Preferensi bahasa lokal dan lang dokumen
 src/lib/simulation/         Engine event deterministik, payment, Lost Update, Deadlock
 src/lib/progress.ts         Penyimpanan serta validasi progres lokal
 docs/                       Arsitektur, penulisan skenario, dan roadmap
@@ -88,7 +98,7 @@ Repositori memiliki test dari implementasi awal. Keberadaannya tidak memberikan 
 - Transactional outbox dimodelkan sampai penyimpanan event. Publisher, retry pengiriman, dan consumer tidak disimulasikan. Ini bukan jaminan exactly-once message delivery.
 - Progres tersimpan di browser ini saja. Menghapus storage menghapus progres; private browsing atau storage yang diblokir dapat menghalangi penyimpanan.
 - Tidak ada autentikasi, sinkronisasi lintas perangkat, atau infrastruktur produksi.
-- Antarmuka awal berbahasa Inggris; konten lesson dipisahkan dari komponen untuk memudahkan lokalisasi berikutnya.
+- Bahasa awal server dan metadata tetap Inggris. Terjemahan serta layout sesudah pergantian bahasa belum diverifikasi di runtime sesuai aturan tanpa test.
 
 Audit dependency pada 20 Oktober 2026 menemukan nol advisory produksi dan lima temuan high pada rantai tooling ESLint khusus development. Ini merupakan hasil pemeriksaan sebelumnya, bukan audit baru. Rincian tersedia pada histori pekerjaan.
 

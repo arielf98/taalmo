@@ -8,15 +8,15 @@
 - Complete Duplicate Payment Callback sandbox: unsafe/protected modes, step/run/reset/replay, historical state, node inspection, committed records, rollback recovery, result evaluation, final quiz.
 - Complete Lost Update sandbox: stale reads and unsafe replacements versus row-locked atomic increments, configurable write order and initial balance, step/run/reset/replay, historical state, record inspection, and a separate final quiz.
 - Complete Deadlock sandbox: two-transaction wait-for graph, opposite/consistent lock ordering, staged debit rollback, configurable victim, one bounded whole-transaction retry, and a dedicated final quiz.
+- English/Indonesian interface, learning content, quizzes, simulation explanations, diagram labels, and activity dates; a device-local language preference preserves learning state. Server metadata stays English.
 - Device-local progress for six milestones, light/dark themes, responsive layout. Existing tests come from the initial MVP; follow the no-test policy in `AGENTS.md` for subsequent work.
 
-## Recommended next milestone: localization
+## Recommended next milestone: sandbox discovery
 
-Extract interface strings into a small locale dictionary and provide reviewed Indonesian content alongside the existing English interface. Keep stable lesson, lab, and progress IDs so language changes do not reset learning progress. Do not add a content backend or paid translation service before it is needed.
+Make the three implemented labs easier to discover from the Sandbox navigation. Reuse the existing lab catalog for a compact lab overview with learning links and device-local completion status. Keep existing direct lab URLs and progress IDs stable; no backend or new dependencies are needed.
 
 ## Later learning improvements
 
-- Extract interface strings to a locale dictionary and provide reviewed Indonesian content.
 - Expand meaningful accessibility checks and Safari/Firefox/mobile browser coverage.
 - Distinguish reading completion from checkpoint mastery if the product needs both.
 - Add more scheduling choices only when they teach a specific concept; keep runs reproducible.

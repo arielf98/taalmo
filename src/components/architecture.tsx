@@ -1,4 +1,6 @@
 "use client";
+import { useLocale, localizedFlowLabels } from "@/lib/locale";
+
 import {
   Background,
   BackgroundVariant,
@@ -83,6 +85,8 @@ export function Architecture({
   onSelect?: (id: string) => void;
   compact?: boolean;
 }) {
+  const { t } = useLocale();
+
   const nodes: Node[] = definitions.map((n) => ({
     id: n.id,
     position: { x: n.x, y: n.y },
@@ -90,7 +94,7 @@ export function Architecture({
     targetPosition: Position.Left,
     draggable: false,
     selectable: !!onSelect,
-    ariaLabel: `Inspect ${n.title}`,
+    ariaLabel: t("Inspect {0}", [n.title]),
     className: `system-node ${active === n.id ? "node-active" : ""} ${selected === n.id ? "node-selected" : ""}`,
     data: {
       label: (
@@ -98,35 +102,46 @@ export function Architecture({
           <div className={`node-icon node-icon-${n.id}`}>
             <n.Icon size={23} />
           </div>
-          <strong>{n.title}</strong>
-          <span>{n.subtitle}</span>
+          <strong>{t(n.title)}</strong>
+          <span>{t(n.subtitle)}</span>
           {n.id === "ledger" && (
             <small>
-              {state.ledger.length} committed{" "}
-              {state.ledger.length === 1 ? "entry" : "entries"}
+              {t(
+                state.ledger.length === 1
+                  ? "{0} committed entry"
+                  : "{0} committed entries",
+                [state.ledger.length],
+              )}
             </small>
           )}
           {n.id === "outbox" && (
             <small>
-              {state.outbox.length} committed{" "}
-              {state.outbox.length === 1 ? "event" : "events"}
+              {t(
+                state.outbox.length === 1
+                  ? "{0} committed event"
+                  : "{0} committed events",
+                [state.outbox.length],
+              )}
             </small>
           )}
           {n.id === "database" && (
             <small>
               {state.lockOwner
-                ? `Lock held by callback ${state.lockOwner}`
+                ? t("Lock held by callback {0}", [state.lockOwner])
                 : state.processed
-                  ? "Payment processed"
-                  : "Awaiting payment"}
+                  ? t("Payment processed")
+                  : t("Awaiting payment")}
             </small>
           )}
           {n.id === "api" && (
             <small>
-              A: {state.callbacks.A.status} · B: {state.callbacks.B.status}
+              {t("A: ")}
+              {t(state.callbacks.A.status)}
+              {t(" · B: ")}
+              {t(state.callbacks.B.status)}
             </small>
           )}
-          {n.id === "gateway" && <small>payment_id: pay_1042</small>}
+          {n.id === "gateway" && <small>{t("payment_id: pay_1042")}</small>}
         </div>
       ),
     },
@@ -151,7 +166,7 @@ export function Architecture({
       source === "gateway"
         ? "A + B"
         : target === "database"
-          ? "transaction"
+          ? t("transaction")
           : undefined,
     labelStyle: { fill: "#a5b9b8", fontSize: 11 },
     labelBgStyle: { fill: "#172d35" },
@@ -160,9 +175,10 @@ export function Architecture({
     <div
       className={`architecture ${compact ? "architecture-compact" : ""}`}
       role="region"
-      aria-label="Interactive payment system architecture"
+      aria-label={t("Interactive payment system architecture")}
     >
       <ReactFlow
+        ariaLabelConfig={localizedFlowLabels(t, !!onSelect)}
         nodes={nodes}
         edges={edges}
         fitView
@@ -186,10 +202,11 @@ export function Architecture({
       </ReactFlow>
       <div className="diagram-caption">
         <span className="status-dot" />
-        SIMULATED ENVIRONMENT
+        {t("SIMULATED ENVIRONMENT")}
         {!compact && (
           <span>
-            <MousePointer2 size={11} /> Select a node to inspect
+            <MousePointer2 size={11} />
+            {t(" Select a node to inspect")}
           </span>
         )}
       </div>
