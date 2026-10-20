@@ -6,13 +6,12 @@
 - Local learning dashboard, path, activity, recommendations, and milestones.
 - Three transaction introductions and knowledge checkpoints.
 - Complete Duplicate Payment Callback sandbox: unsafe/protected modes, step/run/reset/replay, historical state, node inspection, committed records, rollback recovery, result evaluation, final quiz.
-- Device-local progress, light/dark themes, responsive layout, domain and browser tests.
+- Complete Lost Update sandbox: stale reads and unsafe replacements versus row-locked atomic increments, configurable write order and initial balance, step/run/reset/replay, historical state, record inspection, and a separate final quiz.
+- Device-local progress for five milestones, light/dark themes, responsive layout. Existing tests come from the initial MVP; follow the no-test policy in `AGENTS.md` for subsequent work.
 
-## Recommended next milestone: Lost Update lab
+## Recommended next milestone: Deadlock lab
 
-Add one more end-to-end lab using the existing generic engine. Model overlapping read-modify-write operations, compare unsafe writes against an atomic increment or optimistic concurrency check, and add a final reasoning checkpoint. Replace the single available-lab launch action with an explicit per-lesson lab route only when this second lab exists.
-
-Then implement the Deadlock lab with a small wait-for graph, deterministic detection, consistent lock ordering, and a bounded whole-transaction retry example.
+Implement a small wait-for graph, deterministic deadlock detection, consistent lock ordering, and a bounded whole-transaction retry example. Reuse the generic engine and register the new lab in the existing lesson/lab catalog. Keep simulation state and outcome evaluation independent from the UI.
 
 ## Later learning improvements
 

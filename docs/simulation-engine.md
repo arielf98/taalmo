@@ -45,7 +45,7 @@ This models one business effect per payment ID when the unique key and business 
 2. Build a deterministic event schedule from configuration.
 3. Implement transitions from state and event, independent of presentation.
 4. Evaluate the actual final state against the business invariants.
-5. Test failure behavior, intermediate visibility, determinism, and no mutation of earlier snapshots.
+5. Review failure behavior, intermediate visibility, deterministic event ordering, and snapshot cloning in code. Follow `AGENTS.md`: do not add unit tests or execute tests for subsequent work.
 6. Map state to a dedicated UI; reuse the engine without importing payment-specific assumptions into it.
 
 A minimal definition looks like:
@@ -58,3 +58,15 @@ const scenario: ScenarioDefinition<Counter, Increment, Result> = {
   evaluate: (state) => ({ passed: state.value === 1 }),
 };
 ```
+
+## Lost Update scenario
+
+`lost-update.ts` reuses the same immutable event runner. Configuration selects unsafe replacement or atomic increment, initial balance in integer cents, positive increments for requests A and B, and A-first or B-first write order. Invalid configuration is rejected; the initial balance plus both increments may not exceed 100000000 cents.
+
+Unsafe execution has six events: A reads, B reads, A calculates, B calculates, first request writes, second request overwrites. At the default $100 balance with A adding $20 and B adding $30, A-first finishes at $130 and B-first at $120; both should finish at $150. The evaluator derives the missing amount from committed state.
+
+Atomic execution has seven events: first request obtains the row lock, second waits, first stages its increment, first commits and releases the lock, second obtains the lock, second increments the updated row, second commits. Staged values are kept on the request and do not alter the shared committed balance. Both orders preserve both increments.
+
+The diagram and inspector expose request read values, calculated/staged balances, committed balance, row-lock owner, and the committed write history. Timeline selection shows the corresponding immutable snapshot; the final evaluation is shown only in the current state.
+
+This represents row-lock coordination for a same-row UPDATE at Read Committed, not the complete PostgreSQL lock manager or MVCC implementation. A competing updater waits for the first transaction and applies its operation to the updated row, as described in [PostgreSQL’s Read Committed documentation](https://www.postgresql.org/docs/16/transaction-iso.html#XACT-READ-COMMITTED). Stricter isolation and serialization failures are outside this scenario. Atomic increment prevents this lost update but is not idempotent: retrying a business request still needs separate deduplication.

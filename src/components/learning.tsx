@@ -16,7 +16,7 @@ import {
   RotateCcw,
   Sparkles,
 } from "lucide-react";
-import { lessons, pathHref } from "@/content/lessons";
+import { lessons, labs, milestoneIds, pathHref } from "@/content/lessons";
 import { useProgress } from "@/lib/progress";
 import { Badge, Completion, Workspace } from "./shell";
 import { Button } from "./ui/button";
@@ -25,11 +25,21 @@ import { Quiz } from "./quiz";
 export function Dashboard() {
   const { progress } = useProgress();
   const count = progress.completed.length;
-  const labDone = progress.completed.includes("lab-payment");
+  const completedLabs = labs.filter((lab) =>
+    progress.completed.includes(lab.id),
+  );
+  const labDone = completedLabs.length > 0;
   const next = lessons.find((l) => !progress.completed.includes(l.id));
-  const pathComplete = !next && labDone;
-  const continueLab =
-    !labDone && progress.completed.includes("duplicate-payment");
+  const pathComplete = milestoneIds.every((id) =>
+    progress.completed.includes(id),
+  );
+  const readyLab = labs.find(
+    (lab) =>
+      !progress.completed.includes(lab.id) &&
+      progress.completed.includes(lab.lessonId),
+  );
+  const continueLab = !!readyLab;
+  const focusLostUpdate = readyLab?.id === "lab-lost-update";
   return (
     <Workspace>
       <div className="breadcrumb">
@@ -63,16 +73,16 @@ export function Dashboard() {
             {pathComplete
               ? "Keep experimenting: revisit the sandbox and explore what changes when a transaction fails."
               : continueLab
-                ? "You’ve checked the concept. Run both modes and see how a transaction protects the payment."
+                ? "You’ve checked the concept. Run both modes and inspect how the database protects the business change."
                 : labDone
-                  ? "You’ve completed the payment lab. Explore another transaction concept."
+                  ? "You’ve completed a lab. Explore another transaction concept."
                   : "Discover how a tiny race condition can turn into a double payment."}
           </p>
           <Button asChild>
             <Link
               href={
                 pathComplete || continueLab
-                  ? "/sandbox/duplicate-payment"
+                  ? (readyLab?.href ?? labs[0].href)
                   : labDone
                     ? `/lessons/${next?.id ?? "duplicate-payment"}`
                     : "/lessons/duplicate-payment"
@@ -91,7 +101,8 @@ export function Dashboard() {
           <div className="continue-meta">
             {pathComplete ? (
               <>
-                <Check size={13} /> All four milestones complete
+                <Check size={13} /> All {milestoneIds.length} milestones
+                complete
               </>
             ) : (
               <>
@@ -103,17 +114,20 @@ export function Dashboard() {
         </div>
         <div className="continue-art" aria-hidden="true">
           <div className="art-callback a">
-            callback A <ArrowRight size={18} />
+            {focusLostUpdate ? "request A" : "callback A"}{" "}
+            <ArrowRight size={18} />
           </div>
           <div className="art-callback b">
-            callback B <ArrowRight size={18} />
+            {focusLostUpdate ? "request B" : "callback B"}{" "}
+            <ArrowRight size={18} />
           </div>
           <div className="art-db">
             <Database size={40} />
-            <span>One effect.</span>
+            <span>{focusLostUpdate ? "Both updates." : "One effect."}</span>
           </div>
           <span className="art-stamp">
-            <Check size={17} /> idempotent
+            <Check size={17} />{" "}
+            {focusLostUpdate ? "atomic increment" : "idempotent"}
           </span>
         </div>
       </section>
@@ -121,23 +135,26 @@ export function Dashboard() {
         <div>
           <BookOpen size={20} />
           <strong>
-            {progress.completed.filter((id) => id !== "lab-payment").length}
-            <span>/ 3</span>
+            {
+              lessons.filter((lesson) => progress.completed.includes(lesson.id))
+                .length
+            }
+            <span>/ {lessons.length}</span>
           </strong>
           <span>Lessons completed</span>
         </div>
         <div>
           <FlaskConical size={20} />
           <strong>
-            {labDone ? 1 : 0}
-            <span>/ 1</span>
+            {completedLabs.length}
+            <span>/ {labs.length}</span>
           </strong>
           <span>Labs completed</span>
         </div>
         <div>
           <GitBranch size={20} />
           <strong>
-            {Math.round((count / 4) * 100)}
+            {Math.round((count / milestoneIds.length) * 100)}
             <span>%</span>
           </strong>
           <span>Path progress</span>
@@ -160,9 +177,13 @@ export function Dashboard() {
               queries.
             </p>
             <div className="progress-track">
-              <span style={{ width: `${(count / 4) * 100}%` }} />
+              <span
+                style={{ width: `${(count / milestoneIds.length) * 100}%` }}
+              />
             </div>
-            <small>{count} of 4 milestones complete</small>
+            <small>
+              {count} of {milestoneIds.length} milestones complete
+            </small>
           </div>
           <Button variant="outline" asChild>
             <Link href={pathHref}>
@@ -182,9 +203,8 @@ export function Dashboard() {
               <Link
                 key={a.id}
                 href={
-                  a.id === "lab-payment"
-                    ? "/sandbox/duplicate-payment"
-                    : `/lessons/${a.id}`
+                  labs.find((lab) => lab.id === a.id)?.href ??
+                  `/lessons/${a.id}`
                 }
               >
                 <span className="activity-check">
@@ -192,9 +212,7 @@ export function Dashboard() {
                 </span>
                 <div>
                   <strong>
-                    {a.id === "lab-payment"
-                      ? "Payment lab completed"
-                      : `${lessons.find((l) => l.id === a.id)?.title} completed`}
+                    {`${labs.find((lab) => lab.id === a.id)?.title ?? lessons.find((lesson) => lesson.id === a.id)?.title} completed`}
                   </strong>
                   <p>
                     {new Date(a.at).toLocaleDateString("en", {
@@ -224,9 +242,11 @@ export function Dashboard() {
         <Lightbulb size={19} />
         <p>
           <strong>A good next step:</strong>{" "}
-          {progress.completed.includes("duplicate-payment")
-            ? "Try both processing modes in the payment sandbox and compare their timelines."
-            : "Start with Duplicate Payment Callback. It connects a common backend bug to a powerful database guarantee."}
+          {readyLab
+            ? `Continue with ${readyLab.title} and compare both execution strategies.`
+            : pathComplete
+              ? "Revisit Lost Update with a different write order, then compare the payment lab’s idempotency guarantee."
+              : "Complete a lesson checkpoint, then explore its interactive lab."}
         </p>
       </div>
     </Workspace>
@@ -254,13 +274,13 @@ export function LearningPath() {
         </p>
         <div className="inline-meta">
           <span>
-            <BookOpen size={15} /> 3 lessons
+            <BookOpen size={15} /> {lessons.length} lessons
           </span>
           <span>
-            <FlaskConical size={15} /> 1 available lab
+            <FlaskConical size={15} /> {labs.length} available labs
           </span>
           <span>
-            <Clock size={15} /> About 35 minutes
+            <Clock size={15} /> About 40 minutes
           </span>
         </div>
       </div>
@@ -270,10 +290,17 @@ export function LearningPath() {
           <p>Your first chapter: concurrency, one experiment at a time.</p>
         </div>
         <div className="path-progress">
-          <strong>{Math.round((progress.completed.length / 4) * 100)}%</strong>
+          <strong>
+            {Math.round(
+              (progress.completed.length / milestoneIds.length) * 100,
+            )}
+            %
+          </strong>
           <div className="progress-track">
             <span
-              style={{ width: `${(progress.completed.length / 4) * 100}%` }}
+              style={{
+                width: `${(progress.completed.length / milestoneIds.length) * 100}%`,
+              }}
             />
           </div>
         </div>
@@ -281,7 +308,7 @@ export function LearningPath() {
       <div className="lesson-list">
         {lessons.map((l) => (
           <Link
-            className={`lesson-row card ${l.available ? "available-lesson" : ""}`}
+            className={`lesson-row card ${l.labHref ? "available-lesson" : ""}`}
             key={l.id}
             href={`/lessons/${l.id}`}
           >
@@ -297,7 +324,7 @@ export function LearningPath() {
             <div className="lesson-row-copy">
               <div className="lesson-tags">
                 <span className="eyebrow">{l.tag}</span>
-                {l.available && <Badge>INTERACTIVE LAB</Badge>}
+                {l.labHref && <Badge>INTERACTIVE LAB</Badge>}
               </div>
               <h2>{l.title}</h2>
               <p>{l.subtitle}</p>
@@ -307,7 +334,7 @@ export function LearningPath() {
                   {l.duration}
                 </span>
                 <span>
-                  {l.available
+                  {l.labHref
                     ? "Lesson + sandbox"
                     : "Introduction · lab coming soon"}
                 </span>
@@ -482,7 +509,7 @@ export function Lesson({ slug }: { slug: string }) {
               explanation={lesson.explanation}
             />
           </div>
-          {lesson.available ? (
+          {lesson.labHref ? (
             <section className="launch-card">
               <span className="feature-icon mint">
                 <FlaskConical size={26} />
@@ -490,12 +517,13 @@ export function Lesson({ slug }: { slug: string }) {
               <div>
                 <h3>Now, make it happen.</h3>
                 <p>
-                  Break a payment handler. Then protect it with atomic
-                  idempotency.
+                  {slug === "lost-update"
+                    ? "Make two requests compete for one balance. Then preserve both increments."
+                    : "Break a payment handler. Then protect it with atomic idempotency."}
                 </p>
               </div>
               <Button asChild>
-                <Link href="/sandbox/duplicate-payment">
+                <Link href={lesson.labHref}>
                   Launch sandbox <ArrowUpRight size={16} />
                 </Link>
               </Button>
@@ -506,11 +534,11 @@ export function Lesson({ slug }: { slug: string }) {
               <div>
                 <h3>Interactive lab coming next</h3>
                 <p>
-                  The introduction and checkpoint are available. For a complete
-                  experiment, try the payment callback lab.
+                  The introduction and checkpoint are available. Explore the
+                  learning path for the two complete interactive labs.
                 </p>
-                <Link className="text-link" href="/sandbox/duplicate-payment">
-                  Explore the available sandbox <ArrowRight size={15} />
+                <Link className="text-link" href={pathHref}>
+                  Explore the available labs <ArrowRight size={15} />
                 </Link>
               </div>
             </section>
@@ -542,9 +570,9 @@ export function Lesson({ slug }: { slug: string }) {
           <a href="#checkpoint">
             04 <span>Check your understanding</span>
           </a>
-          {lesson.available && (
+          {lesson.labHref && (
             <Button asChild variant="outline" size="sm">
-              <Link href="/sandbox/duplicate-payment">
+              <Link href={lesson.labHref}>
                 Launch sandbox <ArrowUpRight size={14} />
               </Link>
             </Button>

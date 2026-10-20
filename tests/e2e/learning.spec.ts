@@ -172,6 +172,7 @@ test("dashboard continues into the lab and recognizes a completed path", async (
           "duplicate-payment",
           "deadlock",
           "lab-payment",
+          "lab-lost-update",
         ],
         activity: [],
         experiments: ["unsafe", "protected"],
@@ -216,7 +217,7 @@ test("mobile navigation, theme, and introductory lesson state", async ({
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.getByRole("link", { name: "Learn", exact: true }).click();
   await page.getByRole("link", { name: "Explore path" }).click();
-  await page.getByRole("link", { name: /Lost Update/ }).click();
+  await page.getByRole("link", { name: /Deadlock/ }).click();
   await expect(page.getByText("Interactive lab coming next")).toBeVisible();
   expect(
     await page.evaluate(

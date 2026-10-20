@@ -1,17 +1,22 @@
 "use client";
 import { useMemo, useSyncExternalStore } from "react";
+import {
+  milestoneIds,
+  experimentModes,
+  type ExperimentMode,
+} from "../content/lessons";
 const key = "taalmo.progress.v1";
 export interface Progress {
   completed: string[];
   activity: { id: string; at: string }[];
-  experiments: ("unsafe" | "protected")[];
+  experiments: ExperimentMode[];
 }
 const empty = (): Progress => ({
   completed: [],
   activity: [],
   experiments: [],
 });
-const valid = ["lost-update", "duplicate-payment", "deadlock", "lab-payment"];
+const valid = milestoneIds;
 export function parseProgress(raw: string): Progress {
   try {
     const p: unknown = JSON.parse(raw);
@@ -42,8 +47,8 @@ export function parseProgress(raw: string): Progress {
         : [],
       experiments: Array.isArray(v.experiments)
         ? v.experiments.filter(
-            (m): m is "unsafe" | "protected" =>
-              m === "unsafe" || m === "protected",
+            (m): m is ExperimentMode =>
+              typeof m === "string" && experimentModes.includes(m),
           )
         : [],
     };
@@ -100,7 +105,8 @@ export function useProgress() {
         ),
       });
     },
-    experiment(mode: "unsafe" | "protected") {
+    experiment(mode: ExperimentMode) {
+      if (!experimentModes.includes(mode)) return false;
       const p = parseProgress(progressRepository.read());
       return progressRepository.save({
         ...p,

@@ -5,9 +5,9 @@ export const lessons = [
     number: "01",
     title: "Lost Update",
     subtitle: "When the last write isn’t the right write.",
-    duration: "8 min",
+    duration: "15 min",
     tag: "Concurrency",
-    available: false,
+    labHref: "/sandbox/lost-update",
     intro:
       "Two requests read the same account balance. Both calculate a new value, then write it back. The second write silently replaces the first.",
     example:
@@ -31,7 +31,7 @@ export const lessons = [
     subtitle: "One payment. Two callbacks. What could go wrong?",
     duration: "15 min",
     tag: "Idempotency",
-    available: true,
+    labHref: "/sandbox/duplicate-payment",
     intro:
       "Payment gateways retry. Sometimes two callbacks for the very same payment arrive almost together. Your API must make one business change, however many times it receives the notification.",
     example:
@@ -56,7 +56,7 @@ export const lessons = [
     subtitle: "When every request is waiting for the other.",
     duration: "10 min",
     tag: "Locking",
-    available: false,
+    labHref: null,
     intro:
       "Transaction A locks row 1 and needs row 2. Transaction B locks row 2 and needs row 1. Neither can continue: their waits form a cycle.",
     example:
@@ -74,6 +74,42 @@ export const lessons = [
       "Consistent lock ordering removes this circular wait. If a transaction is aborted, retry the full transaction, with bounded retries.",
   },
 ] as const;
+export const labs = [
+  {
+    id: "lab-payment",
+    lessonId: "duplicate-payment",
+    href: lessons[1].labHref,
+    title: "Payment lab",
+    modes: ["unsafe", "protected"],
+  },
+  {
+    id: "lab-lost-update",
+    lessonId: "lost-update",
+    href: lessons[0].labHref,
+    title: "Lost Update lab",
+    modes: ["lost-update:unsafe", "lost-update:atomic"],
+  },
+] as const;
+export type ExperimentMode = (typeof labs)[number]["modes"][number];
+export const milestoneIds: readonly string[] = [
+  ...lessons.map((lesson) => lesson.id),
+  ...labs.map((lab) => lab.id),
+];
+export const experimentModes: readonly string[] = labs.flatMap<string>(
+  (lab) => [...lab.modes],
+);
+export const lostUpdateQuiz = {
+  id: "lab-lost-update",
+  question: "Why does an atomic increment preserve both updates?",
+  options: [
+    "Each UPDATE increments the current locked row",
+    "The last request always has the larger increment",
+    "Wrapping a stale replacement value in BEGIN and COMMIT is enough",
+  ],
+  answer: 0,
+  explanation:
+    "The row lock serializes conflicting updates. The waiting UPDATE increments the updated row after the first commits. It does not reuse a replacement value computed from an earlier client-side read. This prevents lost updates, but does not make retries idempotent.",
+};
 export const labQuiz = {
   id: "lab-payment",
   question: "Why does the protected version produce only one business effect?",

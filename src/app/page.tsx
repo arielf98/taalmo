@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Header, Footer, Badge } from "@/components/shell";
 import { Button } from "@/components/ui/button";
+import { lessons, labs } from "@/content/lessons";
 import { ProductPreview } from "@/components/preview";
 export default function Home() {
   return (
@@ -161,7 +162,9 @@ export default function Home() {
                 real world.
               </p>
               <div className="path-card-bottom">
-                <span>3 lessons · 1 interactive lab</span>
+                <span>
+                  {lessons.length} lessons · {labs.length} interactive labs
+                </span>
                 <ArrowUpRight size={22} />
               </div>
             </Link>

@@ -15,6 +15,7 @@ import {
   Check,
 } from "lucide-react";
 import { Button } from "./ui/button";
+import { milestoneIds } from "@/content/lessons";
 import { useProgress } from "@/lib/progress";
 const themeSubscribe = (fn: () => void) => {
   window.addEventListener("taalmo-theme", fn);
@@ -141,10 +142,15 @@ export function Workspace({
             </Link>
             <div className="progress-track">
               <span
-                style={{ width: `${(progress.completed.length / 4) * 100}%` }}
+                style={{
+                  width: `${(progress.completed.length / milestoneIds.length) * 100}%`,
+                }}
               />
             </div>
-            <small>{progress.completed.length} of 4 milestones complete</small>
+            <small>
+              {progress.completed.length} of {milestoneIds.length} milestones
+              complete
+            </small>
           </div>
           <div className="sidebar-note">
             <Sprout size={22} />

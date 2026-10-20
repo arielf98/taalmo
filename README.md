@@ -25,11 +25,12 @@ Tidak memerlukan `.env`, database, akun, API key, Docker, atau layanan berbayar.
 - Landing page dengan preview simulator yang bisa dijalankan.
 - Dashboard, learning path Database Engineering, progres, aktivitas, dan rekomendasi belajar.
 - Lesson Lost Update, Duplicate Payment Callback, dan Deadlock, masing-masing dengan contoh interleaving dan checkpoint.
+- Lab Lost Update: mode unsafe dan atomic increment, pilihan urutan penulisan serta saldo awal, run/step/reset/replay, histori, inspector, dan kuis akhir.
 - Lab Duplicate Payment Callback: mode unsafe dan idempotent, run/step/reset/replay, histori, inspector, ledger, transactional outbox, dan opsi rollback sebelum commit.
 - Kuis akhir lab yang terbuka setelah kedua mode selesai dieksplorasi.
 - Progres lokal, tema terang/gelap, serta layout desktop, tablet, dan mobile.
 
-Lab penuh Lost Update sedang menjadi milestone berikutnya. Deadlock masih berupa pengantar dan checkpoint dengan status lab belum tersedia.
+Dua lab tersedia: Lost Update dan Duplicate Payment Callback. Deadlock masih berupa pengantar dan checkpoint dengan status lab belum tersedia. Path memiliki lima milestone: tiga checkpoint lesson dan dua checkpoint lab. Progres payment lama tetap dipertahankan.
 
 ## Alur belajar pertama
 
@@ -41,6 +42,12 @@ Lab penuh Lost Update sedang menjadi milestone berikutnya. Deadlock masih berupa
 6. Coba kegagalan sebelum commit untuk melihat rollback dan pemulihan callback kedua.
 7. Jawab kuis akhir; progres tersimpan pada browser dan origin yang sama.
 
+## Mencoba Lost Update
+
+Buka **Learn → Explore path → Lost Update → Launch sandbox**, atau langsung ke `/sandbox/lost-update`. Jalankan Unsafe: A dan B membaca saldo yang sama, lalu penulisan kedua menghilangkan increment pertama. Balik Write order untuk mengamati perubahan yang hilang. Pada Atomic increment, request kedua menunggu row lock dan memakai saldo yang sudah diperbarui, sehingga kedua increment tersimpan.
+
+Progres eksperimen Lost Update terpisah dari payment. Kuis akhir baru terbuka setelah kedua strategi pada lab ini diselesaikan.
+
 ## Struktur proyek
 
 ```text
@@ -48,7 +55,7 @@ src/app/                    Halaman App Router, metadata, dan CSS responsif
 src/components/             UI learning, sandbox, diagram, dan kuis
 src/components/ui/          Komponen UI dasar
 src/content/lessons.ts      Konten lesson dan checkpoint berbahasa Inggris
-src/lib/simulation/         Engine event deterministik dan state machine skenario
+src/lib/simulation/         Engine event deterministik, payment, dan Lost Update
 src/lib/progress.ts         Penyimpanan serta validasi progres lokal
 docs/                       Arsitektur, penulisan skenario, dan roadmap
 AGENTS.md                   Aturan kerja agen pada repositori

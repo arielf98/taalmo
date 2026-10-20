@@ -3549,3 +3549,25 @@ td {
     animation: none !important;
   }
 }
+
+.balance-summary {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  margin: 0;
+}
+.balance-summary dt {
+  font-size: 11px;
+  color: var(--muted);
+}
+.balance-summary dd {
+  margin: 5px 0 0;
+  font:
+    22px/1.4 ui-monospace,
+    monospace;
+  letter-spacing: -0.04em;
+}
+.balance-summary > div + div dd {
+  font-size: 16px;
+  color: var(--green);
+}
