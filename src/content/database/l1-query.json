@@ -1,0 +1,1508 @@
+[
+  {
+    "id": "l1m01l01",
+    "version": "1.0.0",
+    "difficulty": "beginner",
+    "tags": ["sql", "select", "projection", "school-finance"],
+    "hook": "Tim aplikasi hanya membutuhkan nama siswa dan tanggal masuk, tetapi endpoint mengirim seluruh kolom siswa. Bagaimana memilih hasil yang cukup untuk kontrak tanpa ikut membawa metadata yang belum diperlukan?",
+    "objectives": [
+      "Menulis SELECT dengan daftar kolom eksplisit dan alias yang mudah dibaca.",
+      "Menjelaskan mengapa SELECT * tidak stabil sebagai kontrak API ketika schema berubah.",
+      "Memeriksa hasil proyeksi dengan urutan yang deterministik tanpa mengubah data sumber."
+    ],
+    "sections": [
+      {
+        "title": "Intuisi: proyeksi adalah keputusan kontrak",
+        "paragraphs": [
+          "Bayangkan tabel school.students sebagai lemari arsip. Setiap baris adalah satu siswa, sedangkan setiap kolom adalah jenis informasi di dalam mapnya. SELECT memilih map mana yang dibuka dan kolom mana yang dibawa ke laporan. Ketika kebutuhan hanya nama dan tanggal masuk, SELECT full_name, enrolled_at menyatakan kebutuhan itu dengan jelas. Database tetap membaca relation yang sama, tetapi hasil yang diteruskan ke pemanggil mempunyai bentuk yang lebih kecil dan mudah diperiksa.",
+          "SELECT * memang nyaman ketika sedang mengenali fixture di psql. Masalahnya muncul ketika query menjadi kontrak untuk halaman, ekspor, atau API. Kolom baru seperti nomor telepon atau catatan internal dapat ikut terkirim tanpa perubahan pada query. Daftar kolom eksplisit membuat perubahan schema terlihat sebagai keputusan yang harus ditinjau. Alias juga membantu memisahkan nama internal full_name dari nama field yang ingin dibaca konsumen, misalnya student_name."
+        ]
+      },
+      {
+        "title": "Contoh kerja dan batasan",
+        "paragraphs": [
+          "Pada contoh kerja, student_id tetap disertakan sebagai identitas stabil walaupun kebutuhan tampilan hanya nama dan tanggal. Identitas diperlukan agar pemanggil dapat membuat tautan atau mencocokkan baris tanpa menebak dari nama yang bisa sama. ORDER BY student_id membuat contoh dapat direproduksi. LIMIT dipakai hanya untuk membuat hasil belajar kecil; ia bukan pengganti pagination yang harus dirancang untuk daftar produksi.",
+          "Proyeksi tidak memberikan izin akses. Jika full_name boleh dilihat tetapi data sensitif tidak boleh, aturan akses tetap harus ditegakkan oleh role, endpoint, atau lapisan kebijakan. Proyeksi juga tidak menjamin isi tetap benar ketika sumber datanya salah. Query dapat memilih kolom yang tepat dari baris yang salah jika filter, join, atau kunci bisnisnya keliru. Karena itu, lesson ini sengaja membahas bentuk hasil, bukan keamanan dan validasi seluruh aplikasi."
+        ]
+      },
+      {
+        "title": "Miskonsepsi yang sering terjadi",
+        "paragraphs": [
+          "Miskonsepsi pertama adalah menganggap SELECT * selalu dilarang. Untuk eksplorasi singkat di database disposable, SELECT * dapat mempercepat orientasi. Yang perlu dihindari adalah menjadikannya antarmuka yang dikonsumsi kode lain. Miskonsepsi kedua adalah menganggap alias mengganti nama kolom di tabel. Alias hanya berlaku pada result set query itu; schema tetap menyimpan full_name.",
+          "Miskonsepsi ketiga adalah mengira daftar kolom otomatis memberi urutan baris. SELECT menentukan kolom, bukan urutan record. Urutan hanya dapat diandalkan jika ORDER BY ditulis. Terakhir, mengurangi kolom bukan berarti mengurangi jumlah baris. WHERE mengatur baris, SELECT mengatur kolom; dua operasi ini menjawab pertanyaan yang berbeda dan sering perlu dipakai bersama."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "SELECT student_id, full_name AS student_name, enrolled_at FROM school.students ORDER BY student_id LIMIT 4;",
+      "columns": ["student_id", "student_name", "enrolled_at"],
+      "rows": [
+        ["1", "Alya Putri", "2023-07-11"],
+        ["2", "Bima Pratama", "2023-07-11"],
+        ["3", "Citra Rahma", "2021-07-10"],
+        ["4", "Danu Saputra", "2022-07-12"]
+      ],
+      "explanation": "Daftar SELECT hanya membawa tiga kolom yang diminta dan alias student_name hanya berlaku pada hasil query. student_id dipertahankan sebagai identitas untuk pemanggil. ORDER BY student_id membuat empat baris pertama konsisten; tanpa ORDER BY, LIMIT tidak menjanjikan record mana yang dipilih."
+    },
+    "checks": [
+      {
+        "id": "l1m01l01-check-1",
+        "question": "Mengapa SELECT * kurang cocok untuk result set yang menjadi kontrak API?",
+        "options": [
+          "Kolom baru atau metadata yang tidak direncanakan dapat ikut terkirim saat schema berubah.",
+          "SELECT * selalu lebih lambat daripada semua bentuk SELECT eksplisit.",
+          "SELECT * tidak pernah dapat dijalankan pada PostgreSQL."
+        ],
+        "answer": 0,
+        "explanation": "Masalah utamanya adalah kontrak menjadi implisit dan mudah berubah ketika kolom ditambahkan.",
+        "feedback": [
+          "Benar. Daftar kolom eksplisit membuat perubahan bentuk hasil menjadi keputusan yang terlihat.",
+          "Belum tepat. Kinerja bergantung pada query, indeks, dan data; alasan lesson ini berfokus pada kestabilan kontrak.",
+          "Belum tepat. PostgreSQL mendukung SELECT *, tetapi penggunaannya perlu disesuaikan dengan konteks."
+        ]
+      },
+      {
+        "id": "l1m01l01-check-2",
+        "question": "Pernyataan mana yang benar tentang alias student_name pada contoh kerja?",
+        "options": [
+          "Alias mengubah nama kolom full_name secara permanen di schema.",
+          "Alias mengganti label kolom pada result set query tersebut saja.",
+          "Alias menghapus kolom full_name dari tabel sumber."
+        ],
+        "answer": 1,
+        "explanation": "Alias adalah label output, bukan operasi DDL yang mengubah tabel.",
+        "feedback": [
+          "Belum tepat. Perubahan permanen memerlukan ALTER TABLE atau migrasi.",
+          "Benar. Pemanggil melihat label student_name, sementara schema tetap memiliki full_name.",
+          "Belum tepat. Query baca tidak menghapus kolom sumber."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi bentuk hasil dan perbaiki query agar endpoint hanya mengirim identitas, nama, dan tanggal masuk empat siswa pertama.",
+      "setup": "Gunakan schema school dari seed. Query starter sengaja memakai SELECT * untuk menunjukkan kebocoran bentuk output. Aktivitas menilai keputusan proyeksi dan determinisme hasil, bukan menjalankan SQL bebas.",
+      "starterSql": "SELECT * FROM school.students ORDER BY student_id LIMIT 4;",
+      "variants": [
+        {
+          "id": "l1m01l01-variant-1",
+          "question": "Jika kolom students ditambah emergency_phone, apa yang terjadi pada query starter?",
+          "options": [
+            "Kolom baru ikut masuk result set karena wildcard memperluas proyeksi.",
+            "Query otomatis gagal karena SELECT * menyimpan daftar kolom lama.",
+            "Kolom baru tidak pernah dapat dibaca oleh query apa pun."
+          ],
+          "answer": 0,
+          "explanation": "Wildcard dievaluasi terhadap kolom yang tersedia ketika query dijalankan.",
+          "feedback": [
+            "Benar. Itulah alasan kontrak API sebaiknya menyebut kolom secara eksplisit.",
+            "Belum tepat. SELECT * justru mengikuti schema saat eksekusi.",
+            "Belum tepat. Kolom baru dapat dibaca dengan SELECT eksplisit maupun wildcard."
+          ]
+        },
+        {
+          "id": "l1m01l01-variant-2",
+          "question": "Query mana yang memenuhi kebutuhan nama dan tanggal masuk, dengan student_id sebagai identitas?",
+          "options": [
+            "SELECT full_name, enrolled_at FROM school.students LIMIT 4;",
+            "SELECT student_id, full_name AS student_name, enrolled_at FROM school.students ORDER BY student_id LIMIT 4;",
+            "SELECT * FROM school.students WHERE student_id <= 4;"
+          ],
+          "answer": 1,
+          "explanation": "Pilihan kedua membatasi kolom sekaligus menetapkan urutan dan batas hasil.",
+          "feedback": [
+            "Sebagian benar, tetapi tidak membawa identitas dan tidak menetapkan urutan.",
+            "Benar. Bentuk hasil dan urutannya sesuai kebutuhan.",
+            "Belum tepat. Filter ID bukan pengganti daftar kolom dan ORDER BY."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l1m01l01-edge-1",
+          "question": "Dua siswa dapat memiliki full_name sama. Field mana yang harus dipakai pemanggil untuk membedakan record?",
+          "options": [
+            "full_name karena nama adalah label paling mudah dibaca.",
+            "student_id karena primary key stabil untuk membedakan record.",
+            "Urutan baris karena posisi selalu tetap."
+          ],
+          "answer": 1,
+          "explanation": "Nama bukan kunci unik pada schema, sedangkan student_id adalah primary key.",
+          "feedback": [
+            "Belum tepat. Nama dapat berulang.",
+            "Benar. Identitas record harus memakai kunci yang dipastikan unik.",
+            "Belum tepat. Posisi berubah tanpa ORDER BY dan bukan identitas data."
+          ]
+        },
+        {
+          "id": "l1m01l01-edge-2",
+          "question": "Apa konsekuensi memakai LIMIT 4 tanpa ORDER BY pada endpoint yang harus menampilkan empat siswa yang konsisten?",
+          "options": [
+            "PostgreSQL menjamin empat student_id terkecil.",
+            "Jumlahnya tetap empat, tetapi record dan urutannya tidak dijamin konsisten.",
+            "LIMIT otomatis menambahkan ORDER BY primary key."
+          ],
+          "answer": 1,
+          "explanation": "LIMIT membatasi banyak baris tetapi tidak menetapkan urutan pemilihan.",
+          "feedback": [
+            "Belum tepat. Jaminan itu hanya ada jika ORDER BY ditulis.",
+            "Benar. Tambahkan ORDER BY sesuai definisi halaman.",
+            "Belum tepat. PostgreSQL tidak menyisipkan ORDER BY secara otomatis."
+          ]
+        }
+      ],
+      "hints": [
+        "Pisahkan kebutuhan kolom dari kebutuhan baris: SELECT mengatur kolom, ORDER BY dan LIMIT mengatur hasil.",
+        "Tulis student_id, full_name AS student_name, dan enrolled_at secara eksplisit lalu urutkan berdasarkan student_id.",
+        "Solusi lengkapnya adalah SELECT student_id, full_name AS student_name, enrolled_at FROM school.students ORDER BY student_id LIMIT 4."
+      ],
+      "solutionSql": "SELECT student_id, full_name AS student_name, enrolled_at FROM school.students ORDER BY student_id LIMIT 4;",
+      "solutionExplanation": "Solusi menghapus wildcard sehingga field tambahan tidak ikut terkirim, mempertahankan primary key untuk identitas, memberi alias yang ramah konsumen, dan memakai ORDER BY sebelum LIMIT agar sampel deterministic.",
+      "critical": false
+    },
+    "reflection": "Jelaskan mengapa memilih kolom eksplisit lebih aman untuk kontrak API, lalu sebutkan satu konteks eksplorasi di mana SELECT * masih praktis dan satu risiko yang harus ditinjau sebelum query dipromosikan."
+  },
+  {
+    "id": "l1m01l02",
+    "version": "1.0.0",
+    "difficulty": "beginner",
+    "tags": ["sql", "where", "boolean", "predicates", "school-finance"],
+    "hook": "Kepala sekolah meminta daftar siswa aktif jenjang SD. Query yang mencampur AND dan OR tanpa tanda kurung bisa memasukkan siswa yang salah. Bagaimana membentuk predikat yang benar sebelum database memilih baris?",
+    "objectives": [
+      "Menggunakan WHERE dengan perbandingan, AND, OR, dan tanda kurung.",
+      "Menjelaskan prioritas operator boolean dan dampaknya terhadap himpunan hasil.",
+      "Menguji query terhadap baris aktif, nonaktif, dan jenjang yang berbeda secara deterministik."
+    ],
+    "sections": [
+      {
+        "title": "Intuisi: predikat adalah gerbang per baris",
+        "paragraphs": [
+          "WHERE dapat dibayangkan sebagai gerbang yang dilewati setiap baris. Gerbang menghasilkan TRUE, FALSE, atau UNKNOWN; hanya baris dengan TRUE yang masuk result set. is_active = TRUE adalah satu syarat, grade = 'SD' adalah syarat lain. AND meminta keduanya benar, sehingga daftar siswa aktif SD lebih sempit daripada daftar siswa aktif atau semua siswa SD. OR memperluas himpunan karena salah satu cabang sudah cukup.",
+          "Tanda kurung bukan hiasan. SQL biasanya mengevaluasi NOT lebih dahulu, lalu AND, lalu OR. Karena itu, is_active = TRUE AND grade = 'SD' OR grade = 'TK' dibaca sebagai (is_active = TRUE AND grade = 'SD') OR grade = 'TK'. Jika maksud bisnisnya siswa aktif dari SD atau TK, tulis is_active = TRUE AND (grade = 'SD' OR grade = 'TK') agar maksud tersebut tidak bergantung pada ingatan pembaca tentang prioritas operator."
+        ]
+      },
+      {
+        "title": "Menyusun dan memeriksa predikat",
+        "paragraphs": [
+          "Cara aman menyusun filter adalah menulis kalimat bisnis terlebih dahulu, kemudian memecahnya menjadi bagian. 'Aktif dan grade SD' menjadi dua syarat yang dihubungkan AND. 'Grade SD atau TK' menjadi daftar alternatif dalam tanda kurung. Setelah itu periksa boundary: Danu memiliki grade SD tetapi is_active false, sedangkan Elina aktif tetapi grade TK. Dua baris ini membuat kesalahan operator terlihat.",
+          "Perbandingan string harus memakai nilai yang benar-benar ada di schema dan fixture. grade adalah TEXT, is_active adalah BOOLEAN, dan keduanya bukan label tampilan yang boleh ditebak. Di PostgreSQL, TRUE dapat ditulis sebagai boolean literal. Untuk nilai yang mungkin NULL, logika perlu dibahas terpisah karena perbandingan terhadap NULL menghasilkan UNKNOWN. Seed lesson ini memiliki kolom NOT NULL agar fokus pertama tetap pada kombinasi boolean."
+        ]
+      },
+      {
+        "title": "Batasan dan miskonsepsi",
+        "paragraphs": [
+          "Filter yang benar hanya menjawab definisi yang ditulis. Jika 'aktif' di organisasi berarti belum lulus atau masih memiliki tagihan, is_active saja belum cukup. Query juga tidak memperbaiki data dengan grade yang salah eja. Predicate membuat keputusan dari nilai yang ada; kualitas dan definisi sumbernya tetap menjadi tanggung jawab model data dan pemilik proses.",
+          "Miskonsepsi umum adalah menganggap OR selalu lebih ketat karena menambah kata syarat. Secara himpunan, OR biasanya memperbesar hasil. Miskonsepsi lain adalah menghapus tanda kurung karena query tetap berjalan. Query yang berjalan belum tentu memodelkan kebijakan bisnis. Selalu baca ulang kondisi berdasarkan contoh baris yang seharusnya masuk dan baris yang sengaja harus tersaring."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "SELECT student_id, full_name, grade, is_active FROM school.students WHERE is_active = TRUE AND grade = 'SD' ORDER BY student_id;",
+      "columns": ["student_id", "full_name", "grade", "is_active"],
+      "rows": [
+        ["1", "Alya Putri", "SD", "t"],
+        ["2", "Bima Pratama", "SD", "t"]
+      ],
+      "explanation": "AND membuat kedua syarat wajib benar. Danu tidak muncul karena is_active false walaupun grade-nya SD; Citra dan Farhan tidak muncul karena grade SMP; Elina tidak muncul karena grade TK. ORDER BY student_id membuat validasi hasil stabil."
+    },
+    "checks": [
+      {
+        "id": "l1m01l02-check-1",
+        "question": "Bagaimana PostgreSQL membaca kondisi is_active = TRUE AND grade = 'SD' OR grade = 'TK' tanpa tanda kurung?",
+        "options": [
+          "(is_active = TRUE AND grade = 'SD') OR grade = 'TK'",
+          "is_active = TRUE AND (grade = 'SD' OR grade = 'TK')",
+          "is_active = TRUE OR (grade = 'SD' AND grade = 'TK')"
+        ],
+        "answer": 0,
+        "explanation": "AND memiliki prioritas lebih tinggi daripada OR.",
+        "feedback": [
+          "Benar. Tanda kurung eksplisit tetap disarankan agar maksud bisnis mudah dibaca.",
+          "Belum tepat. Bentuk ini adalah maksud lain yang perlu ditulis dengan tanda kurung.",
+          "Belum tepat. Kondisi tersebut tidak merepresentasikan ekspresi awal."
+        ]
+      },
+      {
+        "id": "l1m01l02-check-2",
+        "question": "Mengapa Danu tidak masuk hasil query aktif SD?",
+        "options": [
+          "Danu tidak memiliki student_id.",
+          "Danu memiliki grade SMP.",
+          "Danu memenuhi grade SD tetapi gagal pada syarat is_active = TRUE."
+        ],
+        "answer": 2,
+        "explanation": "Seed menyimpan Danu sebagai SD dengan is_active false.",
+        "feedback": [
+          "Belum tepat. Danu memiliki primary key 4.",
+          "Belum tepat. Grade Danu adalah SD.",
+          "Benar. AND menuntut semua syarat dipenuhi."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi baris yang salah dari query starter, lalu perbaiki prioritas boolean agar hanya siswa aktif pada grade SD atau TK yang tampil.",
+      "setup": "Fixture memiliki Alya dan Bima sebagai SD aktif, Danu sebagai SD nonaktif, serta Elina sebagai TK aktif. Aktivitas berfokus pada prediksi himpunan hasil dari predicate, bukan SQL editor bebas.",
+      "starterSql": "SELECT student_id, full_name, grade FROM school.students WHERE is_active = TRUE AND grade = 'SD' OR grade = 'TK' ORDER BY student_id;",
+      "variants": [
+        {
+          "id": "l1m01l02-variant-1",
+          "question": "Dengan query starter, apakah Elina ikut muncul dan mengapa?",
+          "options": [
+            "Tidak, karena OR selalu diabaikan setelah AND.",
+            "Ya, karena cabang grade = 'TK' benar tanpa mensyaratkan is_active.",
+            "Ya, tetapi hanya jika grade Elina juga SD."
+          ],
+          "answer": 1,
+          "explanation": "Prioritas operator membuat cabang OR berdiri sendiri.",
+          "feedback": [
+            "Belum tepat. OR tetap dievaluasi setelah hasil AND.",
+            "Benar. Ini alasan tanda kurung diperlukan untuk kebijakan aktif SD atau TK.",
+            "Belum tepat. Elina bergrade TK dan itu sudah cukup untuk cabang OR starter."
+          ]
+        },
+        {
+          "id": "l1m01l02-variant-2",
+          "question": "Predikat mana yang tepat untuk 'aktif dan (SD atau TK)'?",
+          "options": [
+            "is_active = TRUE OR (grade = 'SD' AND grade = 'TK')",
+            "(is_active = TRUE AND grade = 'SD') OR grade = 'TK'",
+            "is_active = TRUE AND (grade = 'SD' OR grade = 'TK')"
+          ],
+          "answer": 2,
+          "explanation": "Syarat aktif berlaku pada dua alternatif grade karena ditempatkan di luar grup OR.",
+          "feedback": [
+            "Belum tepat. Ini menerima semua siswa aktif tanpa memeriksa grade.",
+            "Belum tepat. Cabang TK masih dapat melewati syarat aktif.",
+            "Benar. Semua siswa yang masuk harus aktif dan memiliki salah satu grade."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l1m01l02-edge-1",
+          "question": "Jika organisasi menambah grade baru 'SDLB' yang juga ingin diperlakukan sebagai SD, apa yang harus dilakukan?",
+          "options": [
+            "Mengandalkan LIKE tanpa memastikan definisi grade.",
+            "Memperjelas predicate, misalnya grade IN ('SD', 'SDLB'), lalu meninjau definisi bisnis.",
+            "Menghapus filter grade agar semua siswa masuk."
+          ],
+          "answer": 1,
+          "explanation": "Perluasan kategori harus eksplisit dan disepakati, bukan kebetulan dari pencocokan string.",
+          "feedback": [
+            "Belum tepat. LIKE dapat memasukkan kategori yang tidak dimaksud.",
+            "Benar. Query dan definisi bisnis perlu berubah bersama.",
+            "Belum tepat. Menghapus filter merusak batas laporan."
+          ]
+        },
+        {
+          "id": "l1m01l02-edge-2",
+          "question": "Apa hasil logis jika sebuah kolom boolean nullable dibandingkan dengan = TRUE dan nilainya NULL?",
+          "options": [
+            "TRUE karena NULL dianggap sama dengan TRUE.",
+            "FALSE secara pasti dan dapat dibedakan dari NULL.",
+            "UNKNOWN, sehingga baris tidak lolos WHERE."
+          ],
+          "answer": 2,
+          "explanation": "Perbandingan dengan NULL menghasilkan UNKNOWN dalam three-valued logic.",
+          "feedback": [
+            "Belum tepat. NULL bukan TRUE.",
+            "Belum tepat. Secara logika hasilnya UNKNOWN, bukan FALSE biasa.",
+            "Benar. Gunakan IS NULL atau IS NOT NULL sesuai maksud."
+          ]
+        }
+      ],
+      "hints": [
+        "Kelompokkan dua alternatif grade terlebih dahulu; syarat aktif harus berlaku pada grup tersebut.",
+        "Tulis is_active = TRUE AND (grade = 'SD' OR grade = 'TK') dan bandingkan dengan query starter.",
+        "Solusi memakai tanda kurung di sekitar OR, lalu ORDER BY student_id untuk membaca hasilnya."
+      ],
+      "solutionSql": "SELECT student_id, full_name, grade FROM school.students WHERE is_active = TRUE AND (grade = 'SD' OR grade = 'TK') ORDER BY student_id;",
+      "solutionExplanation": "Tanda kurung membuat OR hanya memilih kategori grade, sedangkan AND menerapkan is_active pada kedua kategori. Dengan seed, hasilnya Alya, Bima, dan Elina; Danu tersaring oleh boolean false.",
+      "critical": false
+    },
+    "reflection": "Tulis ulang kalimat bisnis untuk filter aktif SD atau TK, jelaskan peran tanda kurung, dan sebutkan satu perubahan definisi 'aktif' yang akan membuat predicate ini belum cukup."
+  },
+  {
+    "id": "l1m01l03",
+    "version": "1.0.0",
+    "difficulty": "beginner",
+    "tags": ["sql", "null", "three-valued-logic", "not-exists", "school-finance"],
+    "hook": "Query WHERE paid_at = NULL mengembalikan nol baris, padahal ada payment pending dan failed tanpa timestamp. Tim finance juga menyebut invoice tanpa pembayaran dan invoice yang baru dibayar sebagian sebagai 'belum lunas'. Apakah ketiganya benar-benar sama?",
+    "objectives": [
+      "Menggunakan IS NULL dan IS NOT NULL untuk menguji ketiadaan nilai.",
+      "Membedakan paid_at NULL, tidak adanya payment succeeded, dan outstanding akibat pembayaran sebagian.",
+      "Menjelaskan jebakan NOT IN ketika subquery mengandung NULL serta memilih NOT EXISTS untuk anti-join yang jelas."
+    ],
+    "sections": [
+      {
+        "title": "Intuisi: NULL adalah ketidakadaan informasi",
+        "paragraphs": [
+          "NULL bukan angka nol, string kosong, atau nilai status tertentu. NULL menyatakan bahwa nilai belum diketahui atau memang tidak tersedia. Karena tidak ada nilai konkret untuk dibandingkan, ekspresi paid_at = NULL tidak bernilai TRUE, bahkan ketika paid_at pada baris itu juga NULL. PostgreSQL menggunakan hasil UNKNOWN untuk perbandingan tersebut. WHERE hanya mempertahankan TRUE, sehingga baris NULL hilang dari hasil query yang tampak masuk akal tetapi salah.",
+          "Gunakan paid_at IS NULL untuk menguji apakah timestamp tidak tersedia. Namun, timestamp kosong hanya menjawab keadaan payment record. Ia tidak menjawab apakah invoice memiliki payment sukses. Invoice 108 tidak memiliki payment row sama sekali; invoice 104 memiliki payment pending dengan paid_at NULL; invoice 105 memiliki payment failed dengan paid_at NULL. Ketiganya memerlukan pembacaan status dan relasi, bukan satu kolom saja."
+        ]
+      },
+      {
+        "title": "Paid, unpaid, dan outstanding adalah definisi berbeda",
+        "paragraphs": [
+          "Sumber kebenaran untuk pembayaran berhasil pada fixture adalah payment berstatus succeeded. Invoice 102 memiliki satu payment succeeded senilai 200000 dari amount 500000, sehingga ia memiliki pembayaran sukses tetapi masih memiliki outstanding 300000. Label 'no_succeeded_payment' cocok untuk invoice tanpa jumlah succeeded, bukan untuk semua invoice yang belum lunas. Invoice 104 dan 105 masing-masing memiliki pending atau failed, sedangkan 108 tidak memiliki baris payment.",
+          "Contoh kerja sengaja menghitung tiga sinyal sekaligus: jumlah payment row dengan paid_at NULL, total succeeded, dan outstanding dari invoice dikurangi total succeeded. Dengan begitu, paid_at NULL dapat dibaca sebagai keadaan pencatatan, status succeeded sebagai bukti penerimaan, dan outstanding sebagai saldo. COALESCE mengubah ketiadaan aggregate menjadi nol untuk perhitungan, tetapi tidak mengubah fakta bahwa relasi payment bisa tidak ada."
+        ]
+      },
+      {
+        "title": "NOT IN dan jebakan NULL",
+        "paragraphs": [
+          "NOT IN terlihat seperti cara singkat mencari invoice yang tidak ada di daftar pembayaran. Jika subquery mengembalikan NULL, perbandingan invoice_id NOT IN (nilai, NULL) dapat menjadi UNKNOWN untuk baris yang seharusnya lolos. Akibatnya hasil bisa kosong atau mengejutkan. Masalah ini bukan karena invoice_id pada seed nullable; query antarmuka dapat saja membentuk daftar dari kolom yang nullable. NOT EXISTS menyatakan maksud anti-join secara korelatif dan tidak mengubah baris menjadi UNKNOWN hanya karena ada nilai NULL pada daftar yang tidak relevan.",
+          "Miskonsepsi lain adalah menganggap IS NULL identik dengan unpaid. Payment failed yang paid_at NULL belum menjadi penerimaan, tetapi payment pending juga bukan bukti pembayaran berhasil. Sebaliknya, invoice tanpa payment row tidak pernah menghasilkan baris p dari LEFT JOIN. Definisi bisnis harus menyebut status dan agregasi yang digunakan. Jika cicilan diterima dua kali, keberadaan succeeded saja belum cukup untuk mengatakan invoice lunas; bandingkan jumlahnya dengan amount."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "SELECT i.invoice_id, COUNT(p.payment_id) FILTER (WHERE p.paid_at IS NULL) AS null_paid_at_rows, COALESCE(SUM(p.amount) FILTER (WHERE p.status = 'succeeded'), 0::numeric(12,2)) AS succeeded_amount, i.amount - COALESCE(SUM(p.amount) FILTER (WHERE p.status = 'succeeded'), 0::numeric(12,2)) AS outstanding, CASE WHEN COALESCE(SUM(p.amount) FILTER (WHERE p.status = 'succeeded'), 0::numeric(12,2)) = 0::numeric(12,2) THEN 'no_succeeded_payment' WHEN COALESCE(SUM(p.amount) FILTER (WHERE p.status = 'succeeded'), 0::numeric(12,2)) < i.amount THEN 'partial' ELSE 'paid' END AS payment_state FROM school.invoices i LEFT JOIN school.payments p ON p.invoice_id = i.invoice_id WHERE i.invoice_id IN (101, 102, 104, 105, 108) GROUP BY i.invoice_id, i.amount ORDER BY i.invoice_id;",
+      "columns": ["invoice_id", "null_paid_at_rows", "succeeded_amount", "outstanding", "payment_state"],
+      "rows": [
+        ["101", "0", "500000.00", "0.00", "paid"],
+        ["102", "0", "200000.00", "300000.00", "partial"],
+        ["104", "1", "0.00", "450000.00", "no_succeeded_payment"],
+        ["105", "1", "0.00", "650000.00", "no_succeeded_payment"],
+        ["108", "0", "0.00", "400000.00", "no_succeeded_payment"]
+      ],
+      "explanation": "LEFT JOIN mempertahankan invoice 108 walaupun tidak ada payment row. COUNT payment_id tidak menghitung placeholder NULL dari outer join. Filter status hanya memasukkan succeeded ke jumlah penerimaan; karena itu 102 berstatus partial, sedangkan 104 dan 105 memiliki paid_at NULL tetapi tidak memiliki pembayaran sukses. Invoice 108 menunjukkan bahwa tidak adanya payment row berbeda dari adanya payment row dengan timestamp NULL."
+    },
+    "checks": [
+      {
+        "id": "l1m01l03-check-1",
+        "question": "Apa hasil logis dari NULL = NULL di PostgreSQL?",
+        "options": [
+          "TRUE, karena kedua operand sama-sama NULL.",
+          "UNKNOWN, sehingga tidak lolos filter WHERE.",
+          "FALSE biasa yang selalu dapat dipakai sebagai pembanding NULL."
+        ],
+        "answer": 1,
+        "explanation": "NULL bukan nilai biasa; equality dengan NULL menghasilkan UNKNOWN.",
+        "feedback": [
+          "Belum tepat. SQL tidak menganggap dua NULL sebagai nilai yang sama melalui operator =.",
+          "Benar. Pakai IS NULL untuk predicate ketiadaan.",
+          "Belum tepat. Hasil logisnya UNKNOWN, bukan FALSE biasa."
+        ]
+      },
+      {
+        "id": "l1m01l03-check-2",
+        "question": "Mengapa invoice 102 tidak boleh disebut 'tidak memiliki pembayaran sukses' pada seed?",
+        "options": [
+          "Ia memiliki succeeded payment 200000, tetapi amount invoice 500000 sehingga masih partial.",
+          "Ia tidak memiliki payment row sama sekali.",
+          "Semua payment dengan paid_at bukan NULL selalu failed."
+        ],
+        "answer": 0,
+        "explanation": "Keberadaan succeeded dan kelunasan adalah dua pertanyaan berbeda.",
+        "feedback": [
+          "Benar. Invoice 102 memiliki penerimaan sukses sekaligus outstanding 300000.",
+          "Belum tepat. Invoice 102 memiliki payment_id 202.",
+          "Belum tepat. Payment 202 justru succeeded dengan paid_at terisi."
+        ]
+      },
+      {
+        "id": "l1m01l03-check-3",
+        "question": "Pilihan mana yang paling aman untuk mencari invoice yang tidak memiliki payment succeeded?",
+        "options": [
+          "WHERE paid_at = NULL",
+          "WHERE invoice_id NOT IN (SELECT invoice_id FROM school.payments)",
+          "WHERE NOT EXISTS (SELECT 1 FROM school.payments p WHERE p.invoice_id = i.invoice_id AND p.status = 'succeeded')"
+        ],
+        "answer": 2,
+        "explanation": "NOT EXISTS menguji ketiadaan baris yang cocok dengan status secara eksplisit.",
+        "feedback": [
+          "Belum tepat. Equality dengan NULL menghasilkan UNKNOWN.",
+          "Belum tepat. Query itu tidak memfilter status succeeded dan rentan pada NULL dari subquery.",
+          "Benar. Korelasi dan status membuat definisi anti-join dapat dibaca."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi perbedaan antara payment dengan paid_at NULL, invoice tanpa payment succeeded, dan invoice partial. Perbaiki query starter agar anti-join memakai NOT EXISTS dan status succeeded.",
+      "setup": "Gunakan school.payments dan school.invoices dari seed. Invoice 102 partial, 104 pending, 105 failed, dan 108 tidak memiliki payment row. Aktivitas adalah keputusan/debugging query terbatas; tidak ada SQL arbitrer yang dijalankan murid.",
+      "starterSql": "SELECT i.invoice_id FROM school.invoices i WHERE i.invoice_id NOT IN (SELECT p.invoice_id FROM school.payments p WHERE p.paid_at IS NULL) ORDER BY i.invoice_id;",
+      "variants": [
+        {
+          "id": "l1m01l03-variant-1",
+          "question": "Apa yang ditemukan oleh SELECT payment_id, invoice_id FROM school.payments WHERE paid_at IS NULL?",
+          "options": [
+            "Payment pending dan failed yang timestamp-nya NULL, tetapi bukan invoice tanpa payment row.",
+            "Semua invoice yang belum lunas, termasuk invoice 102 partial dan 108 tanpa payment.",
+            "Hanya payment succeeded karena status tidak perlu diperiksa."
+          ],
+          "answer": 0,
+          "explanation": "Query tersebut membaca payment record yang ada dan hanya menguji timestamp.",
+          "feedback": [
+            "Benar. Seed memberi contoh 205 pending dan 206 failed, sementara 108 tidak punya payment row.",
+            "Belum tepat. Invoice tanpa payment row tidak muncul dari tabel payments.",
+            "Belum tepat. paid_at NULL pada fixture berkaitan dengan pending/failed."
+          ]
+        },
+        {
+          "id": "l1m01l03-variant-2",
+          "question": "Predikat mana yang bermakna 'tidak ada payment succeeded' untuk alias i?",
+          "options": [
+            "i.invoice_id = NULL",
+            "NOT EXISTS (SELECT 1 FROM school.payments p WHERE p.invoice_id = i.invoice_id AND p.status = 'succeeded')",
+            "i.invoice_id NOT IN (SELECT p.invoice_id FROM school.payments p WHERE p.paid_at IS NULL)"
+          ],
+          "answer": 1,
+          "explanation": "NOT EXISTS memeriksa baris payment untuk invoice yang sama dan status yang dituju.",
+          "feedback": [
+            "Belum tepat. Gunakan IS NULL untuk menguji NULL.",
+            "Benar. Ini membedakan tidak ada succeeded dari keadaan paid_at.",
+            "Belum tepat. Ini menyaring timestamp NULL, bukan keberadaan succeeded."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l1m01l03-edge-1",
+          "question": "Bagaimana status invoice 102 pada seed jika definisinya dibandingkan terhadap total payment succeeded?",
+          "options": [
+            "No payment, karena hanya ada satu payment row.",
+            "Paid penuh, karena payment succeeded selalu berarti lunas.",
+            "Partial, karena 200000 succeeded masih kurang dari amount 500000."
+          ],
+          "answer": 2,
+          "explanation": "Status succeeded menyatakan payment diterima, bukan bahwa invoice seluruhnya lunas.",
+          "feedback": [
+            "Belum tepat. Payment 202 adalah succeeded.",
+            "Belum tepat. Jumlah pembayaran harus dibandingkan dengan amount invoice.",
+            "Benar. Outstanding invoice 102 adalah 300000."
+          ]
+        },
+        {
+          "id": "l1m01l03-edge-2",
+          "question": "Mengapa NOT IN dapat bermasalah jika subquery daftar invoice mengembalikan satu NULL?",
+          "options": [
+            "NULL membuat perbandingan yang tidak cocok menjadi UNKNOWN, bukan TRUE.",
+            "NULL selalu diperlakukan sebagai angka nol.",
+            "NOT IN otomatis mengubah semua NULL menjadi succeeded."
+          ],
+          "answer": 0,
+          "explanation": "Kehadiran NULL pada daftar mempengaruhi truth value perbandingan anti-join.",
+          "feedback": [
+            "Benar. NOT EXISTS sering lebih jelas untuk ketiadaan baris yang berkorelasi.",
+            "Belum tepat. NULL bukan 0.",
+            "Belum tepat. NOT IN tidak mengubah status data."
+          ]
+        }
+      ],
+      "hints": [
+        "Pisahkan dua pertanyaan: apakah payment row ada, dan apakah payment succeeded ada.",
+        "Gunakan NOT EXISTS dengan korelasi p.invoice_id = i.invoice_id dan p.status = 'succeeded'.",
+        "Solusi utama memilih semua invoice tanpa succeeded, sedangkan outstanding partial tetap dihitung dengan SUM succeeded dibanding amount."
+      ],
+      "solutionSql": "SELECT i.invoice_id FROM school.invoices i WHERE NOT EXISTS (SELECT 1 FROM school.payments p WHERE p.invoice_id = i.invoice_id AND p.status = 'succeeded') ORDER BY i.invoice_id;",
+      "solutionExplanation": "NOT EXISTS mengembalikan invoice yang tidak memiliki payment succeeded, termasuk invoice tanpa payment row dan invoice yang hanya pending atau failed. Query ini sengaja tidak menyebut paid_at karena timestamp NULL hanya menggambarkan payment record, bukan definisi kelunasan invoice.",
+      "critical": true
+    },
+    "reflection": "Bedakan dengan kalimat sendiri tiga hal berikut: payment dengan paid_at NULL, invoice tanpa payment succeeded, dan invoice outstanding karena partial. Jelaskan mengapa invoice 102 dan 108 harus diperlakukan berbeda."
+  },
+  {
+    "id": "l1m02l01",
+    "version": "1.0.0",
+    "difficulty": "beginner",
+    "tags": ["sql", "order-by", "limit", "determinism", "school-finance"],
+    "hook": "Laporan perlu mengambil lima invoice terbaru. Semua invoice pada tanggal yang sama memiliki tie, sehingga LIMIT saja tidak cukup untuk menentukan lima record mana yang dikirim. Bagaimana membuat hasil ranking yang dapat diulang?",
+    "objectives": [
+      "Mengurutkan hasil dengan ORDER BY berdasarkan kolom bisnis dan tie-breaker.",
+      "Menjelaskan bahwa LIMIT membatasi jumlah baris tetapi tidak menetapkan urutan tanpa ORDER BY.",
+      "Membedakan tanggal periode dari tanggal jatuh tempo saat mendefinisikan 'terbaru'."
+    ],
+    "sections": [
+      {
+        "title": "Intuisi: LIMIT membutuhkan urutan",
+        "paragraphs": [
+          "Sebuah tabel adalah himpunan baris, bukan daftar yang memiliki posisi permanen. PostgreSQL bebas menemukan baris melalui rencana eksekusi yang sesuai. ORDER BY mengubah kebutuhan bisnis menjadi urutan eksplisit; LIMIT kemudian mengambil prefix dari urutan itu. Tanpa ORDER BY, LIMIT 5 hanya berkata 'beri lima baris', bukan 'beri lima invoice terbaru'. Hasil yang tampak konsisten saat ini dapat berubah setelah indeks, vacuum, statistik, atau rencana query berubah.",
+          "Definisi terbaru harus dipilih dari kolom yang tepat. Pada seed, period_month menyatakan bulan tagihan dan due_date menyatakan jatuh tempo. Jika laporan menyebut invoice terbaru, kita memakai period_month DESC. Karena beberapa invoice memiliki period_month yang sama, invoice_id DESC menjadi tie-breaker. Menulis urutan lengkap membuat aturan dapat dibaca dan diuji, termasuk ketika record baru ditambahkan pada periode yang sama."
+        ]
+      },
+      {
+        "title": "Tie-breaker dan batasan",
+        "paragraphs": [
+          "Tie-breaker harus cukup stabil untuk memberi total order pada baris yang dipilih. Primary key invoice_id memenuhi kebutuhan itu karena unik. Jika kolom tie-breaker tidak unik, hasil di dalam kelompok tie masih boleh berubah. Untuk pagination produksi, kombinasi order dan cursor juga perlu dirancang; OFFSET plus LIMIT sederhana dapat melewati atau mengulang baris saat data berubah di antara halaman.",
+          "ORDER BY tidak memperbaiki arti tanggal. Mengurutkan due_date bila pertanyaan sebenarnya tentang period_month adalah bug semantik walaupun sintaksnya valid. NULL juga memiliki aturan posisi sendiri; jika kolom nullable, tentukan NULLS FIRST atau NULLS LAST sesuai kebutuhan. Seed period_month dan due_date NOT NULL, sehingga contoh ini dapat memusatkan perhatian pada tie antara bulan yang sama."
+        ]
+      },
+      {
+        "title": "Miskonsepsi yang sering terjadi",
+        "paragraphs": [
+          "Miskonsepsi pertama adalah menganggap primary key otomatis menjadi urutan default. Primary key menjaga keunikan dan constraint, bukan urutan result set. Miskonsepsi kedua adalah menambahkan LIMIT sebelum memikirkan order. Secara konseptual database memilih hasil berdasarkan query lengkap; tanpa order, tidak ada konsep 'pertama' yang dapat dipertanggungjawabkan.",
+          "Miskonsepsi ketiga adalah tie-breaker hanya berguna untuk tampilan. Tie-breaker juga penting bagi cache, pagination, ekspor, dan perbandingan hasil antar-run. Jika dua invoice sama-sama September, id yang eksplisit membuat pilihan kelima dapat dijelaskan kepada reviewer. Selalu simpan definisi order sedekat mungkin dengan kebutuhan laporan.",
+          "Saat mengubah definisi 'terbaru', ubah juga penjelasan dan contoh hasilnya. Mengganti period_month dengan due_date hanya pada SELECT tetapi lupa pada ORDER BY membuat laporan terlihat masuk akal namun menjawab pertanyaan lain. Kolom yang ditampilkan boleh lebih banyak daripada kolom pengurut, tetapi pembaca harus tahu mengapa urutan itu dipilih."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "SELECT invoice_id, period_month, due_date, amount FROM school.invoices ORDER BY period_month DESC, invoice_id DESC LIMIT 5;",
+      "columns": ["invoice_id", "period_month", "due_date", "amount"],
+      "rows": [
+        ["110", "2026-09-01", "2026-09-10", "650000.00"],
+        ["108", "2026-09-01", "2026-09-10", "400000.00"],
+        ["106", "2026-09-01", "2026-09-10", "650000.00"],
+        ["104", "2026-09-01", "2026-09-10", "450000.00"],
+        ["102", "2026-09-01", "2026-09-10", "500000.00"]
+      ],
+      "explanation": "period_month DESC menempatkan September sebelum Agustus, lalu invoice_id DESC memberi urutan deterministik di dalam September. Semua lima hasil berasal dari periode 2026-09-01. due_date ditampilkan sebagai konteks tetapi tidak menjadi kolom utama pengurutan pada definisi ini."
+    },
+    "checks": [
+      {
+        "id": "l1m02l01-check-1",
+        "question": "Apa yang dijamin oleh LIMIT 5 tanpa ORDER BY?",
+        "options": [
+          "Selalu lima invoice terbaru.",
+          "Paling banyak lima baris, tanpa jaminan baris atau urutan mana yang dipilih.",
+          "Lima invoice dengan invoice_id terkecil."
+        ],
+        "answer": 1,
+        "explanation": "LIMIT membatasi cardinality hasil, bukan ranking.",
+        "feedback": [
+          "Belum tepat. 'Terbaru' harus didefinisikan melalui ORDER BY.",
+          "Benar. Jangan mengandalkan urutan kebetulan dari rencana eksekusi.",
+          "Belum tepat. Primary key tidak menjadi urutan default."
+        ]
+      },
+      {
+        "id": "l1m02l01-check-2",
+        "question": "Mengapa invoice_id cocok menjadi tie-breaker pada contoh?",
+        "options": [
+          "invoice_id adalah primary key sehingga unik untuk setiap invoice.",
+          "invoice_id selalu mencerminkan nilai amount terbesar.",
+          "invoice_id mengubah period_month menjadi tanggal baru."
+        ],
+        "answer": 0,
+        "explanation": "Kolom unik membantu membentuk total order setelah kolom bisnis seri.",
+        "feedback": [
+          "Benar. Keunikan membuat baris di dalam tie dapat diurutkan konsisten.",
+          "Belum tepat. ID tidak menyatakan nilai nominal.",
+          "Belum tepat. Tie-breaker hanya mengurutkan baris."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Debug laporan lima invoice terbaru. Prediksi mengapa query starter belum menetapkan lima record yang konsisten ketika beberapa period_month sama.",
+      "setup": "Seed memiliki lima invoice September dengan period_month dan due_date yang sama. Aktivitas memakai Quiz untuk memilih urutan dan tie-breaker, bukan menjalankan SQL bebas.",
+      "starterSql": "SELECT invoice_id, period_month, amount FROM school.invoices ORDER BY period_month DESC LIMIT 5;",
+      "variants": [
+        {
+          "id": "l1m02l01-variant-1",
+          "question": "Apa yang masih bebas berubah pada query starter?",
+          "options": [
+            "Invoice dari bulan yang sama dapat memiliki urutan atau anggota LIMIT yang tidak ditentukan.",
+            "period_month akan berubah menjadi NULL.",
+            "LIMIT akan mengembalikan lebih dari lima baris."
+          ],
+          "answer": 0,
+          "explanation": "ORDER BY hanya membedakan period_month; tie belum diberi aturan.",
+          "feedback": [
+            "Benar. Tambahkan kolom unik setelah period_month.",
+            "Belum tepat. ORDER BY tidak mengubah nilai kolom.",
+            "Belum tepat. LIMIT tetap membatasi paling banyak lima baris."
+          ]
+        },
+        {
+          "id": "l1m02l01-variant-2",
+          "question": "Perbaikan mana yang memilih invoice periode terbaru dengan tie-breaker ID terbesar?",
+          "options": [
+            "ORDER BY invoice_id DESC, period_month DESC LIMIT 5",
+            "ORDER BY period_month DESC, invoice_id DESC LIMIT 5",
+            "ORDER BY amount DESC LIMIT 5"
+          ],
+          "answer": 1,
+          "explanation": "Kolom utama tetap period_month, lalu invoice_id menyelesaikan tie.",
+          "feedback": [
+            "Belum tepat. ID menjadi prioritas utama dan dapat mencampur periode.",
+            "Benar. Urutan kolom menyatakan prioritas bisnis lalu tie-breaker.",
+            "Belum tepat. Amount bukan definisi terbaru."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l1m02l01-edge-1",
+          "question": "Jika due_date adalah definisi terbaru yang disepakati, perubahan minimal apa yang diperlukan?",
+          "options": [
+            "Ganti kolom utama ORDER BY menjadi due_date DESC dan tetap beri tie-breaker.",
+            "Hapus ORDER BY karena due_date sudah bertipe DATE.",
+            "Urutkan berdasarkan full_name siswa."
+          ],
+          "answer": 0,
+          "explanation": "Tipe DATE tidak otomatis menentukan urutan result set; definisi bisnis menentukan kolom.",
+          "feedback": [
+            "Benar. Gunakan due_date DESC, invoice_id DESC jika ID menjadi tie-breaker.",
+            "Belum tepat. ORDER BY tetap dibutuhkan.",
+            "Belum tepat. Nama siswa bukan tanggal jatuh tempo."
+          ]
+        },
+        {
+          "id": "l1m02l01-edge-2",
+          "question": "Mengapa primary key tidak boleh dianggap sebagai urutan default tanpa ORDER BY?",
+          "options": [
+            "Constraint unik tidak sama dengan janji urutan output.",
+            "Primary key hanya boleh dipakai di INSERT.",
+            "PostgreSQL tidak dapat mengurutkan angka."
+          ],
+          "answer": 0,
+          "explanation": "Keunikan dan urutan adalah properti berbeda.",
+          "feedback": [
+            "Benar. Tulis ORDER BY jika urutan adalah bagian dari hasil yang dibutuhkan.",
+            "Belum tepat. Primary key berguna untuk baca, join, dan filter juga.",
+            "Belum tepat. PostgreSQL dapat mengurutkan angka dengan ORDER BY."
+          ]
+        }
+      ],
+      "hints": [
+        "LIMIT membutuhkan ORDER BY jika kata 'terbaru' atau 'pertama' memiliki arti yang harus dipertanggungjawabkan.",
+        "Jadikan period_month DESC prioritas pertama dan invoice_id DESC sebagai tie-breaker.",
+        "Gunakan ORDER BY period_month DESC, invoice_id DESC LIMIT 5."
+      ],
+      "solutionSql": "SELECT invoice_id, period_month, amount FROM school.invoices ORDER BY period_month DESC, invoice_id DESC LIMIT 5;",
+      "solutionExplanation": "Query menuliskan definisi terbaru berdasarkan periode lalu memberi total order dengan invoice_id. Dengan demikian lima record September yang dipilih adalah 110, 108, 106, 104, dan 102 dalam urutan stabil.",
+      "critical": false
+    },
+    "reflection": "Jelaskan perbedaan period_month dan due_date pada kebutuhan 'terbaru', lalu sebutkan mengapa pagination atau ekspor perlu tie-breaker walaupun hasil tampak stabil di database kecil."
+  },
+  {
+    "id": "l1m02l02",
+    "version": "1.0.0",
+    "difficulty": "beginner",
+    "tags": ["sql", "case", "coalesce", "business-rules", "school-finance"],
+    "hook": "Laporan finance perlu menampilkan angka nol ketika invoice belum punya payment sukses, sekaligus memberi label overdue untuk saldo yang lewat jatuh tempo. Bagaimana menulis aturan itu tanpa mengubah NULL menjadi fakta pembayaran?",
+    "objectives": [
+      "Menggunakan COALESCE sebagai fallback output dan perhitungan.",
+      "Memakai CASE untuk memetakan kondisi amount, outstanding, dan due_date menjadi status bisnis.",
+      "Memfilter payment succeeded sebelum agregasi agar pending dan failed tidak dihitung sebagai penerimaan."
+    ],
+    "sections": [
+      {
+        "title": "Intuisi: ekspresi mengubah data menjadi informasi",
+        "paragraphs": [
+          "Kolom database menyimpan fakta dasar, sedangkan laporan sering membutuhkan informasi turunan. amount adalah nominal tagihan; total succeeded payment dan due_date dapat dipakai untuk menyusun outstanding serta status. CASE membaca kondisi secara berurutan dan mengembalikan label yang eksplisit. Misalnya saldo nol berarti paid, sedangkan saldo positif dan due_date sebelum tanggal laporan berarti overdue. Urutan WHEN penting karena kondisi pertama yang benar akan dipilih.",
+          "LEFT JOIN membuat invoice yang belum memiliki payment tetap muncul, tetapi aggregate di sisi kanan dapat bernilai NULL. COALESCE(SUM(...), 0) memberi fallback numerik agar pengurangan dapat dihitung. Fallback itu bukan INSERT ke payments dan bukan bukti bahwa payment pernah terjadi. Ia hanya menyatakan bahwa untuk metrik yang sedang dihitung, ketiadaan jumlah succeeded diperlakukan sebagai nol."
+        ]
+      },
+      {
+        "title": "Membuat aturan status yang terbaca",
+        "paragraphs": [
+          "Aturan harus menyebut status payment yang masuk. Pada seed, pending 450000 untuk invoice 104 dan failed 650000 untuk invoice 105 tidak boleh menaikkan succeeded_amount. Karena itu aggregate menggunakan FILTER (WHERE p.status = 'succeeded'). Setelah aggregate selesai, CASE dapat membandingkan hasil dengan invoice amount dan tanggal tetap DATE '2026-09-15'. Tanggal tetap membuat worked example dapat diulang tanpa bergantung pada jam mesin.",
+          "COALESCE juga berguna untuk label tampilan, tetapi jangan menutup makna NULL terlalu cepat. Dalam audit, tidak ada payment row, payment pending, dan payment failed mungkin perlu dibedakan. Lesson ini memakai angka nol untuk metrik succeeded karena itu definisi yang jelas; narasi dan status tetap perlu menyebut sumber perhitungannya. Jika aturan bisnis berubah, CASE harus ditinjau sebagai code yang memuat kebijakan."
+        ]
+      },
+      {
+        "title": "Batasan dan miskonsepsi",
+        "paragraphs": [
+          "Miskonsepsi umum adalah menganggap COALESCE berarti data NULL sudah diperbaiki. COALESCE hanya memilih nilai saat ekspresi dibaca. Miskonsepsi lain adalah menulis SUM(p.amount) tanpa filter status lalu memberi label paid dari angka itu. Query tersebut akan menganggap pending atau failed sebagai uang diterima dan menghasilkan laporan yang salah walaupun semua sintaksnya valid.",
+          "CASE juga bukan pengganti model status yang kompleks. Jika ada grace period, refund, write-off, atau multi-currency, aturan perlu diperluas dengan requirement yang eksplisit. Contoh ini menyederhanakan definisi untuk School Finance seed: saldo = amount dikurangi succeeded payment dan overdue berarti saldo positif setelah due_date terlewati pada tanggal laporan. Batasan tersebut harus dibawa bersama query ketika hasil dipakai.",
+          "Sebelum memakai label turunan untuk keputusan operasional, cocokkan beberapa invoice dengan bukti sumbernya. Invoice 104 adalah contoh penting: ada row payment, tetapi statusnya pending dan timestamp-nya NULL. Laporan yang hanya memeriksa keberadaan row akan berbeda dari laporan yang mendefinisikan penerimaan melalui status succeeded."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "WITH paid AS (SELECT invoice_id, SUM(amount) FILTER (WHERE status = 'succeeded') AS succeeded_amount FROM school.payments GROUP BY invoice_id), classified AS (SELECT i.invoice_id, i.due_date, i.amount, COALESCE(p.succeeded_amount, 0::numeric(12,2)) AS succeeded_amount FROM school.invoices i LEFT JOIN paid p ON p.invoice_id = i.invoice_id) SELECT invoice_id, succeeded_amount, amount - succeeded_amount AS outstanding, CASE WHEN amount - succeeded_amount <= 0::numeric(12,2) THEN 'paid' WHEN due_date < DATE '2026-09-15' THEN 'overdue' ELSE 'open' END AS billing_state FROM classified WHERE invoice_id IN (101, 102, 104, 108) ORDER BY invoice_id;",
+      "columns": ["invoice_id", "succeeded_amount", "outstanding", "billing_state"],
+      "rows": [
+        ["101", "500000.00", "0.00", "paid"],
+        ["102", "200000.00", "300000.00", "overdue"],
+        ["104", "0.00", "450000.00", "overdue"],
+        ["108", "0.00", "400000.00", "overdue"]
+      ],
+      "explanation": "paid menghitung hanya status succeeded. COALESCE mengubah ketiadaan aggregate menjadi 0 untuk invoice 104 dan 108. CASE memprioritaskan paid ketika outstanding nol; jika masih ada saldo dan due_date sebelum 2026-09-15, labelnya overdue. Pending invoice 104 tidak dihitung sebagai pembayaran diterima."
+    },
+    "checks": [
+      {
+        "id": "l1m02l02-check-1",
+        "question": "Apa fungsi COALESCE(p.succeeded_amount, 0) setelah LEFT JOIN aggregate?",
+        "options": [
+          "Mengubah status payment pending menjadi succeeded.",
+          "Menghapus invoice yang tidak punya payment.",
+          "Memberi nilai numerik 0 ketika aggregate succeeded tidak memiliki baris pasangan."
+        ],
+        "answer": 2,
+        "explanation": "COALESCE memilih fallback pada hasil baca, bukan mengubah data sumber.",
+        "feedback": [
+          "Belum tepat. Status tidak berubah karena COALESCE.",
+          "Belum tepat. LEFT JOIN justru mempertahankan invoice tanpa pasangan.",
+          "Benar. Fallback membuat pengurangan amount - paid dapat dihitung."
+        ]
+      },
+      {
+        "id": "l1m02l02-check-2",
+        "question": "Mengapa aggregate contoh memakai FILTER (WHERE status = 'succeeded')?",
+        "options": [
+          "Agar payment pending dan failed tidak dianggap sebagai penerimaan.",
+          "Agar invoice tanpa payment otomatis dihapus.",
+          "Agar due_date berubah menjadi tanggal pembayaran."
+        ],
+        "answer": 0,
+        "explanation": "Status bisnis menentukan payment yang boleh masuk ke succeeded_amount.",
+        "feedback": [
+          "Benar. Pending dan failed tetap dapat ada di tabel tetapi tidak masuk total diterima.",
+          "Belum tepat. LEFT JOIN dan COALESCE mempertahankan invoice tersebut.",
+          "Belum tepat. FILTER tidak mengubah due_date."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Debug laporan status invoice yang menjumlahkan semua payment. Perbaiki agar angka payment hanya menghitung succeeded dan NULL menjadi nol untuk perhitungan.",
+      "setup": "Tanggal laporan adalah DATE '2026-09-15'. Invoice 104 memiliki payment pending 450000 dan invoice 108 tidak punya payment row. Query starter sengaja menjumlahkan semua status.",
+      "starterSql": "SELECT i.invoice_id, COALESCE(SUM(p.amount), 0) AS paid_amount FROM school.invoices i LEFT JOIN school.payments p ON p.invoice_id = i.invoice_id WHERE i.invoice_id IN (104, 108) GROUP BY i.invoice_id ORDER BY i.invoice_id;",
+      "variants": [
+        {
+          "id": "l1m02l02-variant-1",
+          "question": "Berapa paid_amount yang benar untuk invoice 104 jika hanya succeeded dihitung?",
+          "options": [
+            "0.00, karena payment-nya pending.",
+            "450000.00, karena semua payment amount adalah penerimaan.",
+            "NULL, karena invoice memiliki payment row."
+          ],
+          "answer": 0,
+          "explanation": "Payment 205 berstatus pending sehingga tidak masuk aggregate succeeded.",
+          "feedback": [
+            "Benar. COALESCE memberi nol pada aggregate yang tersaring.",
+            "Belum tepat. Status pending tidak boleh dihitung sebagai diterima.",
+            "Belum tepat. SUM terfilter tanpa baris dapat difallback ke nol."
+          ]
+        },
+        {
+          "id": "l1m02l02-variant-2",
+          "question": "CASE mana yang menandai invoice sebagai overdue pada tanggal laporan jika saldo masih positif?",
+          "options": [
+            "CASE WHEN due_date < DATE '2026-09-15' AND outstanding > 0 THEN 'overdue' ELSE 'open' END",
+            "CASE WHEN status = 'pending' THEN 'overdue' ELSE 'paid' END",
+            "CASE WHEN amount > 0 THEN 'overdue' ELSE 'open' END"
+          ],
+          "answer": 0,
+          "explanation": "Overdue bergantung pada lewat jatuh tempo dan adanya outstanding, bukan status payment tunggal.",
+          "feedback": [
+            "Benar. Kedua syarat mendefinisikan aturan contoh.",
+            "Belum tepat. Pending belum tentu overdue dan tidak mencakup saldo.",
+            "Belum tepat. Amount positif tidak berarti jatuh tempo sudah lewat."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l1m02l02-edge-1",
+          "question": "Apa yang ditampilkan COALESCE untuk invoice 108 yang tidak punya payment row?",
+          "options": [
+            "0 untuk succeeded_amount, tanpa membuat payment palsu.",
+            "500000 karena COALESCE menyalin amount invoice.",
+            "Baris invoice hilang karena LEFT JOIN."
+          ],
+          "answer": 0,
+          "explanation": "Fallback berlaku pada metrik aggregate, sedangkan row invoice tetap dipertahankan.",
+          "feedback": [
+            "Benar. Angka nol adalah representasi metrik, bukan INSERT payment.",
+            "Belum tepat. COALESCE memakai fallback yang ditulis, yaitu 0.",
+            "Belum tepat. LEFT JOIN mempertahankan sisi kiri."
+          ]
+        },
+        {
+          "id": "l1m02l02-edge-2",
+          "question": "Jika invoice sudah lewat due_date tetapi succeeded payment sama dengan amount, status contoh harus apa?",
+          "options": [
+            "overdue karena due_date selalu mengalahkan saldo.",
+            "paid karena CASE memeriksa saldo nol lebih dahulu.",
+            "NULL karena CASE tidak bisa membandingkan numeric."
+          ],
+          "answer": 1,
+          "explanation": "Dalam aturan lesson ini, saldo nol berarti paid walaupun tanggal sudah lewat.",
+          "feedback": [
+            "Belum tepat. Urutan kondisi menjadikan paid prioritas.",
+            "Benar. Kebijakan berbeda dapat mengubah urutan CASE secara eksplisit.",
+            "Belum tepat. Numeric dapat dibandingkan secara normal."
+          ]
+        }
+      ],
+      "hints": [
+        "Periksa status payment sebelum menjumlahkan amount, lalu pikirkan apa yang terjadi jika tidak ada baris tersisa.",
+        "Gunakan SUM(amount) FILTER (WHERE status = 'succeeded') dan bungkus dengan COALESCE(..., 0).",
+        "Gabungkan hasil itu dengan amount dan due_date untuk CASE paid, overdue, atau open."
+      ],
+      "solutionSql": "WITH paid AS (SELECT invoice_id, SUM(amount) FILTER (WHERE status = 'succeeded') AS succeeded_amount FROM school.payments GROUP BY invoice_id) SELECT i.invoice_id, COALESCE(p.succeeded_amount, 0::numeric(12,2)) AS paid_amount, CASE WHEN i.amount - COALESCE(p.succeeded_amount, 0::numeric(12,2)) <= 0::numeric(12,2) THEN 'paid' WHEN i.due_date < DATE '2026-09-15' THEN 'overdue' ELSE 'open' END AS billing_state FROM school.invoices i LEFT JOIN paid p ON p.invoice_id = i.invoice_id WHERE i.invoice_id IN (104, 108) ORDER BY i.invoice_id;",
+      "solutionExplanation": "CTE paid mengagregasi hanya succeeded, lalu LEFT JOIN menjaga invoice tanpa payment. COALESCE menjadikan nilai kosong sebagai nol untuk pengurangan. CASE memeriksa paid lebih dahulu, kemudian overdue berdasarkan tanggal tetap dan saldo positif.",
+      "critical": true
+    },
+    "reflection": "Jelaskan perbedaan antara memakai COALESCE untuk output metrik dan mengubah data sumber. Sebutkan satu aturan status tambahan, seperti write-off atau refund, yang tidak dapat ditangani oleh CASE sederhana ini tanpa definisi baru."
+  },
+  {
+    "id": "l1m02l03",
+    "version": "1.0.0",
+    "difficulty": "beginner",
+    "tags": ["sql", "date", "string", "cast", "school-finance"],
+    "hook": "Laporan bulanan perlu menampilkan label 2026-09, tetapi filter tanggal harus tetap memanfaatkan tipe DATE. Bagaimana memformat tanggal untuk output tanpa mengubah kolom di predicate menjadi teks?",
+    "objectives": [
+      "Memformat DATE menjadi label string dengan to_char tanpa kehilangan tipe sumber.",
+      "Memfilter rentang bulan dengan batas inklusif dan eksklusif yang jelas.",
+      "Menjelaskan risiko cast pada input yang invalid, presisi, dan penggunaan indeks."
+    ],
+    "sections": [
+      {
+        "title": "Intuisi: tipe sumber dan tipe tampilan berbeda",
+        "paragraphs": [
+          "period_month disimpan sebagai DATE sehingga PostgreSQL dapat membandingkannya sebagai tanggal, mengurutkannya secara kronologis, dan memvalidasi nilai kalender. Pengguna laporan mungkin menginginkan label string 2026-09. to_char(period_month, 'YYYY-MM') mengubah nilai pada result set, bukan schema. Memisahkan format tampilan dari predicate menjaga query tetap berbicara dalam unit tanggal saat memilih baris.",
+          "Rentang bulan September dapat ditulis period_month >= DATE '2026-09-01' AND period_month < DATE '2026-10-01'. Batas bawah inklusif memasukkan awal bulan, sedangkan batas atas eksklusif menghindari menghitung tanggal di Oktober. Bentuk ini lebih aman daripada menebak jumlah hari bulan dan tetap cocok bila kolom nanti memakai timestamp dengan batas waktu yang sesuai."
+        ]
+      },
+      {
+        "title": "Cast dan risiko yang harus terlihat",
+        "paragraphs": [
+          "Cast berguna ketika tipe memang perlu berubah, misalnya membandingkan input yang sudah divalidasi atau menampilkan hasil sebagai text. Namun, cast text ke date akan gagal untuk format yang invalid, dan cast numeric ke integer dapat kehilangan pecahan. Cast kolom period_month ke text di WHERE juga memindahkan perbandingan ke bentuk string serta dapat menyulitkan pemakaian indeks. Contoh ini sengaja melakukan format hanya di SELECT.",
+          "Tanggal literal ISO dengan DATE '2026-09-01' memberi tipe yang jelas tanpa bergantung pada locale. Jika batas berasal dari user, validasi input tetap dibutuhkan sebelum membentuk query parameter. Jangan menyusun SQL dengan konkatenasi string tanggal. Lesson ini membahas ekspresi tipe dan rentang; keamanan parameter dan perencanaan indeks perlu diperdalam pada lesson backend serta performance."
+        ]
+      },
+      {
+        "title": "Miskonsepsi dan batasan format",
+        "paragraphs": [
+          "Miskonsepsi umum adalah mengira to_char membuat tanggal menjadi tanggal baru. Hasilnya adalah text untuk display; ia tidak lagi cocok sebagai sumber operasi tanggal tanpa parsing kembali. Miskonsepsi lain adalah membandingkan DATE dengan label '2026-09'. Label dapat terlihat sama bagi manusia tetapi bukan rentang kalender yang eksplisit.",
+          "Format YYYY-MM cukup untuk laporan bulanan, tetapi bukan identitas yang aman jika timezone dan timestamp menjadi relevan. Untuk timestamp, batas bulan harus ditetapkan dalam timezone bisnis. Untuk nilai yang nullable, predicate juga harus menjelaskan apakah NULL diabaikan. Seed memiliki period_month NOT NULL, sehingga contoh dapat fokus pada batas rentang dan perbedaan transformasi output versus filter.",
+          "Batas rentang juga membuat niat query terlihat ketika bulan berubah menjadi parameter. Aplikasi dapat mengirim awal bulan dan awal bulan berikutnya sebagai parameter terpisah, sementara SQL tetap memakai operator tanggal. Pendekatan itu menghindari daftar nama bulan, aturan locale, dan kesalahan saat berpindah dari Februari ke bulan dengan jumlah hari berbeda."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "SELECT invoice_id, to_char(period_month, 'YYYY-MM') AS billing_month, amount FROM school.invoices WHERE period_month >= DATE '2026-09-01' AND period_month < DATE '2026-10-01' ORDER BY period_month, invoice_id;",
+      "columns": ["invoice_id", "billing_month", "amount"],
+      "rows": [
+        ["102", "2026-09", "500000.00"],
+        ["104", "2026-09", "450000.00"],
+        ["106", "2026-09", "650000.00"],
+        ["108", "2026-09", "400000.00"],
+        ["110", "2026-09", "650000.00"]
+      ],
+      "explanation": "WHERE membandingkan DATE dengan batas bulan, sedangkan to_char hanya memformat hasil menjadi label YYYY-MM. Batas Oktober eksklusif menjaga query tetap benar tanpa menghitung jumlah hari bulan. ORDER BY period_month lalu invoice_id membuat hasil stabil."
+    },
+    "checks": [
+      {
+        "id": "l1m02l03-check-1",
+        "question": "Mengapa filter September ditulis dengan batas >= 1 September dan < 1 Oktober?",
+        "options": [
+          "Agar perbandingan tetap memakai tanggal dan mencakup seluruh bulan tanpa menghitung jumlah hari.",
+          "Agar period_month menjadi text sebelum dibandingkan.",
+          "Agar semua tanggal di tahun 2026 ikut masuk."
+        ],
+        "answer": 0,
+        "explanation": "Batas eksklusif bulan berikutnya adalah pola rentang kalender yang jelas.",
+        "feedback": [
+          "Benar. Pola ini mencakup 1 September sampai sebelum 1 Oktober.",
+          "Belum tepat. Kolom tetap DATE pada predicate.",
+          "Belum tepat. Batas bawah dan atas membatasi satu bulan."
+        ]
+      },
+      {
+        "id": "l1m02l03-check-2",
+        "question": "Apa tipe hasil to_char(period_month, 'YYYY-MM')?",
+        "options": [
+          "DATE yang otomatis dapat dipakai sebagai batas bulan berikutnya.",
+          "TEXT untuk label tampilan.",
+          "BOOLEAN yang menyatakan tanggal valid."
+        ],
+        "answer": 1,
+        "explanation": "to_char memformat nilai menjadi string.",
+        "feedback": [
+          "Belum tepat. Hasil perlu parsing kembali jika ingin dijadikan tanggal.",
+          "Benar. Format tersebut cocok untuk display, bukan pengganti predicate tanggal.",
+          "Belum tepat. to_char tidak menghasilkan boolean."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Perbaiki query starter yang memfilter month dengan cast text. Prediksi mengapa batas DATE lebih tepat, lalu pertahankan label bulan pada hasil.",
+      "setup": "Gunakan period_month DATE pada school.invoices. Hasil yang diinginkan adalah semua invoice September 2026, dengan label billing_month YYYY-MM dan urutan invoice_id.",
+      "starterSql": "SELECT invoice_id, period_month::text AS billing_month FROM school.invoices WHERE period_month::text LIKE '2026-09%' ORDER BY invoice_id;",
+      "variants": [
+        {
+          "id": "l1m02l03-variant-1",
+          "question": "Apa kekurangan utama period_month::text LIKE '2026-09%' sebagai filter tanggal?",
+          "options": [
+            "Ia tidak pernah menghasilkan baris untuk DATE.",
+            "Ia membandingkan representasi string, sehingga definisi rentang tanggal dan peluang optimasi menjadi kurang jelas.",
+            "Ia otomatis memasukkan Oktober karena LIKE mencari prefix."
+          ],
+          "answer": 1,
+          "explanation": "Cast kolom ke text mengubah bentuk predicate dari rentang tanggal menjadi pencocokan string.",
+          "feedback": [
+            "Belum tepat. PostgreSQL dapat mencast DATE ke text.",
+            "Benar. Gunakan batas DATE untuk filter, format hanya pada output.",
+            "Belum tepat. Prefix 2026-09 tidak cocok dengan 2026-10, tetapi tetap bukan rentang tanggal terbaik."
+          ]
+        },
+        {
+          "id": "l1m02l03-variant-2",
+          "question": "Manakah query filter September yang tidak memformat kolom di WHERE?",
+          "options": [
+            "WHERE period_month BETWEEN DATE '2026-09-01' AND DATE '2026-09-30'",
+            "WHERE period_month >= DATE '2026-09-01' AND period_month < DATE '2026-10-01'",
+            "WHERE to_char(period_month, 'YYYY-MM') = '2026-09'"
+          ],
+          "answer": 1,
+          "explanation": "Batas eksklusif awal bulan berikutnya aman dan mempertahankan tipe tanggal pada kolom.",
+          "feedback": [
+            "Dapat bekerja untuk DATE, tetapi batas akhir tertutup harus dipelihara saat tipe menjadi timestamp.",
+            "Benar. Ini rentang tanggal yang eksplisit dan mudah diperluas.",
+            "Belum tepat. Kolom diformat di predicate."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l1m02l03-edge-1",
+          "question": "Apa risiko cast text 'September' ke DATE?",
+          "options": [
+            "Selalu berubah menjadi 2026-09-01.",
+            "Dapat gagal karena input bukan format tanggal yang valid dan tidak tervalidasi.",
+            "PostgreSQL mengabaikan cast dan memakai NULL."
+          ],
+          "answer": 1,
+          "explanation": "Cast yang tidak dapat diparse menghasilkan error, bukan konversi diam-diam yang aman.",
+          "feedback": [
+            "Belum tepat. Database tidak boleh menebak tanggal yang dimaksud.",
+            "Benar. Validasi input perlu dilakukan sebelum cast.",
+            "Belum tepat. Cast invalid umumnya menghasilkan error."
+          ]
+        },
+        {
+          "id": "l1m02l03-edge-2",
+          "question": "Jika period_month diganti menjadi timestamp, pola batas bulan mana yang paling aman untuk rentang?",
+          "options": [
+            ">= awal bulan dan < awal bulan berikutnya.",
+            "= '2026-09' tanpa cast atau batas.",
+            "Mengubah timestamp ke text lalu membandingkan nama bulan."
+          ],
+          "answer": 0,
+          "explanation": "Batas setengah terbuka menghindari masalah jam terakhir dan presisi pecahan detik.",
+          "feedback": [
+            "Benar. Pola ini tetap memasukkan seluruh waktu dalam bulan.",
+            "Belum tepat. Literal tersebut belum mendefinisikan rentang timestamp.",
+            "Belum tepat. Nama bulan text kehilangan definisi tanggal dan locale."
+          ]
+        }
+      ],
+      "hints": [
+        "Pisahkan kolom untuk filter dari ekspresi untuk label output.",
+        "Gunakan DATE '2026-09-01' sebagai batas bawah dan DATE '2026-10-01' sebagai batas atas eksklusif.",
+        "Solusi dapat memilih to_char(period_month, 'YYYY-MM') di SELECT, lalu memakai rentang DATE di WHERE."
+      ],
+      "solutionSql": "SELECT invoice_id, to_char(period_month, 'YYYY-MM') AS billing_month FROM school.invoices WHERE period_month >= DATE '2026-09-01' AND period_month < DATE '2026-10-01' ORDER BY invoice_id;",
+      "solutionExplanation": "Solution mempertahankan period_month sebagai DATE untuk predicate dan mengubahnya menjadi label hanya di result set. Rentang half-open mencakup seluruh September, sementara ORDER BY invoice_id membuat hasil deterministik.",
+      "critical": false
+    },
+    "reflection": "Jelaskan mengapa format string cocok di SELECT tetapi kurang tepat di WHERE untuk kolom tanggal. Sebutkan satu risiko baru jika input tanggal berasal dari user dan satu strategi validasinya."
+  },
+  {
+    "id": "l1m03l01",
+    "version": "1.0.0",
+    "difficulty": "beginner",
+    "tags": ["sql", "inner-join", "foreign-key", "relations", "school-finance"],
+    "hook": "Laporan invoice perlu menampilkan nama siswa. Tabel invoices dan students sama-sama memiliki ID, tetapi JOIN yang memakai kolom mirip secara sembarang dapat menghasilkan pasangan yang salah atau kosong. Predicate mana yang benar-benar mewakili relasi?",
+    "objectives": [
+      "Menulis INNER JOIN dari foreign key invoices.student_id ke students.student_id.",
+      "Menjelaskan bahwa JOIN ditentukan oleh predicate, bukan kemiripan nama kolom.",
+      "Memilih kolom output yang jelas dan menghindari ambiguitas alias pada dua tabel."
+    ],
+    "sections": [
+      {
+        "title": "Intuisi: JOIN mencocokkan kunci",
+        "paragraphs": [
+          "Satu invoice menyimpan student_id sebagai referensi ke student_id pada school.students. INNER JOIN membaca predicate s.student_id = i.student_id dan menggabungkan kolom dari dua baris yang memenuhi kondisi itu. Relasi tersebut bukan sekadar karena kedua kolom bernama sama; ia berasal dari foreign key yang menjaga setiap invoice menunjuk ke student yang ada. Bila tidak ada pasangan yang cocok, INNER JOIN tidak mengarang baris dan tidak menampilkan invoice tersebut.",
+          "Alias memperjelas asal kolom ketika query menyebut dua tabel. `school.invoices i JOIN school.students s` membuat `i.amount` dan `s.full_name` dapat dibaca tanpa menebak. Kolom output sebaiknya diberi nama yang sesuai laporan, misalnya student_name. Menulis daftar kolom eksplisit juga mencegah invoice_id dan student_id yang sama-sama numerik menjadi output yang membingungkan."
+        ]
+      },
+      {
+        "title": "Foreign key dan batasan INNER JOIN",
+        "paragraphs": [
+          "Foreign key adalah perlindungan integritas saat data ditulis; JOIN adalah cara mengambil data yang berhubungan. Foreign key tidak otomatis membuat setiap query JOIN benar. Query masih dapat memakai kolom yang salah, menambahkan filter yang terlalu ketat, atau memperbanyak baris ketika relasi yang dipilih one-to-many. Worked example memakai relasi many invoices to one student, sehingga setiap invoice seed mendapat tepat satu nama siswa.",
+          "INNER JOIN cocok ketika laporan hanya ingin record yang memiliki pasangan valid. Jika pertanyaannya berubah menjadi 'semua siswa termasuk yang belum punya invoice', INNER JOIN akan membuang siswa tanpa pasangan dan LEFT JOIN diperlukan. Pemilihan jenis join adalah pernyataan tentang baris mana yang wajib dipertahankan, bukan preferensi sintaks."
+        ]
+      },
+      {
+        "title": "Miskonsepsi yang sering terjadi",
+        "paragraphs": [
+          "Miskonsepsi pertama adalah JOIN otomatis mencocokkan kolom dengan nama sama. PostgreSQL tidak menebak predicate pada JOIN biasa; kita harus menuliskannya. NATURAL JOIN memang dapat menebak berdasarkan semua nama kolom bersama, tetapi perubahan schema bisa mengubah pasangan kolom sehingga tidak cocok untuk kontrak laporan. Miskonsepsi kedua adalah foreign key selalu berarti satu baris total. Satu student dapat memiliki banyak invoice, sehingga arah relasi harus dibaca.",
+          "Miskonsepsi ketiga adalah INNER JOIN dapat dipakai untuk mencari data yang hilang. INNER JOIN justru menyimpan hanya pasangan yang ada. Untuk mencari siswa tanpa invoice, mulai dari students dan gunakan LEFT JOIN, lalu uji kolom sisi kanan IS NULL. Pertanyaan bisnis tentang kehilangan baris menentukan bentuk join.",
+          "Sebelum menulis JOIN, catat grain setiap sumber: students satu baris per siswa dan invoices satu baris per invoice. Catatan sederhana ini membantu membaca mengapa Alya memiliki dua hasil dan mengingatkan bahwa menggabungkan tabel dapat mengubah jumlah baris. Jika laporan menginginkan satu baris per siswa, aggregate atau DISTINCT harus menjadi keputusan terpisah, bukan efek samping JOIN."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "SELECT i.invoice_id, s.full_name AS student_name, i.period_month, i.amount FROM school.invoices i INNER JOIN school.students s ON s.student_id = i.student_id WHERE i.invoice_id IN (101, 102, 103, 104) ORDER BY i.invoice_id;",
+      "columns": ["invoice_id", "student_name", "period_month", "amount"],
+      "rows": [
+        ["101", "Alya Putri", "2026-08-01", "500000.00"],
+        ["102", "Alya Putri", "2026-09-01", "500000.00"],
+        ["103", "Bima Pratama", "2026-08-01", "450000.00"],
+        ["104", "Bima Pratama", "2026-09-01", "450000.00"]
+      ],
+      "explanation": "Predicate s.student_id = i.student_id mengikuti foreign key. Alya muncul dua kali karena memiliki dua invoice, bukan karena JOIN salah. INNER JOIN menjaga setiap invoice yang punya student valid dan mengeluarkan kolom yang dipilih secara eksplisit."
+    },
+    "checks": [
+      {
+        "id": "l1m03l01-check-1",
+        "question": "Predicate mana yang mengikuti relasi foreign key pada seed?",
+        "options": [
+          "s.student_id = i.student_id",
+          "s.full_name = i.period_month",
+          "s.student_id = i.invoice_id"
+        ],
+        "answer": 0,
+        "explanation": "invoices.student_id mereferensikan students.student_id.",
+        "feedback": [
+          "Benar. Keduanya adalah kunci identitas student.",
+          "Belum tepat. Tipe dan makna kolom berbeda.",
+          "Belum tepat. invoice_id adalah kunci invoice, bukan kunci student."
+        ]
+      },
+      {
+        "id": "l1m03l01-check-2",
+        "question": "Mengapa Alya muncul dua kali pada worked example?",
+        "options": [
+          "INNER JOIN menggandakan semua baris secara otomatis.",
+          "Alya memiliki dua invoice yang masing-masing cocok ke satu student row.",
+          "student_id Alya tidak unik."
+        ],
+        "answer": 1,
+        "explanation": "Relasi satu student ke banyak invoice menghasilkan satu output per invoice.",
+        "feedback": [
+          "Belum tepat. Penggandaan mengikuti cardinality relasi, bukan aturan INNER JOIN semata.",
+          "Benar. Dua invoice 101 dan 102 sama-sama milik Alya.",
+          "Belum tepat. students.student_id adalah primary key."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Debug query invoice dan siswa yang salah memilih kolom JOIN. Prediksi apakah hasil kosong, salah pasangan, atau benar sebelum memilih perbaikannya.",
+      "setup": "Schema hanya memakai school.students(student_id) dan school.invoices(student_id, invoice_id). Aktivitas menguji pembacaan foreign key dengan Quiz, bukan eksekusi query bebas.",
+      "starterSql": "SELECT i.invoice_id, s.full_name FROM school.invoices i INNER JOIN school.students s ON s.student_id = i.invoice_id WHERE i.invoice_id IN (101, 102) ORDER BY i.invoice_id;",
+      "variants": [
+        {
+          "id": "l1m03l01-variant-1",
+          "question": "Apa masalah predicate s.student_id = i.invoice_id pada query starter?",
+          "options": [
+            "Ia membandingkan kunci student dengan kunci invoice sehingga pasangan dapat kosong atau salah.",
+            "Ia selalu benar untuk semua baris karena keduanya BIGINT.",
+            "Ia mengubah foreign key menjadi primary key baru."
+          ],
+          "answer": 0,
+          "explanation": "Tipe sama tidak berarti makna kunci sama.",
+          "feedback": [
+            "Benar. Relasi harus memakai i.student_id.",
+            "Belum tepat. Nilai kunci berbeda walaupun tipe numeriknya sama.",
+            "Belum tepat. Query baca tidak mengubah constraint."
+          ]
+        },
+        {
+          "id": "l1m03l01-variant-2",
+          "question": "Perbaikan JOIN yang tepat untuk menampilkan nama pemilik invoice adalah ...",
+          "options": [
+            "ON s.student_id = i.student_id",
+            "ON s.full_name = i.student_id",
+            "ON s.student_id = i.amount"
+          ],
+          "answer": 0,
+          "explanation": "Foreign key menyimpan student_id pada invoice.",
+          "feedback": [
+            "Benar. Ini predicate relasional yang dijaga schema.",
+            "Belum tepat. full_name adalah label text, bukan key invoice.",
+            "Belum tepat. amount bukan identitas student."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l1m03l01-edge-1",
+          "question": "Jika query dimulai dari students tetapi memakai INNER JOIN invoices, apa yang terjadi pada student tanpa invoice?",
+          "options": [
+            "Student tanpa invoice tidak muncul karena tidak memiliki pasangan.",
+            "Student otomatis muncul dengan invoice_id NULL.",
+            "Semua student mendapat invoice pertama."
+          ],
+          "answer": 0,
+          "explanation": "INNER JOIN mempertahankan hanya baris dengan pasangan di kedua sisi.",
+          "feedback": [
+            "Benar. Gunakan LEFT JOIN jika sisi students wajib dipertahankan.",
+            "Belum tepat. NULL placeholder adalah perilaku LEFT JOIN.",
+            "Belum tepat. Database tidak mengarang pasangan."
+          ]
+        },
+        {
+          "id": "l1m03l01-edge-2",
+          "question": "Jika satu student memiliki tiga invoice, berapa baris yang dihasilkan INNER JOIN invoice-to-student untuk student tersebut?",
+          "options": [
+            "Satu, karena student_id unik.",
+            "Tiga, satu untuk setiap invoice yang cocok.",
+            "Sembilan, karena kedua tabel dikalikan."
+          ],
+          "answer": 1,
+          "explanation": "Satu sisi parent cocok dengan banyak child sehingga output mengikuti jumlah child.",
+          "feedback": [
+            "Belum tepat. Keunikan student_id tidak menghapus baris invoice.",
+            "Benar. Setiap invoice adalah record output tersendiri.",
+            "Belum tepat. Predicate mencegah cross join."
+          ]
+        }
+      ],
+      "hints": [
+        "Baca foreign key di seed: kolom invoice mana yang menunjuk ke students?",
+        "Gunakan ON s.student_id = i.student_id; invoice_id hanya mengidentifikasi invoice.",
+        "Tambahkan alias pada kolom output dan ORDER BY i.invoice_id agar pasangan mudah diperiksa."
+      ],
+      "solutionSql": "SELECT i.invoice_id, s.full_name AS student_name FROM school.invoices i INNER JOIN school.students s ON s.student_id = i.student_id WHERE i.invoice_id IN (101, 102) ORDER BY i.invoice_id;",
+      "solutionExplanation": "Perbaikan memakai kolom foreign key i.student_id, bukan invoice_id. Hasilnya invoice 101 dan 102 sama-sama berpasangan dengan Alya Putri. Query tidak memerlukan NATURAL JOIN atau tebakan berdasarkan nama kolom.",
+      "critical": false
+    },
+    "reflection": "Jelaskan mengapa foreign key dan JOIN memiliki peran berbeda, lalu sebutkan kondisi laporan yang mengharuskan LEFT JOIN meskipun relasi invoices.student_id dijaga foreign key."
+  },
+  {
+    "id": "l1m03l02",
+    "version": "1.0.0",
+    "difficulty": "beginner",
+    "tags": ["sql", "left-join", "null", "missing-rows", "school-finance"],
+    "hook": "Manajemen ingin melihat semua siswa pada bulan September, termasuk siswa yang belum memiliki invoice. Filter bulan yang diletakkan di WHERE dapat menghapus baris NULL dari sisi invoice. Di mana predicate tersebut seharusnya ditempatkan?",
+    "objectives": [
+      "Menggunakan LEFT JOIN untuk mempertahankan semua baris dari tabel sisi kiri.",
+      "Membedakan filter relasi di ON dari filter hasil di WHERE.",
+      "Menemukan siswa tanpa invoice tanpa menyamakan NULL dengan invoice valid."
+    ],
+    "sections": [
+      {
+        "title": "Intuisi: sisi kiri adalah daftar yang wajib dipertahankan",
+        "paragraphs": [
+          "LEFT JOIN dapat dibaca sebagai: ambil semua baris dari sisi kiri, lalu tempelkan pasangan dari sisi kanan jika ada. Jika tidak ada pasangan, kolom kanan diisi NULL. Ketika daftar awalnya adalah students, Danu tetap terlihat walaupun ia hanya memiliki invoice Agustus dan tidak memiliki invoice September. Placeholder NULL itu berguna karena menandakan ketiadaan pasangan, bukan nilai invoice yang kosong.",
+          "Predicate pada ON menentukan pasangan kanan yang boleh ditempelkan. Menaruh i.period_month = DATE '2026-09-01' di ON berarti siswa tetap dipertahankan, tetapi hanya invoice September yang dicari. Setelah join, `WHERE i.invoice_id IS NULL` dapat dipakai untuk memilih siswa yang benar-benar tidak punya invoice pada periode tersebut."
+        ]
+      },
+      {
+        "title": "Mengapa WHERE dapat mengubah arti join",
+        "paragraphs": [
+          "Jika filter sisi kanan ditulis di WHERE, baris placeholder NULL diuji setelah LEFT JOIN. Kondisi i.period_month = DATE '2026-09-01' pada NULL menghasilkan UNKNOWN dan baris dibuang. Secara hasil, query tampak seperti INNER JOIN untuk periode itu. Ini bukan error parser; ini perubahan semantik akibat urutan konseptual filter. Pindahkan kondisi pasangan ke ON jika sisi kiri harus tetap lengkap.",
+          "Worked example menampilkan enam siswa dengan invoice September atau NULL. Aktivitas kemudian memakai pola anti-join untuk mengambil hanya Danu. Memisahkan dua kebutuhan ini membantu: laporan cakupan butuh semua siswa, sedangkan daftar pengecualian butuh baris kanan NULL. Keduanya memerlukan LEFT JOIN, tetapi predicate WHERE akhirnya berbeda."
+        ]
+      },
+      {
+        "title": "Batasan dan miskonsepsi",
+        "paragraphs": [
+          "Miskonsepsi pertama adalah menganggap LEFT JOIN selalu menampilkan semua baris tanpa syarat. WHERE pada sisi kiri juga dapat menghapus baris kiri, dan kondisi kanan di WHERE dapat menghapus placeholder. Jenis join hanya memberi perilaku awal; predicate lanjutan tetap menentukan hasil akhir. Miskonsepsi kedua adalah menguji i.amount IS NULL sebagai satu-satunya tanda tidak ada invoice. Kolom amount NOT NULL pada invoice, tetapi invoice_id lebih langsung menyatakan apakah pasangan ada.",
+          "Jika kebutuhan berubah menjadi siswa yang tidak memiliki invoice apa pun, hapus filter periode dari ON. Jika kebutuhan adalah siswa dengan invoice September tetapi tidak ada payment, relasi berikutnya perlu LEFT JOIN lagi dan predicate harus diarahkan pada tabel payments. Jangan menambahkan filter sembarang setelah outer join tanpa bertanya sisi mana yang wajib dipertahankan.",
+          "Predicate ON dapat menyaring pasangan tanpa menyaring daftar kiri, sedangkan WHERE menyaring hasil akhir setelah placeholder dibuat. Membaca dua tahap ini sebagai proses terpisah biasanya lebih mudah daripada menghafal aturan. Tulis contoh satu siswa yang memiliki invoice periode lain dan satu siswa yang tidak memiliki invoice sama sekali untuk memastikan query sesuai definisi."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "SELECT s.student_id, s.full_name, i.invoice_id, i.period_month FROM school.students s LEFT JOIN school.invoices i ON i.student_id = s.student_id AND i.period_month = DATE '2026-09-01' ORDER BY s.student_id;",
+      "columns": ["student_id", "full_name", "invoice_id", "period_month"],
+      "rows": [
+        ["1", "Alya Putri", "102", "2026-09-01"],
+        ["2", "Bima Pratama", "104", "2026-09-01"],
+        ["3", "Citra Rahma", "106", "2026-09-01"],
+        ["4", "Danu Saputra", null, null],
+        ["5", "Elina Zahra", "108", "2026-09-01"],
+        ["6", "Farhan Hasan", "110", "2026-09-01"]
+      ],
+      "explanation": "Semua siswa dipertahankan karena students berada di sisi kiri. Filter periode berada di ON sehingga hanya invoice September yang menjadi pasangan. Danu mendapat NULL pada kolom invoice karena invoice 107 miliknya adalah Agustus, bukan September."
+    },
+    "checks": [
+      {
+        "id": "l1m03l02-check-1",
+        "question": "Apa efek memindahkan i.period_month = DATE '2026-09-01' dari ON ke WHERE pada worked example?",
+        "options": [
+          "Danu tetap terlihat dengan invoice NULL.",
+          "Danu hilang karena predicate WHERE tidak TRUE untuk nilai NULL.",
+          "Semua invoice berubah menjadi September."
+        ],
+        "answer": 1,
+        "explanation": "Filter kanan di WHERE membuang placeholder NULL dan membuat hasil seolah inner join untuk periode itu.",
+        "feedback": [
+          "Belum tepat. Placeholder NULL akan diuji oleh WHERE.",
+          "Benar. Itu sebabnya predicate pasangan diletakkan pada ON.",
+          "Belum tepat. WHERE tidak mengubah nilai source."
+        ]
+      },
+      {
+        "id": "l1m03l02-check-2",
+        "question": "Predicate mana yang menemukan siswa tanpa invoice September?",
+        "options": [
+          "LEFT JOIN dengan kondisi periode di ON, lalu WHERE i.invoice_id IS NULL.",
+          "INNER JOIN lalu WHERE i.invoice_id IS NULL.",
+          "WHERE s.student_id IS NULL pada tabel students."
+        ],
+        "answer": 0,
+        "explanation": "LEFT JOIN menghasilkan placeholder NULL untuk sisi kanan yang tidak cocok.",
+        "feedback": [
+          "Benar. Pola ini mempertahankan student dan memilih yang tidak punya pasangan.",
+          "Belum tepat. INNER JOIN sudah membuang baris tanpa pasangan.",
+          "Belum tepat. student_id adalah primary key NOT NULL pada sisi kiri."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Debug pencarian siswa tanpa invoice September. Prediksi mengapa filter WHERE pada query starter menghilangkan siswa yang seharusnya ditemukan, lalu pindahkan predicate ke ON.",
+      "setup": "Danu memiliki invoice Agustus tetapi tidak memiliki invoice September. Semua siswa harus dipertahankan sebelum anti-join memilih invoice_id NULL.",
+      "starterSql": "SELECT s.student_id, s.full_name FROM school.students s LEFT JOIN school.invoices i ON i.student_id = s.student_id WHERE i.period_month = DATE '2026-09-01' AND i.invoice_id IS NULL ORDER BY s.student_id;",
+      "variants": [
+        {
+          "id": "l1m03l02-variant-1",
+          "question": "Mengapa query starter tidak menemukan Danu?",
+          "options": [
+            "Danu tidak ada di school.students.",
+            "WHERE i.period_month = ... gagal pada placeholder NULL sebelum i.invoice_id IS NULL dapat memilihnya.",
+            "LEFT JOIN selalu menghapus siswa tanpa invoice."
+          ],
+          "answer": 1,
+          "explanation": "Predicate periode pada WHERE menuntut nilai kanan yang tidak tersedia.",
+          "feedback": [
+            "Belum tepat. Danu adalah student_id 4.",
+            "Benar. Pindahkan filter periode ke ON.",
+            "Belum tepat. LEFT JOIN justru dapat mempertahankan Danu bila predicate tepat."
+          ]
+        },
+        {
+          "id": "l1m03l02-variant-2",
+          "question": "Query mana yang menemukan siswa tanpa invoice September?",
+          "options": [
+            "LEFT JOIN school.invoices i ON i.student_id = s.student_id AND i.period_month = DATE '2026-09-01' WHERE i.invoice_id IS NULL",
+            "LEFT JOIN school.invoices i ON i.student_id = s.student_id WHERE i.period_month = DATE '2026-09-01' AND i.invoice_id IS NULL",
+            "INNER JOIN school.invoices i ON i.student_id = s.student_id WHERE i.invoice_id IS NULL"
+          ],
+          "answer": 0,
+          "explanation": "Kondisi periode menentukan pasangan, sedangkan WHERE NULL menguji tidak adanya pasangan.",
+          "feedback": [
+            "Benar. Danu dipertahankan oleh LEFT JOIN lalu terpilih karena invoice_id NULL.",
+            "Belum tepat. Filter periode di WHERE membuang placeholder dahulu.",
+            "Belum tepat. INNER JOIN tidak menghasilkan baris tanpa pasangan."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l1m03l02-edge-1",
+          "question": "Jika student memiliki invoice Agustus dan September, apakah pola anti-join September akan memilihnya?",
+          "options": [
+            "Ya, karena invoice Agustus membuat September dianggap NULL.",
+            "Tidak, karena invoice September menjadi pasangan non-NULL.",
+            "Ya, karena LEFT JOIN hanya dapat melihat satu invoice acak."
+          ],
+          "answer": 1,
+          "explanation": "Kondisi ON hanya mencari invoice September, sehingga pasangan tersebut mencegah invoice_id NULL.",
+          "feedback": [
+            "Belum tepat. Invoice Agustus tidak menghapus pasangan September.",
+            "Benar. Satu pasangan September cukup untuk tidak lolos anti-join.",
+            "Belum tepat. Join mengikuti predicate dan semua pasangan yang cocok."
+          ]
+        },
+        {
+          "id": "l1m03l02-edge-2",
+          "question": "Apa yang terjadi jika WHERE s.is_active = TRUE ditambahkan pada anti-join?",
+          "options": [
+            "Hanya siswa aktif yang dipertahankan; Danu yang nonaktif tidak masuk daftar.",
+            "Semua siswa menjadi aktif.",
+            "Filter tersebut memindahkan invoice period ke September."
+          ],
+          "answer": 0,
+          "explanation": "Filter sisi kiri di WHERE memang membatasi daftar awal, sesuai jika kebutuhan hanya siswa aktif.",
+          "feedback": [
+            "Benar. Predicate sisi kiri berbeda dari predicate pasangan kanan.",
+            "Belum tepat. Query baca tidak mengubah is_active.",
+            "Belum tepat. Filter student tidak mengubah periode invoice."
+          ]
+        }
+      ],
+      "hints": [
+        "Tentukan dulu sisi yang wajib dipertahankan: semua students.",
+        "Pindahkan kondisi i.period_month ke ON, lalu gunakan WHERE i.invoice_id IS NULL untuk mencari yang tidak punya pasangan.",
+        "Solusi menghasilkan student_id 4 Danu Saputra untuk September 2026."
+      ],
+      "solutionSql": "SELECT s.student_id, s.full_name FROM school.students s LEFT JOIN school.invoices i ON i.student_id = s.student_id AND i.period_month = DATE '2026-09-01' WHERE i.invoice_id IS NULL ORDER BY s.student_id;",
+      "solutionExplanation": "ON membatasi pasangan invoice ke periode September tanpa membuang students. Setelah itu WHERE i.invoice_id IS NULL memilih placeholder dari student yang tidak punya invoice September, yaitu Danu.",
+      "critical": true
+    },
+    "reflection": "Gambarkan dengan kata-kata urutan dampak ON dan WHERE pada LEFT JOIN. Jelaskan bagaimana query harus berubah jika definisinya adalah siswa tanpa invoice apa pun, bukan hanya tanpa invoice September."
+  },
+  {
+    "id": "l1m03l03",
+    "version": "1.0.0",
+    "difficulty": "beginner",
+    "tags": ["sql", "one-to-many", "double-counting", "preaggregation", "school-finance"],
+    "hook": "Laporan total tagihan membesar setelah invoice di-join ke banyak payment dan baris diskon. Setiap relasi one-to-many memperbanyak baris sebelum SUM berjalan. Bagaimana menghitung total tanpa membayar invoice yang sama berkali-kali?",
+    "objectives": [
+      "Menjelaskan bagaimana dua relasi one-to-many dapat menghasilkan perkalian baris.",
+      "Melakukan pre-aggregation pada setiap relasi anak sebelum menggabungkannya ke invoice.",
+      "Membedakan data diskon ilustratif dari schema seed dan memeriksa hasil dengan output deterministik."
+    ],
+    "sections": [
+      {
+        "title": "Intuisi: cardinality berubah sebelum aggregate",
+        "paragraphs": [
+          "Invoice 103 memiliki dua payment succeeded, masing-masing 250000 dan 200000. Jika invoice langsung di-join ke payments lalu SUM(i.amount), baris invoice 103 muncul dua kali dan nominal 450000 ikut dijumlahkan dua kali. Itu sudah cukup untuk double counting. Jika invoice juga memiliki dua discount line, direct join terhadap dua relasi anak dapat menghasilkan empat kombinasi untuk invoice yang sama: setiap payment bertemu setiap discount. Nilai dasar dan nilai anak semuanya dapat membesar.",
+          "Kesalahan ini tidak selalu tampak sebagai duplicate row yang identik. Kolom payment_id dan discount line berbeda, sehingga hasil join terlihat informatif. Masalahnya muncul ketika kolom dari sisi parent dijumlahkan setelah multiplicity membesar. Pertanyaan pertama sebelum aggregate adalah: satu row hasil join mewakili satu invoice, satu payment, satu discount, atau kombinasi beberapa entitas?"
+        ]
+      },
+      {
+        "title": "Pre-aggregate sebagai pagar multiplicity",
+        "paragraphs": [
+          "Solusi yang mudah diaudit adalah mengagregasi setiap relasi anak dalam CTE terpisah berdasarkan invoice_id. CTE paid menghasilkan paling banyak satu baris per invoice untuk total succeeded. CTE discounts pada aktivitas menghasilkan satu baris per invoice untuk total diskon. Baru setelah itu kedua ringkasan di-LEFT JOIN ke invoices. Hasil join akhir kembali memiliki grain satu baris per invoice, sehingga amount tidak dikalikan oleh jumlah payment atau discount.",
+          "Seed School Finance tidak memiliki tabel discount. Agar latihan tidak mengarang schema, aktivitas membuat discount_lines dengan VALUES sebagai tabel sementara yang hanya hidup di query. Ini bukan klaim bahwa discount_lines ada di database. Dua baris untuk invoice 103 sengaja mensimulasikan dua diskon; peserta harus mengagregasinya sebelum join. Jika diskon diterapkan setelah pembayaran sudah diterima, saldo negatif dapat berarti kredit atau overpayment dan memerlukan kebijakan bisnis tambahan."
+        ]
+      },
+      {
+        "title": "Batasan, validasi, dan miskonsepsi",
+        "paragraphs": [
+          "Miskonsepsi umum adalah memakai SUM(DISTINCT i.amount) sebagai obat universal. Itu dapat menyembunyikan duplikasi ketika dua invoice berbeda kebetulan memiliki amount sama, sehingga hasil menjadi terlalu kecil. DISTINCT pada nilai bukan identitas entitas. Miskonsepsi lain adalah menganggap GROUP BY i.invoice_id saja selalu menyelesaikan masalah. Jika nilai parent sudah terduplikasi sebelum grouping, SUM tetap menjumlahkan salinan tersebut.",
+          "Pre-aggregation perlu mengikuti grain laporan. Jika laporan ingin satu baris per siswa, ringkas invoice setelah payment dihitung pada grain invoice lalu agregasikan lagi dengan aturan yang jelas. Jika payment refund, failed, atau multi-currency ada, status dan mata uang harus masuk ke aggregate. Contoh ini hanya memakai amount numeric pada seed dan diskon VALUES lokal. Verifikasi jumlah parent, payment, dan discount sebelum percaya laporan."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "WITH paid AS (SELECT invoice_id, SUM(amount) FILTER (WHERE status = 'succeeded') AS succeeded_paid FROM school.payments GROUP BY invoice_id) SELECT i.invoice_id, i.amount AS billed_amount, COALESCE(p.succeeded_paid, 0::numeric(12,2)) AS succeeded_paid, i.amount - COALESCE(p.succeeded_paid, 0::numeric(12,2)) AS outstanding FROM school.invoices i LEFT JOIN paid p ON p.invoice_id = i.invoice_id WHERE i.invoice_id IN (101, 102, 103) ORDER BY i.invoice_id;",
+      "columns": ["invoice_id", "billed_amount", "succeeded_paid", "outstanding"],
+      "rows": [
+        ["101", "500000.00", "500000.00", "0.00"],
+        ["102", "500000.00", "200000.00", "300000.00"],
+        ["103", "450000.00", "450000.00", "0.00"]
+      ],
+      "explanation": "CTE paid mengubah banyak payment menjadi satu ringkasan per invoice sebelum join. Karena invoice 103 tidak lagi bertemu dua payment secara langsung, billed_amount tetap 450000 dan succeeded_paid menjadi 450000. Query worked hanya memakai tabel seed; discount_lines yang tidak ada di seed diperkenalkan eksplisit di aktivitas sebagai VALUES lokal."
+    },
+    "checks": [
+      {
+        "id": "l1m03l03-check-1",
+        "question": "Mengapa SUM(i.amount) pada join invoices ke payments dapat membesar untuk invoice 103?",
+        "options": [
+          "Invoice 103 memiliki dua payment sehingga row parent muncul dua kali sebelum SUM.",
+          "SUM selalu menggandakan semua numeric.",
+          "Foreign key mengubah amount menjadi dua currency."
+        ],
+        "answer": 0,
+        "explanation": "Cardinality one-to-many memperbanyak representasi parent di result set antara.",
+        "feedback": [
+          "Benar. Pre-aggregate payment per invoice sebelum join mencegah pengulangan amount.",
+          "Belum tepat. SUM hanya menjumlahkan nilai yang diberikan.",
+          "Belum tepat. Foreign key tidak mengubah tipe atau currency amount."
+        ]
+      },
+      {
+        "id": "l1m03l03-check-2",
+        "question": "Apa grain yang sebaiknya dihasilkan CTE paid sebelum di-join ke invoices?",
+        "options": [
+          "Satu baris per payment_id.",
+          "Satu baris per invoice_id.",
+          "Satu baris untuk seluruh database tanpa invoice_id."
+        ],
+        "answer": 1,
+        "explanation": "Join akhir ingin kembali ke grain satu baris per invoice.",
+        "feedback": [
+          "Belum tepat. Itu belum mengurangi multiplicity payment.",
+          "Benar. GROUP BY invoice_id menghasilkan ringkasan yang aman ditempelkan ke parent.",
+          "Belum tepat. Ringkasan global tidak dapat dipasangkan ke invoice individual."
+        ]
+      },
+      {
+        "id": "l1m03l03-check-3",
+        "question": "Mengapa discount_lines pada aktivitas dibuat dengan VALUES?",
+        "options": [
+          "Seed memang memiliki tabel discount_lines permanen.",
+          "VALUES membuat tabel sementara dalam query untuk mengilustrasikan dua baris diskon tanpa mengarang schema seed.",
+          "VALUES mengubah semua payment menjadi diskon."
+        ],
+        "answer": 1,
+        "explanation": "Fixture resmi hanya memiliki students, invoices, dan payments.",
+        "feedback": [
+          "Belum tepat. Seed tidak mendefinisikan discount table.",
+          "Benar. Bentuk lokal ini menjaga latihan tetap dapat dijalankan dan jujur terhadap fixture.",
+          "Belum tepat. CTE VALUES memiliki kolom sendiri dan tidak mengubah payments."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Debug laporan invoice 102 dan 103 yang menggabungkan payment dan dua discount line lokal. Prediksi nilai yang membesar, lalu pre-aggregate setiap relasi ke satu baris per invoice.",
+      "setup": "Seed tidak memiliki tabel diskon. Untuk aktivitas ini, discount_lines(invoice_id, discount_amount) dimodelkan sebagai VALUES (102, 50000), (103, 30000), (103, 20000). Dua diskon untuk 103 dan dua succeeded payment untuk 103 sengaja menciptakan perkalian baris pada starter.",
+      "starterSql": "WITH discount_lines(invoice_id, discount_amount) AS (VALUES (102, 50000::numeric), (103, 30000::numeric), (103, 20000::numeric)) SELECT i.invoice_id, SUM(i.amount) AS billed_amount, SUM(p.amount) AS succeeded_paid, SUM(d.discount_amount) AS discount_amount FROM school.invoices i LEFT JOIN school.payments p ON p.invoice_id = i.invoice_id AND p.status = 'succeeded' LEFT JOIN discount_lines d ON d.invoice_id = i.invoice_id WHERE i.invoice_id IN (102, 103) GROUP BY i.invoice_id ORDER BY i.invoice_id;",
+      "variants": [
+        {
+          "id": "l1m03l03-variant-1",
+          "question": "Pada starter, berapa kali invoice 103 direpresentasikan oleh kombinasi payment dan discount?",
+          "options": [
+            "Satu kali, karena invoice_id primary key selalu menghapus child rows.",
+            "Dua kali, karena hanya payment yang one-to-many.",
+            "Empat kali, karena dua succeeded payment bertemu dua discount line."
+          ],
+          "answer": 2,
+          "explanation": "Join dua relasi child independen menghasilkan 2 x 2 kombinasi untuk invoice 103.",
+          "feedback": [
+            "Belum tepat. Primary key tidak menghapus baris hasil join.",
+            "Belum tepat. Discount line juga memperbanyak baris.",
+            "Benar. Itulah sumber penggandaan billed dan aggregate anak."
+          ]
+        },
+        {
+          "id": "l1m03l03-variant-2",
+          "question": "Langkah perbaikan mana yang menjaga grain satu baris per invoice?",
+          "options": [
+            "SUM(DISTINCT i.amount) setelah semua join.",
+            "Agregasikan payments dan discount_lines masing-masing GROUP BY invoice_id sebelum LEFT JOIN ke invoices.",
+            "Hapus invoice_id dari GROUP BY."
+          ],
+          "answer": 1,
+          "explanation": "Setiap CTE child harus menghasilkan maksimal satu ringkasan per parent sebelum digabung.",
+          "feedback": [
+            "Belum tepat. DISTINCT pada amount dapat menggabungkan invoice berbeda dengan nominal sama.",
+            "Benar. Grain akhir tetap satu baris per invoice dan setiap jumlah dihitung sekali.",
+            "Belum tepat. Menghapus key menyembunyikan identitas, bukan memperbaiki cardinality."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l1m03l03-edge-1",
+          "question": "Mengapa SUM(DISTINCT i.amount) tidak aman jika invoice 101 dan 102 sama-sama bernilai 500000?",
+          "options": [
+            "Ia dapat menghitung nominal 500000 sekali walaupun ada dua invoice berbeda.",
+            "Ia selalu menghitung nominal dua kali.",
+            "Ia hanya dapat dipakai untuk kolom text."
+          ],
+          "answer": 0,
+          "explanation": "DISTINCT diterapkan pada nilai amount, bukan identitas invoice.",
+          "feedback": [
+            "Benar. Pre-aggregation berdasarkan invoice_id menjaga grain tanpa menghapus invoice sah.",
+            "Belum tepat. DISTINCT justru menghapus nilai yang sama.",
+            "Belum tepat. DISTINCT dapat dipakai pada banyak tipe, tetapi tetap salah secara grain di sini."
+          ]
+        },
+        {
+          "id": "l1m03l03-edge-2",
+          "question": "Jika sebuah invoice tidak punya payment succeeded, apa yang harus muncul setelah LEFT JOIN ke CTE paid?",
+          "options": [
+            "Invoice hilang karena CTE paid kosong.",
+            "Invoice tetap muncul dengan succeeded_paid difallback menjadi 0.",
+            "Invoice otomatis dianggap paid penuh."
+          ],
+          "answer": 1,
+          "explanation": "LEFT JOIN mempertahankan parent dan COALESCE memberi nilai metrik yang dapat dihitung.",
+          "feedback": [
+            "Belum tepat. Sisi kiri tetap dipertahankan.",
+            "Benar. Ketiadaan child tidak boleh menghapus invoice dari laporan.",
+            "Belum tepat. Nol pembayaran tidak berarti paid penuh."
+          ]
+        }
+      ],
+      "hints": [
+        "Tentukan grain yang diinginkan: satu baris per invoice sebelum menghitung billed, paid, dan discount.",
+        "Buat CTE paid GROUP BY invoice_id dan CTE discounts GROUP BY invoice_id, lalu LEFT JOIN keduanya ke invoices.",
+        "Gunakan COALESCE pada ringkasan child; jangan memakai SUM(DISTINCT i.amount) sebagai tambalan."
+      ],
+      "solutionSql": "WITH discount_lines(invoice_id, discount_amount) AS (VALUES (102, 50000::numeric), (103, 30000::numeric), (103, 20000::numeric)), paid AS (SELECT invoice_id, SUM(amount) FILTER (WHERE status = 'succeeded') AS succeeded_paid FROM school.payments GROUP BY invoice_id), discounts AS (SELECT invoice_id, SUM(discount_amount) AS discount_amount FROM discount_lines GROUP BY invoice_id) SELECT i.invoice_id, i.amount AS billed_amount, COALESCE(p.succeeded_paid, 0::numeric(12,2)) AS succeeded_paid, COALESCE(d.discount_amount, 0::numeric(12,2)) AS discount_amount, i.amount - COALESCE(d.discount_amount, 0::numeric(12,2)) - COALESCE(p.succeeded_paid, 0::numeric(12,2)) AS remaining_after_discount FROM school.invoices i LEFT JOIN paid p ON p.invoice_id = i.invoice_id LEFT JOIN discounts d ON d.invoice_id = i.invoice_id WHERE i.invoice_id IN (102, 103) ORDER BY i.invoice_id;",
+      "solutionExplanation": "paid dan discounts masing-masing diringkas ke satu baris per invoice sebelum join akhir. Hasilnya 102 memiliki billed 500000, paid 200000, discount 50000, remaining 250000; 103 memiliki billed 450000, paid 450000, discount 50000, remaining -50000 yang menandakan pembayaran yang sudah masuk melebihi tagihan setelah kredit diskon. Nilai negatif perlu kebijakan bisnis lanjutan, tetapi tidak lagi merupakan double counting.",
+      "critical": true
+    },
+    "reflection": "Tuliskan grain setiap tabel atau CTE dalam solusi. Jelaskan mengapa invoice 103 dapat memiliki remaining_after_discount negatif tanpa berarti query menggandakan baris, lalu sebutkan kebijakan yang perlu diputuskan untuk kredit atau overpayment."
+  }
+]
