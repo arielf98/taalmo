@@ -17,3 +17,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Commit hanya file yang relevan dengan pekerjaan tersebut. Jangan memasukkan perubahan pengguna atau pekerjaan lain yang belum selesai.
 - Jangan push, merge, atau deploy kecuali pengguna memintanya.
 - Pada laporan akhir, sebutkan commit yang dibuat serta nyatakan bahwa test tidak dijalankan sesuai instruksi pengguna.
+
+## Visualisasi materi Database Engineering
+
+- Pilih bentuk visual sesuai materi agar mudah dipahami pemula; jangan memaksakan semua visual menggunakan React Flow.
+- Untuk struktur tabel dan hubungan antartabel, gunakan diagram bergaya UML/ERD dengan nama tabel, kolom, tipe data, penanda primary key (PK) dan foreign key (FK), serta garis relasi dan kardinalitas yang jelas. Jangan menyajikan struktur tabel sebagai urutan langkah proses.
+- Gunakan React Flow ketika perlu menunjukkan alur proses, seperti perjalanan request, tahapan query, atau transaksi. Relasi antartabel sendiri bukan alur proses.
+- Tampilkan contoh isi tabel dan hasil query sebagai tabel data yang mudah dibaca, dengan penjelasan teks pendamping.
