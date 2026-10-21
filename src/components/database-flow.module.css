@@ -130,6 +130,134 @@
   margin-bottom: 0;
 }
 
+.schema {
+  margin: 24px 0;
+}
+
+.schema > figcaption {
+  margin-bottom: 14px;
+  font-weight: 700;
+}
+
+.schemaScroll,
+.tableScroll {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 14px 0;
+  border-radius: 10px;
+}
+
+.schemaScroll:focus-visible,
+.tableScroll:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 3px;
+}
+
+.entities {
+  display: grid;
+  grid-template-columns: minmax(270px, 1fr) 84px minmax(270px, 1fr) 84px minmax(270px, 1fr);
+  min-width: 980px;
+  align-items: start;
+  padding: 4px 0;
+}
+
+.entity {
+  overflow: hidden;
+  border: 1px solid var(--green);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.entity table,
+.dataTable {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.entity caption {
+  padding: 14px;
+  color: var(--green);
+  background: var(--mint-soft);
+  text-align: left;
+  font: 700 15px ui-monospace, monospace;
+  border-bottom: 1px solid var(--green);
+}
+
+.entity th,
+.entity td {
+  padding: 10px 6px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.entity th[scope="row"] {
+  font-weight: 500;
+}
+
+.entity thead,
+.dataTable thead {
+  background: var(--surface-alt);
+}
+
+.key {
+  padding: 3px;
+  border-radius: 4px;
+  background: var(--mint-soft);
+  color: var(--green);
+  font-weight: 700;
+}
+
+.reference {
+  margin: 0;
+  padding: 12px;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.relationship {
+  padding-top: 96px;
+  color: var(--green);
+  font-size: 11px;
+  text-align: center;
+}
+
+.relationshipLine {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 8px 5px;
+  border-bottom: 2px solid currentColor;
+  font-weight: 700;
+}
+
+.relationExample {
+  margin-top: 28px;
+}
+
+.dataTable caption {
+  padding: 12px 0;
+  text-align: left;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dataTable th,
+.dataTable td {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  font: 13px/1.6 ui-monospace, monospace;
+  white-space: nowrap;
+}
+
+.dataTable th {
+  font-weight: 700;
+}
+
+.dataTable tbody tr:nth-child(even) {
+  background: var(--surface-alt);
+}
+
 @media (max-width: 760px) {
   .explorer {
     padding: 16px;
@@ -141,5 +269,32 @@
 
   .actions :global(.button) {
     white-space: normal;
+  }
+
+  .entities {
+    grid-template-columns: minmax(270px, 1fr);
+    min-width: 270px;
+  }
+
+  .relationship {
+    position: relative;
+    height: 92px;
+    padding: 12px 0;
+  }
+
+  .relationship > code {
+    position: absolute;
+    left: calc(50% + 24px);
+    top: 35px;
+  }
+
+  .relationshipLine {
+    flex-direction: column;
+    width: 0;
+    height: 68px;
+    margin: 0 auto;
+    padding: 0 0 0 8px;
+    border-bottom: 0;
+    border-left: 2px solid currentColor;
   }
 }

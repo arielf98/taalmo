@@ -1,10 +1,17 @@
 export type DatabaseFlowTopic = "overview" | "relations" | "query";
 
+export interface FlowTable {
+  caption: string;
+  columns: string[];
+  rows: string[][];
+}
+
 interface FlowStep {
   title: string;
   subtitle: string;
   explanation: string;
-  example: string;
+  example?: string;
+  table?: FlowTable;
   connection?: string;
 }
 
@@ -58,41 +65,63 @@ export const databaseFlows: Record<DatabaseFlowTopic, DatabaseFlow> = {
         subtitle: "Membaca baris yang sesuai",
         connection: "baca data",
         explanation: "Database merencanakan dan menjalankan query. Bima memiliki invoice 103 dan 104. Membaca tagihan tidak mengubah data dan belum memberi tahu apakah tagihan sudah lunas.",
-        example: "invoice_id | student_id | amount\n103        | 2          | 450000.00\n104        | 2          | 450000.00",
+        table: {
+          caption: "Cuplikan tabel school.invoices yang dibaca",
+          columns: ["invoice_id", "student_id", "amount"],
+          rows: [["103", "2", "450000.00"], ["104", "2", "450000.00"]],
+        },
       },
       {
         title: "Hasil ke pengguna",
         subtitle: "Backend mengembalikan data",
         connection: "hasil query",
         explanation: "PostgreSQL mengembalikan hasil ke backend. Backend membentuk respons dan aplikasi menampilkan dua tagihan. Untuk menghitung sisa tagihan, aplikasi perlu memperhitungkan pembayaran sukses juga.",
-        example: "Tagihan 103: Rp450.000\nTagihan 104: Rp450.000\nHasil SELECT ini hanya berisi invoice_id dan amount.",
+        table: {
+          caption: "Hasil query tagihan Bima",
+          columns: ["invoice_id", "amount"],
+          rows: [["103", "450000.00"], ["104", "450000.00"]],
+        },
       },
     ],
   },
   relations: {
     title: "Bagaimana tabel saling terhubung?",
-    description: "Telusuri siswa → tagihan → pembayaran. Panah menunjukkan hubungan satu-ke-banyak, bukan urutan menjalankan SQL.",
+    description: "Lihat struktur students, invoices, dan payments. Garis menghubungkan tabel yang berelasi; angka di ujung garis menunjukkan jumlah baris yang boleh berhubungan.",
     note: "Contoh ini mengambil sebagian data School Finance. Foreign key pada tabel anak merujuk kunci tabel induk; hubungan tabel sendiri tidak memindahkan atau menggandakan data.",
     steps: [
       {
         title: "students · siswa",
         subtitle: "Satu baris per siswa",
         explanation: "student_id adalah primary key: identitas unik setiap siswa. Nama Bima disimpan sekali di students. Beberapa tagihan dapat merujuk identitas yang sama tanpa menyalin namanya.",
-        example: "student_id | full_name\n2          | Bima Pratama",
+        table: {
+          caption: "Contoh data school.students",
+          columns: ["student_id", "full_name"],
+          rows: [["2", "Bima Pratama"]],
+        },
       },
       {
         title: "invoices · tagihan",
         subtitle: "Satu siswa → banyak tagihan",
-        connection: "student_id · 1 → N",
         explanation: "student_id di invoices adalah foreign key ke students. Invoice 103 dan 104 sama-sama milik siswa 2. Foreign key memastikan siswa yang dirujuk ada, bukan membatasi satu siswa hanya memiliki satu tagihan.",
-        example: "invoice_id | student_id | amount\n103        | 2          | 450000.00\n104        | 2          | 450000.00",
+        table: {
+          caption: "Contoh data school.invoices",
+          columns: ["invoice_id", "student_id", "amount"],
+          rows: [["103", "2", "450000.00"], ["104", "2", "450000.00"]],
+        },
       },
       {
         title: "payments · pembayaran",
         subtitle: "Satu tagihan → banyak pembayaran",
-        connection: "invoice_id · 1 → N",
         explanation: "invoice_id di payments merujuk invoices. Tagihan 103 dibayar dalam dua cicilan sukses: 250.000 + 200.000 = 450.000. JOIN ke payments menghasilkan dua baris untuk tagihan 103; menjumlah amount tagihan setelah JOIN mentah akan menghitungnya dua kali. Pembayaran 205 masih pending sehingga tagihan 104 belum dianggap lunas.",
-        example: "payment_id | invoice_id | amount    | status\n203        | 103        | 250000.00 | succeeded\n204        | 103        | 200000.00 | succeeded\n205        | 104        | 450000.00 | pending",
+        table: {
+          caption: "Contoh data school.payments",
+          columns: ["payment_id", "invoice_id", "amount", "status"],
+          rows: [
+            ["203", "103", "250000.00", "succeeded"],
+            ["204", "103", "200000.00", "succeeded"],
+            ["205", "104", "450000.00", "pending"],
+          ],
+        },
       },
     ],
   },
@@ -106,42 +135,76 @@ export const databaseFlows: Record<DatabaseFlowTopic, DatabaseFlow> = {
         title: "FROM + JOIN",
         subtitle: "Pasangkan siswa dan tagihan",
         explanation: "JOIN memasangkan student_id yang sama di students dan invoices. Dari seed lengkap, terbentuk 10 baris: satu per tagihan. Nama siswa boleh muncul berulang karena satu siswa memiliki beberapa tagihan.",
-        example: "Cuplikan dari 10 baris hasil JOIN:\nstudent_id | full_name    | invoice_id\n1          | Alya Putri   | 101\n1          | Alya Putri   | 102\n2          | Bima Pratama | 103\n2          | Bima Pratama | 104\n… enam tagihan siswa lain",
+        table: {
+          caption: "Cuplikan 4 dari 10 baris hasil JOIN; urutan belum dijamin",
+          columns: ["student_id", "full_name", "invoice_id"],
+          rows: [
+            ["1", "Alya Putri", "101"],
+            ["1", "Alya Putri", "102"],
+            ["2", "Bima Pratama", "103"],
+            ["2", "Bima Pratama", "104"],
+          ],
+        },
       },
       {
         title: "WHERE",
         subtitle: "Saring baris yang dibutuhkan",
         connection: "10 baris",
         explanation: "WHERE mempertahankan hanya student_id 1 dan 2. Sekarang ada empat baris. Baris siswa lain tidak masuk hasil query ini; data aslinya tetap tersimpan.",
-        example: "student_id | full_name    | invoice_id\n1          | Alya Putri   | 101\n1          | Alya Putri   | 102\n2          | Bima Pratama | 103\n2          | Bima Pratama | 104",
+        table: {
+          caption: "Empat baris setelah WHERE; urutan belum dijamin",
+          columns: ["student_id", "full_name", "invoice_id"],
+          rows: [
+            ["1", "Alya Putri", "101"],
+            ["1", "Alya Putri", "102"],
+            ["2", "Bima Pratama", "103"],
+            ["2", "Bima Pratama", "104"],
+          ],
+        },
       },
       {
         title: "GROUP BY",
         subtitle: "Kumpulkan per siswa",
         connection: "4 baris",
         explanation: "GROUP BY membentuk satu grup per identitas siswa. Kita mengelompokkan dengan student_id dan full_name agar dua siswa yang kebetulan bernama sama tetap terpisah.",
-        example: "Grup siswa 1 · Alya Putri: invoice 101, 102\nGrup siswa 2 · Bima Pratama: invoice 103, 104",
+        table: {
+          caption: "Ilustrasi dua grup logis, bukan tabel tersimpan",
+          columns: ["student_id", "full_name", "invoice_id (anggota grup)"],
+          rows: [["1", "Alya Putri", "101, 102"], ["2", "Bima Pratama", "103, 104"]],
+        },
       },
       {
         title: "COUNT + SELECT",
         subtitle: "Hitung dan pilih kolom hasil",
         connection: "2 grup",
         explanation: "COUNT(i.invoice_id) menghitung tagihan di setiap grup. SELECT menampilkan nama dan hasil hitungan sebagai invoice_count. Keduanya memiliki dua tagihan. Pembayaran tidak ikut di-JOIN agar hitungan tidak bertambah karena cicilan.",
-        example: "full_name    | invoice_count\nAlya Putri   | 2\nBima Pratama | 2\nUrutan baris belum dijamin pada tahap ini.",
+        table: {
+          caption: "Dua baris ringkasan; urutan belum dijamin",
+          columns: ["full_name", "invoice_count"],
+          rows: [["Alya Putri", "2"], ["Bima Pratama", "2"]],
+        },
       },
       {
         title: "ORDER BY",
         subtitle: "Tetapkan urutan hasil",
         connection: "2 baris hasil",
         explanation: "ORDER BY s.student_id mengurutkan grup siswa 1 sebelum siswa 2. Kolom pengurutan ini boleh dipakai karena termasuk dalam GROUP BY, walaupun tidak ditampilkan di SELECT.",
-        example: "1. Alya Putri   | 2 tagihan\n2. Bima Pratama | 2 tagihan",
+        table: {
+          caption: "Hasil diurutkan berdasarkan student_id",
+          columns: ["full_name", "invoice_count"],
+          rows: [["Alya Putri", "2"], ["Bima Pratama", "2"]],
+        },
       },
       {
         title: "Hasil akhir",
         subtitle: "Satu baris per siswa",
         connection: "hasil terurut",
         explanation: "Dari 10 baris JOIN, filter menyisakan empat baris, lalu pengelompokan menghasilkan dua baris ringkasan. Ini menghitung jumlah tagihan, bukan jumlah pembayaran atau total rupiah.",
-        example: "full_name    | invoice_count\nAlya Putri   | 2\nBima Pratama | 2",
+        table: {
+          caption: "Hasil akhir query",
+          columns: ["full_name", "invoice_count"],
+          rows: [["Alya Putri", "2"], ["Bima Pratama", "2"]],
+        },
       },
     ],
   },
