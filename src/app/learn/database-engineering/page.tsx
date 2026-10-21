@@ -4,4 +4,6 @@ export const metadata = {
   description:
     "Satu jalur belajar Database Engineering: fondasi database, SQL, dan lab transaksi interaktif. Progres tersimpan pada perangkat ini.",
 };
-export default DatabaseEngineeringPath;
+export default function DatabaseEngineeringPage() {
+  return <DatabaseEngineeringPath />;
+}
