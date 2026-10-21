@@ -1,0 +1,997 @@
+[
+  {
+    "id": "l0m01l01",
+    "version": "1.0.0",
+    "difficulty": "beginner",
+    "tags": ["relasional", "normalisasi", "school-finance"],
+    "hook": "Bendahara menyalin nama siswa dan kelas ke setiap baris tagihan. Ketika Alya pindah kelas, berapa baris yang harus diperbaiki, dan apa yang terjadi jika satu baris terlewat?",
+    "objectives": [
+      "Mengidentifikasi pengulangan fakta siswa pada tabel datar dan menjelaskan risiko update anomaly.",
+      "Memetakan fakta siswa dan fakta tagihan ke dua relasi yang dihubungkan oleh student_id.",
+      "Memilih query yang tetap menghitung tagihan per siswa tanpa menggandakan baris karena relasi one-to-many."
+    ],
+    "sections": [
+      {
+        "title": "Masalah di balik spreadsheet",
+        "paragraphs": [
+          "Spreadsheet datar terlihat praktis karena satu baris dapat dibaca manusia sebagai satu cerita lengkap: nama siswa, kelas, periode, dan jumlah SPP. Masalah muncul ketika satu siswa memiliki dua periode. Fakta yang sama, seperti nama Alya dan jenjang SD, disalin berkali-kali. Setiap salinan menjadi kesempatan untuk salah ketik atau terlambat diperbarui. Ini disebut update anomaly; nilainya tampak kecil, tetapi laporan berikutnya tidak lagi mempunyai satu jawaban yang dapat dipercaya.",
+          "Database relasional memisahkan entitas yang berubah pada ritme berbeda. `students` menyimpan identitas dan atribut siswa sekali, sedangkan `invoices` menyimpan kejadian tagihan yang dapat bertambah setiap bulan. `student_id` adalah penghubung yang stabil. Memisahkan tabel bukan berarti data menjadi terputus: JOIN menggabungkan fakta saat laporan dibutuhkan. Sumber kebenaran untuk nama siswa tetap satu baris, sementara jumlah invoice boleh banyak."
+        ]
+      },
+      {
+        "title": "Intuisi, batasan, dan salah kaprah",
+        "paragraphs": [
+          "Anggap `students` sebagai kartu identitas dan `invoices` sebagai map kuitansi. Satu kartu dapat menunjuk banyak kuitansi, tetapi kuitansi tidak perlu menyalin seluruh isi kartu. Pola ini mengurangi penulisan ulang dan membuat perubahan identitas terlokalisasi. Namun pemisahan tabel tidak otomatis menjaga kualitas: jika `student_id` tidak dibatasi foreign key, invoice yatim masih bisa dibuat. Integrity constraint dan query yang benar tetap dibutuhkan.",
+          "Kesalahan umum adalah menganggap normalisasi berarti setiap laporan harus memakai banyak JOIN, atau menghapus semua duplikasi tanpa memikirkan kebutuhan baca. Tujuan lesson ini lebih sempit: satu fakta bisnis memiliki tempat utama yang jelas. Denormalisasi terkontrol dapat berguna untuk cache atau snapshot, tetapi harus disebut sebagai salinan turunan dengan aturan rekonsiliasi. Untuk tahap ini, jangan mengubah fixture dan jangan mengarang kolom `status`; seed hanya menyediakan identitas, tanggal, jumlah, dan relasi pembayaran."
+        ]
+      },
+      {
+        "title": "Contoh dengan School Finance",
+        "paragraphs": [
+          "Query berikut menghitung berapa invoice yang terkait dengan setiap siswa, lalu hanya menampilkan siswa yang memiliki lebih dari satu invoice. `LEFT JOIN` menjaga siswa tanpa invoice tetap dapat dihitung pada laporan lain. Pengelompokan memakai `student_id` dan nama agar satu siswa menjadi satu baris hasil. Karena hasil count diubah ke text, baris expected dapat dibaca sama seperti keluaran CSV psql.",
+          "Perhatikan bahwa query ini mengukur jumlah invoice, bukan jumlah pembayaran. Invoice 103 memiliki dua pembayaran, tetapi tetap satu invoice. Jika langsung mencampur tabel payments pada query ini, jumlah invoice dapat terlihat dua kali. Memisahkan pertanyaan laporan adalah bagian dari model relasional: hitung unit bisnis yang diminta, lalu gabungkan agregat pada tingkat yang sama."
+        ]
+      },
+      {
+        "title": "Batas kasus dan jembatan",
+        "paragraphs": [
+          "Siswa baru tanpa invoice adalah kasus penting: ia tetap ada di `students`, tetapi tidak boleh muncul sebagai invoice palsu. Sebaliknya, satu siswa dengan banyak periode memang harus menghasilkan count lebih besar dari satu. Jika nama siswa berubah, query tidak perlu diedit karena hanya membaca sumber identitas. Jika aturan bisnis mengizinkan penggabungan atau penghapusan siswa, keputusan itu membutuhkan kebijakan foreign key yang akan dibahas pada lesson berikutnya.",
+          "Saat mencoba aktivitas, tuliskan dulu unit yang ingin dihitung dan tabel yang menjadi sumbernya. Setelah itu tentukan kunci pengelompokan. Refleksi akhir meminta alasan, bukan hafalan istilah, karena kemampuan memisahkan fakta adalah dasar untuk membaca JOIN, agregasi, dan tunggakan di lesson berikutnya."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "SELECT s.full_name, COUNT(i.invoice_id)::text AS invoice_count\nFROM school.students AS s\nLEFT JOIN school.invoices AS i ON i.student_id = s.student_id\nGROUP BY s.student_id, s.full_name\nHAVING COUNT(i.invoice_id) > 1\nORDER BY s.student_id;",
+      "columns": ["full_name", "invoice_count"],
+      "rows": [
+        ["Alya Putri", "2"],
+        ["Bima Pratama", "2"],
+        ["Citra Rahma", "2"],
+        ["Farhan Hasan", "2"]
+      ],
+      "explanation": "Satu baris hasil mewakili satu siswa karena pengelompokan memakai student_id. Invoice dihitung dari invoice_id, sehingga seorang siswa tanpa invoice akan mendapat nol pada query tanpa HAVING. Pembayaran tidak disertakan agar relasi one-to-many kedua tidak menggandakan invoice."
+    },
+    "checks": [
+      {
+        "id": "l0m01l01-check-source-of-truth",
+        "question": "Alya mempunyai dua invoice. Di mana nama Alya sebaiknya disimpan sebagai sumber kebenaran utama?",
+        "options": [
+          "Di setiap baris invoice",
+          "Sekali di school.students lalu dirujuk dengan student_id",
+          "Di kolom teks gabungan pada payments"
+        ],
+        "answer": 1,
+        "explanation": "Identitas siswa adalah fakta entitas, sedangkan invoice adalah fakta transaksi. Menyimpan identitas sekali dan merujuknya mengurangi update anomaly.",
+        "feedback": [
+          "Pilihan ini mengulang fakta dan memungkinkan dua baris memiliki nama berbeda untuk siswa yang sama.",
+          "Benar: students menjadi sumber identitas dan invoices menyimpan hubungan melalui student_id.",
+          "Payments merujuk invoice, bukan tempat yang tepat untuk menyimpan identitas siswa."
+        ]
+      },
+      {
+        "id": "l0m01l01-check-counting-unit",
+        "question": "Mengapa query count invoice tidak boleh langsung menghitung baris setelah JOIN ke payments?",
+        "options": [
+          "Karena satu invoice dapat memiliki beberapa payment sehingga baris invoice terduplikasi",
+          "Karena PostgreSQL tidak mendukung dua JOIN",
+          "Karena COUNT selalu menghapus baris yang NULL"
+        ],
+        "answer": 0,
+        "explanation": "Payments memiliki relasi one-to-many terhadap invoice. Menggabungkannya sebelum agregasi dapat membuat satu invoice muncul beberapa kali.",
+        "feedback": [
+          "Benar: hitung pada grain invoice atau agregasikan payments terlebih dahulu.",
+          "PostgreSQL mendukung banyak JOIN; masalahnya adalah grain hasil, bukan jumlah JOIN.",
+          "COUNT(column) mengabaikan NULL pada kolom itu, tetapi bukan alasan utama duplikasi di sini."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Fixture berisi enam siswa dan sepuluh invoice. Prediksi hasil query yang menghitung invoice per siswa, lalu menyaring count >= 2. Nama mana yang keluar dan berapa count masing-masing? Jelaskan mengapa pembayaran tidak mengubah count tersebut.",
+      "setup": "Gunakan schema school dari school_finance_seed.sql. Query hanya membaca students dan invoices; nilai yang diprediksi adalah hasil relasi yang sudah tersedia.",
+      "starterSql": "SELECT s.full_name, COUNT(i.invoice_id)::text AS invoice_count\nFROM school.students AS s\nLEFT JOIN school.invoices AS i ON i.student_id = s.student_id\nGROUP BY s.student_id, s.full_name\nHAVING COUNT(i.invoice_id) >= 2\nORDER BY s.student_id;",
+      "variants": [
+        {
+          "id": "l0m01l01-activity-variant-a",
+          "question": "Jika kondisi HAVING diubah menjadi COUNT(i.invoice_id) >= 2, berapa baris yang diprediksi?",
+          "options": [
+            "Empat baris: Alya, Bima, Citra, Farhan",
+            "Enam baris karena semua siswa punya identitas",
+            "Sebelas baris karena semua payment ikut dihitung"
+          ],
+          "answer": 0,
+          "explanation": "Alya, Bima, Citra, dan Farhan masing-masing memiliki dua invoice. Danu dan Elina hanya satu.",
+          "feedback": [
+            "Benar: filter diterapkan pada jumlah invoice per siswa.",
+            "Identitas siswa tidak menentukan jumlah invoice.",
+            "Payments tidak berada di query dan tidak boleh menjadi unit count."
+          ]
+        },
+        {
+          "id": "l0m01l01-activity-variant-b",
+          "question": "Pada query yang sama, jika `payments` ditambahkan tanpa agregasi dan COUNT(*) dipakai, apa risiko utamanya untuk Bima?",
+          "options": [
+            "Bima selalu hilang",
+            "Count dapat bertambah karena invoice 103 punya dua baris payment",
+            "Nama Bima berubah menjadi NULL"
+          ],
+          "answer": 1,
+          "explanation": "Invoice 103 punya dua payment, sehingga JOIN mentah menghasilkan dua baris untuk invoice itu dan COUNT(*) tidak lagi menghitung invoice unik.",
+          "feedback": [
+            "LEFT JOIN tidak otomatis menghilangkan Bima.",
+            "Benar: grain payment menggandakan invoice 103.",
+            "Nama berasal dari students dan tidak menjadi NULL karena payment bertambah."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l0m01l01-edge-no-invoice",
+          "question": "Seorang siswa baru ditambahkan tanpa invoice. Dengan LEFT JOIN dan tanpa HAVING, nilai invoice_count yang benar adalah ...",
+          "options": ["0", "1", "NULL"],
+          "answer": 0,
+          "explanation": "COUNT(i.invoice_id) tidak menghitung baris pasangan yang tidak memiliki invoice_id, sehingga hasilnya nol.",
+          "feedback": [
+            "Benar: siswa tetap ada, tetapi tidak memiliki invoice.",
+            "Satu baris hasil JOIN bukan berarti satu invoice.",
+            "COUNT mengembalikan nol untuk kolom yang tidak memiliki nilai pada grup tersebut."
+          ]
+        },
+        {
+          "id": "l0m01l01-edge-name-update",
+          "question": "Jika nama pada students diperbaiki menjadi 'Alya P. Putri', apa yang terjadi pada laporan JOIN yang membaca students?",
+          "options": [
+            "Hanya baris identitas students yang menjadi sumber perubahan; semua invoice menampilkan nama baru",
+            "Semua invoice harus diedit satu per satu",
+            "Laporan menjadi kosong karena student_id berubah otomatis"
+          ],
+          "answer": 0,
+          "explanation": "Invoice menyimpan referensi student_id, sehingga perubahan atribut pada students terbaca di laporan tanpa menyalin update ke invoice.",
+          "feedback": [
+            "Benar: satu sumber identitas menghindari pembaruan berulang.",
+            "Itu adalah masalah tabel datar yang sedang dihindari.",
+            "student_id tidak berubah hanya karena full_name diperbaiki."
+          ]
+        }
+      ],
+      "hints": [
+        "Tentukan dulu satu baris hasil harus mewakili apa: siswa, invoice, atau payment.",
+        "Gunakan LEFT JOIN dari students ke invoices, kelompokkan berdasarkan student_id dan full_name, lalu filter dengan HAVING.",
+        "Solusi memiliki bentuk SELECT s.full_name, COUNT(i.invoice_id)::text ... GROUP BY ... HAVING COUNT(i.invoice_id) >= 2 ORDER BY s.student_id."
+      ],
+      "solutionSql": "SELECT s.full_name, COUNT(i.invoice_id)::text AS invoice_count\nFROM school.students AS s\nLEFT JOIN school.invoices AS i ON i.student_id = s.student_id\nGROUP BY s.student_id, s.full_name\nHAVING COUNT(i.invoice_id) >= 2\nORDER BY s.student_id;",
+      "solutionExplanation": "Query mempertahankan grain siswa: mulai dari students, hubungkan invoice berdasarkan student_id, lalu agregasikan invoice_id. HAVING menyaring hasil setelah grup terbentuk. Payments sengaja tidak digabung karena aktivitas menguji pemisahan entitas dan invoice, bukan jumlah cicilan.",
+      "critical": false
+    },
+    "reflection": "Mengapa memisahkan students dan invoices membuat perubahan nama lebih aman? Sebutkan satu kondisi ketika salinan nama untuk kebutuhan snapshot laporan mungkin masuk akal, lalu jelaskan bagaimana Anda akan menandainya sebagai data turunan agar tidak dianggap sumber kebenaran."
+  },
+  {
+    "id": "l0m01l02",
+    "version": "1.0.0",
+    "difficulty": "beginner",
+    "tags": ["tipe-data", "primary-key", "relasional", "school-finance"],
+    "hook": "Seseorang menyimpan nominal SPP sebagai teks agar mudah ditempel dari chat, lalu memasukkan tanggal '10/8/26'. Laporan menjumlahkan angka secara salah dan urutan jatuh tempo tidak konsisten. Tipe data database seharusnya mencegah masalah ini sejak awal.",
+    "objectives": [
+      "Membedakan peran tabel, baris, kolom, dan tipe data pada relasi PostgreSQL.",
+      "Menjelaskan mengapa primary key harus stabil dan unik untuk setiap record.",
+      "Membaca tipe kolom fixture dan memilih representasi yang sesuai untuk uang, tanggal, teks, dan boolean."
+    ],
+    "sections": [
+      {
+        "title": "Struktur yang dapat dipercaya",
+        "paragraphs": [
+          "Tabel adalah relasi yang dapat dibaca sebagai kumpulan baris dengan struktur kolom yang sama. Satu baris `school.invoices` mewakili satu tagihan; kolom `amount` dan `due_date` menyimpan atribut tagihan itu. Tipe data bukan hiasan dokumentasi. PostgreSQL menggunakannya untuk menentukan operasi yang sah, cara membandingkan nilai, dan format internal. Memilih tipe lebih awal membuat kesalahan input terlihat dekat dengan sumbernya.",
+          "Primary key adalah identitas baris, bukan nomor urut yang sekadar tampak rapi. Pada fixture, `invoice_id` bertipe BIGINT dan unik. Invoice 101 tetap invoice 101 walaupun urutannya ditampilkan berbeda. Kode seperti `invoice_id` dapat dipakai foreign key oleh payments. Nama siswa atau tanggal jatuh tempo bukan pengganti yang aman karena dapat berulang atau berubah."
+        ]
+      },
+      {
+        "title": "Intuisi tipe dan batasannya",
+        "paragraphs": [
+          "Untuk uang, `NUMERIC(12,2)` menyimpan desimal dengan ketelitian yang dipilih, sehingga penjumlahan 450000.00 dan 200000.00 tidak bergantung pada pembulatan floating point. `DATE` cocok untuk tanggal kalender seperti jatuh tempo; `TIMESTAMPTZ` pada payment menyimpan waktu kejadian dengan zona waktu. `TEXT` cocok untuk nama dan kode yang tidak dihitung. `BOOLEAN` menyatakan ya/tidak, bukan string 'aktif' yang bisa dieja berbeda.",
+          "Tipe yang kuat tetap memiliki batasan. NUMERIC tidak memutuskan apakah jumlah tagihan bisnis masuk akal; CHECK `amount >= 0` membantu aturan itu. DATE tidak tahu apakah sekolah buka pada hari tersebut. Primary key tidak memastikan satu siswa hanya punya satu invoice per bulan; constraint unik gabungan diperlukan dan sudah ada pada seed. Jangan menganggap ID otomatis membuat data valid di semua dimensi."
+        ]
+      },
+      {
+        "title": "Membaca schema nyata",
+        "paragraphs": [
+          "Worked example memakai `information_schema.columns`, metadata standar PostgreSQL, untuk membaca tipe kolom invoices. Hasilnya memperlihatkan `invoice_id` dan `student_id` sebagai bigint, dua kolom tanggal sebagai date, dan amount sebagai numeric. Query ini tidak mengarang kolom `status`; seed payments memiliki status pembayaran, sementara invoices memang tidak memilikinya. Menjaga nama dan tipe sesuai sumber mencegah materi terlihat benar tetapi gagal dijalankan.",
+          "Perhatikan perbedaan nama kolom dan nilai kolom. `invoice_id` adalah nama kolom, sedangkan '101' adalah nilai pada baris tertentu. Alias hanya mengubah label keluaran query; alias tidak mengubah tipe penyimpanan atau primary key. Saat membuat laporan, cast ke text dipakai di contoh agar expected rows stabil dalam format CSV psql, bukan sebagai rekomendasi mengubah nominal menjadi text."
+        ]
+      },
+      {
+        "title": "Salah kaprah yang perlu dicek",
+        "paragraphs": [
+          "Nomor telepon, jika kelak dimodelkan, sebaiknya teks karena angka nol di depan dan tanda plus adalah bagian dari representasi, bukan nilai yang dijumlahkan. Sebaliknya, amount bukan text hanya karena laporan akhirnya dicetak. Begitu data disimpan sebagai text, validasi angka, pengurutan numerik, dan agregasi menjadi pekerjaan tambahan. Pilih tipe berdasarkan operasi domain, bukan berdasarkan contoh tampilan.",
+          "Aktivitas meminta Anda memprediksi baris dengan amount minimal tertentu, lalu menguji edge case berupa batas tepat, ID yang stabil, dan urutan eksplisit. Setelah dapat membedakan grain baris dan makna kolom, lesson relasi berikutnya dapat membahas bagaimana foreign key menjaga hubungan tersebut."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "SELECT column_name, data_type\nFROM information_schema.columns\nWHERE table_schema = 'school' AND table_name = 'invoices'\nORDER BY ordinal_position;",
+      "columns": ["column_name", "data_type"],
+      "rows": [
+        ["invoice_id", "bigint"],
+        ["student_id", "bigint"],
+        ["period_month", "date"],
+        ["due_date", "date"],
+        ["amount", "numeric"]
+      ],
+      "explanation": "information_schema membaca metadata kolom yang benar-benar tersedia pada seed. Urutan ordinal_position mempertahankan urutan definisi tabel. amount tetap numeric untuk perhitungan; cast ke text hanya dipakai jika laporan membutuhkan keluaran yang eksplisit."
+    },
+    "checks": [
+      {
+        "id": "l0m01l02-check-money-type",
+        "question": "Tipe mana yang paling tepat untuk amount pada invoice sekolah yang perlu dijumlahkan dengan dua angka desimal?",
+        "options": ["TEXT", "NUMERIC(12,2)", "BOOLEAN"],
+        "answer": 1,
+        "explanation": "NUMERIC(12,2) menyatakan nilai moneter dengan ketelitian desimal dan mendukung operasi aritmetika yang terkontrol.",
+        "feedback": [
+          "TEXT menyimpan tampilan, tetapi menyulitkan validasi dan penjumlahan.",
+          "Benar: numeric cocok untuk nominal desimal dan seed memakai numeric(12,2).",
+          "BOOLEAN hanya menyatakan benar/salah, bukan nominal."
+        ]
+      },
+      {
+        "id": "l0m01l02-check-primary-key",
+        "question": "Sifat utama primary key pada invoices adalah ...",
+        "options": [
+          "Unik dan tidak NULL sehingga satu baris dapat dirujuk stabil",
+          "Selalu bertambah setiap kali SELECT dijalankan",
+          "Harus berupa nama siswa yang mudah dibaca"
+        ],
+        "answer": 0,
+        "explanation": "Primary key mengidentifikasi baris secara stabil dan menjadi target foreign key. Ia tidak harus bermakna bagi manusia.",
+        "feedback": [
+          "Benar: uniqueness dan non-NULL adalah inti identitas baris.",
+          "SELECT tidak mengubah primary key.",
+          "Nama dapat berubah dan tidak selalu unik, sehingga bukan pilihan identitas yang aman."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi tiga baris pertama dari query invoice yang amount-nya minimal 500000 dan diurutkan berdasarkan invoice_id. Perhatikan bahwa alias billed_amount hanya label keluaran, bukan perubahan tipe penyimpanan.",
+      "setup": "Gunakan sepuluh invoice pada school_finance_seed.sql. Nilai amount diformat dua desimal agar keluaran prediksi tidak ambigu.",
+      "starterSql": "SELECT invoice_id::text AS id, to_char(amount, 'FM9999999990.00') AS billed_amount, due_date::text AS due_date\nFROM school.invoices\nWHERE amount >= 500000\nORDER BY invoice_id\nLIMIT 3;",
+      "variants": [
+        {
+          "id": "l0m01l02-activity-variant-a",
+          "question": "Baris pertama query amount >= 500000 ORDER BY invoice_id LIMIT 3 adalah ...",
+          "options": [
+            "invoice 101 dengan billed_amount 500000.00",
+            "invoice 103 dengan billed_amount 450000.00",
+            "invoice 102 dengan billed_amount 500000.00"
+          ],
+          "answer": 0,
+          "explanation": "Invoice 101 dan 102 bernilai 500000, tetapi invoice_id 101 lebih kecil sehingga muncul pertama.",
+          "feedback": [
+            "Benar: filter dan pengurutan eksplisit menentukan baris pertama.",
+            "450000 berada di bawah ambang 500000.",
+            "Invoice 102 memenuhi filter, tetapi bukan ID pertama."
+          ]
+        },
+        {
+          "id": "l0m01l02-activity-variant-b",
+          "question": "Jika LIMIT dihapus tetapi filter tetap amount >= 500000, berapa invoice yang tersisa?",
+          "options": ["5", "6", "7"],
+          "answer": 1,
+          "explanation": "Nilai yang memenuhi adalah invoice 101, 102, 105, 106, 109, dan 110, sehingga totalnya enam.",
+          "feedback": [
+            "Tiga adalah jumlah baris yang terlihat saat LIMIT 3, bukan jumlah seluruh hasil.",
+            "Benar setelah menghitung ulang keenam invoice yang memenuhi filter.",
+            "Tujuh memasukkan invoice 103 atau 104 yang masing-masing 450000."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l0m01l02-edge-boundary",
+          "question": "Apakah invoice dengan amount tepat 500000 masuk pada kondisi `amount >= 500000`?",
+          "options": [
+            "Ya, karena >= termasuk nilai batas",
+            "Tidak, karena hanya nilai lebih besar yang masuk",
+            "Hanya jika invoice_id genap"
+          ],
+          "answer": 0,
+          "explanation": "Operator >= memasukkan nilai yang sama dengan batas, berbeda dari >.",
+          "feedback": [
+            "Benar: 500000 termasuk.",
+            "Itu adalah arti operator >, bukan >=.",
+            "Parity invoice_id tidak dipakai dalam kondisi query."
+          ]
+        },
+        {
+          "id": "l0m01l02-edge-limit-order",
+          "question": "Mengapa `LIMIT 3` tanpa `ORDER BY` tidak cocok untuk expected rows yang stabil?",
+          "options": [
+            "Database bebas memilih urutan fisik sehingga tiga baris dapat berubah",
+            "LIMIT mengubah tipe amount menjadi text",
+            "ORDER BY hanya boleh dipakai pada primary key"
+          ],
+          "answer": 0,
+          "explanation": "Tanpa order requirement, SQL tidak menjamin urutan hasil. Expected rows harus menetapkan order bila posisi baris dinilai.",
+          "feedback": [
+            "Benar: selalu nyatakan order untuk hasil top-N yang deterministik.",
+            "LIMIT tidak mengubah tipe kolom.",
+            "ORDER BY dapat memakai kolom lain yang relevan dan tersedia."
+          ]
+        }
+      ],
+      "hints": [
+        "Pisahkan tiga keputusan: kolom keluaran, filter amount, lalu urutan dan batas baris.",
+        "Gunakan `WHERE amount >= 500000`, `ORDER BY invoice_id`, dan `LIMIT 3`; format amount dengan to_char hanya untuk tampilan.",
+        "Solusi lengkap memilih invoice_id::text sebagai id, to_char(amount, 'FM9999999990.00') sebagai billed_amount, dan due_date::text sebagai due_date."
+      ],
+      "solutionSql": "SELECT invoice_id::text AS id, to_char(amount, 'FM9999999990.00') AS billed_amount, due_date::text AS due_date\nFROM school.invoices\nWHERE amount >= 500000\nORDER BY invoice_id\nLIMIT 3;",
+      "solutionExplanation": "Filter bekerja pada amount sebagai NUMERIC, sehingga perbandingan tetap numerik. Alias hanya memberi nama id dan billed_amount pada result set. ORDER BY membuat LIMIT deterministik; cast dan to_char dipakai agar expected CSV berupa string yang stabil.",
+      "critical": false
+    },
+    "reflection": "Untuk setiap kolom pada laporan tagihan, jelaskan apakah ia dipakai untuk menghitung, mengurutkan, mengidentifikasi, atau hanya menampilkan teks. Kapan menyimpan nomor telepon sebagai angka akan merusak informasi?"
+  },
+  {
+    "id": "l0m01l03",
+    "version": "1.0.0",
+    "difficulty": "beginner",
+    "tags": ["foreign-key", "integritas", "relasional", "school-finance"],
+    "hook": "Seorang operator mencoba menghapus siswa Danu karena sudah tidak aktif. Database harus mencegah invoice yang masih menunjuk Danu menjadi yatim, tetapi pencegahan itu hanya bekerja bila relasi benar-benar dideklarasikan.",
+    "objectives": [
+      "Membedakan foreign key sebagai penjaga integritas dari JOIN sebagai operasi membaca.",
+      "Memprediksi konsekuensi insert atau delete parent row pada relasi students, invoices, dan payments.",
+      "Membaca hasil hitung invoice dan payment per siswa tanpa mengklaim bahwa latihan ini menggantikan desain ERD lengkap."
+    ],
+    "sections": [
+      {
+        "title": "Hubungan yang harus tetap benar",
+        "paragraphs": [
+          "Relasi bisnis memiliki arah. `invoices.student_id` menunjuk `students.student_id`, dan `payments.invoice_id` menunjuk `invoices.invoice_id`. Foreign key membuat PostgreSQL memeriksa arah itu saat insert atau delete. Jika sebuah invoice menunjuk student_id yang tidak ada, insert ditolak. Jika parent hendak dihapus ketika child masih ada, default NO ACTION pada seed menolak penghapusan agar histori keuangan tidak kehilangan pemilik.",
+          "JOIN melakukan pekerjaan berbeda. JOIN membaca dua atau lebih relasi untuk menyusun result set; ia tidak menambahkan perlindungan pada saat data ditulis. Query JOIN dapat tetap dijalankan pada tabel tanpa foreign key, lalu menghasilkan baris yatim atau baris yang hilang. Karena itu, menggambar hubungan di kepala saja belum cukup untuk integrity."
+        ]
+      },
+      {
+        "title": "Intuisi dan pilihan delete",
+        "paragraphs": [
+          "Bayangkan parent row sebagai map siswa dan child row sebagai kuitansi di dalamnya. Menghapus map sementara kuitansi masih ada membuat pemiliknya tidak dapat dilacak. `ON DELETE RESTRICT` atau default NO ACTION tepat ketika histori harus dipertahankan; soft delete melalui `is_active` sering lebih aman untuk siswa yang tidak lagi aktif. `ON DELETE CASCADE` bukan selalu solusi: pada data keuangan, cascade dapat menghapus histori dan perlu justifikasi bisnis yang kuat.",
+          "Foreign key juga bukan validasi seluruh domain. Ia tidak memastikan jumlah pembayaran tidak melebihi amount invoice, dan tidak memutuskan apakah payment failed boleh memiliki paid_at. Constraint lain, transaksi, dan aturan aplikasi menangani invariant berbeda. Jangan menyimpulkan bahwa JOIN yang berhasil membuktikan semua data sehat; JOIN hanya membuktikan pasangan yang cocok pada query tersebut."
+        ]
+      },
+      {
+        "title": "Membaca grain tanpa ERD penuh",
+        "paragraphs": [
+          "Worked example menghitung invoice per siswa dan payment row per siswa. `COUNT(DISTINCT i.invoice_id)` menjaga invoice tetap satu walaupun sebuah invoice memiliki beberapa payment. `COUNT(p.payment_id)` justru menghitung event payment, sehingga Bima dan Farhan dapat memiliki count payment lebih besar daripada count invoice. Perbedaan ini membantu membaca kardinalitas dari data yang tersedia.",
+          "Latihan ini tidak menuntut Anda membuat ERD lengkap, memilih semua atribut, atau merancang lifecycle data. Fokusnya adalah mengenali parent-child dan memprediksi satu operasi aman. Siswa tetap dapat dipahami melalui query konkret sebelum masuk ke diskusi modeling yang lebih luas."
+        ]
+      },
+      {
+        "title": "Kasus yang sering mengejutkan",
+        "paragraphs": [
+          "Siswa Danu memiliki `is_active = false`, tetapi masih mempunyai invoice dan payment. Status aktif adalah atribut siswa, bukan bukti bahwa semua child boleh dihapus. Elina memiliki satu invoice tanpa payment; LEFT JOIN tetap menampilkan Elina dengan payment count nol. Jika memakai INNER JOIN ke payments, Elina akan hilang dari laporan, bukan berubah menjadi nol.",
+          "Pada aktivitas, Anda memprediksi DELETE di dalam transaksi lalu ROLLBACK. Database akan menolak operasi karena invoice masih merujuk student_id, dan rollback memastikan percobaan tidak meninggalkan perubahan. Refleksi meminta alasan kebijakan delete, sebab keputusan cascade versus mempertahankan histori harus mengikuti domain, bukan sekadar membuat query lebih mudah."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "SELECT s.full_name, COUNT(DISTINCT i.invoice_id)::text AS invoice_count, COUNT(p.payment_id)::text AS payment_row_count\nFROM school.students AS s\nLEFT JOIN school.invoices AS i ON i.student_id = s.student_id\nLEFT JOIN school.payments AS p ON p.invoice_id = i.invoice_id\nGROUP BY s.student_id, s.full_name\nORDER BY s.student_id;",
+      "columns": ["full_name", "invoice_count", "payment_row_count"],
+      "rows": [
+        ["Alya Putri", "2", "2"],
+        ["Bima Pratama", "2", "3"],
+        ["Citra Rahma", "2", "2"],
+        ["Danu Saputra", "1", "1"],
+        ["Elina Zahra", "1", "0"],
+        ["Farhan Hasan", "2", "3"]
+      ],
+      "explanation": "COUNT DISTINCT dipakai untuk invoice karena payment dapat berulang untuk satu invoice. Payment count menghitung payment_id secara langsung. LEFT JOIN mempertahankan siswa yang belum memiliki payment, seperti Elina."
+    },
+    "checks": [
+      {
+        "id": "l0m01l03-check-fk-purpose",
+        "question": "Apa yang dijaga foreign key invoices.student_id REFERENCES students(student_id)?",
+        "options": [
+          "Agar JOIN selalu mengurutkan nama siswa",
+          "Agar setiap invoice menunjuk student_id yang ada",
+          "Agar amount invoice otomatis sama dengan total payment"
+        ],
+        "answer": 1,
+        "explanation": "Foreign key menjaga keberadaan parent key untuk setiap child key. Ia tidak mengatur urutan atau perhitungan uang.",
+        "feedback": [
+          "Urutan adalah tanggung jawab ORDER BY, bukan foreign key.",
+          "Benar: invoice tidak boleh menunjuk siswa yang tidak ada.",
+          "Kesesuaian jumlah adalah invariant berbeda yang memerlukan query atau constraint lain."
+        ]
+      },
+      {
+        "id": "l0m01l03-check-delete",
+        "question": "Dengan foreign key default pada seed, apa yang terjadi ketika student_id=4 dihapus sementara invoice 107 masih ada?",
+        "options": [
+          "DELETE ditolak karena masih ada child row",
+          "Student terhapus dan invoice 107 otomatis menjadi student_id NULL",
+          "Semua payment berubah menjadi succeeded"
+        ],
+        "answer": 0,
+        "explanation": "Seed tidak mendefinisikan ON DELETE CASCADE atau SET NULL. Parent yang masih dirujuk tidak dapat dihapus secara langsung.",
+        "feedback": [
+          "Benar: penolakan mempertahankan referensi histori tetap valid.",
+          "SET NULL tidak didefinisikan dan student_id juga NOT NULL.",
+          "Status payment tidak terkait dengan operasi delete parent."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Dalam database disposable, jalankan percobaan DELETE student_id=1 yang masih memiliki invoice, lalu prediksi result set setelah ROLLBACK. Fokuskan pada error foreign key, keberadaan Alya, dan alasan operasi tidak menghapus histori.",
+      "setup": "Fixture memiliki Alya (student_id 1), invoice 101 dan 102 untuk Alya, serta payments yang merujuk kedua invoice. Percobaan harus dibungkus transaksi dan tidak boleh dijalankan ke database produksi.",
+      "starterSql": "BEGIN;\nDELETE FROM school.students WHERE student_id = 1;\nROLLBACK;\nSELECT student_id::text, full_name FROM school.students WHERE student_id = 1;",
+      "variants": [
+        {
+          "id": "l0m01l03-activity-variant-a",
+          "question": "Apa hasil paling tepat dari DELETE student_id=1 pada starter state?",
+          "options": [
+            "DELETE ditolak oleh foreign key karena invoice 101 dan 102 masih ada",
+            "DELETE berhasil dan dua invoice ikut hilang",
+            "DELETE berhasil tetapi invoice tetap memiliki student_id=1 tanpa parent"
+          ],
+          "answer": 0,
+          "explanation": "Default foreign key menolak penghapusan parent yang masih dirujuk. Tidak ada cascade pada seed.",
+          "feedback": [
+            "Benar: child row membuat parent tidak boleh hilang.",
+            "Cascade tidak didefinisikan pada seed.",
+            "Foreign key justru mencegah referensi yatim."
+          ]
+        },
+        {
+          "id": "l0m01l03-activity-variant-b",
+          "question": "Setelah statement gagal dan transaksi di-ROLLBACK, apa result set SELECT terakhir?",
+          "options": [
+            "Satu baris `1,Alya Putri`",
+            "Tidak ada baris karena rollback menghapus student",
+            "Dua baris payment untuk Alya"
+          ],
+          "answer": 0,
+          "explanation": "DELETE gagal dan rollback membatalkan seluruh percobaan. Parent tetap ada, sehingga SELECT students menghasilkan satu baris.",
+          "feedback": [
+            "Benar: identitas Alya tetap tersedia.",
+            "Rollback tidak menghapus data yang sudah ada.",
+            "SELECT membaca students, bukan payments."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l0m01l03-edge-elina",
+          "question": "Elina memiliki invoice 108 tetapi belum memiliki payment. Mengapa LEFT JOIN ke payments menghasilkan payment_row_count 0?",
+          "options": [
+            "Tidak ada payment_id yang cocok, tetapi baris siswa dan invoice tetap dipertahankan",
+            "LEFT JOIN menghapus semua invoice tanpa child",
+            "COUNT(payment_id) menghitung invoice_id sebagai payment"
+          ],
+          "answer": 0,
+          "explanation": "LEFT JOIN mempertahankan sisi kiri dan mengisi kolom kanan dengan NULL; COUNT(payment_id) tidak menghitung NULL.",
+          "feedback": [
+            "Benar: ini membedakan zero child dari parent yang hilang.",
+            "Penghapusan sisi kiri adalah perilaku INNER JOIN.",
+            "COUNT hanya menghitung kolom payment_id, bukan invoice_id."
+          ]
+        },
+        {
+          "id": "l0m01l03-edge-cascade",
+          "question": "Mengapa menambahkan ON DELETE CASCADE tanpa keputusan bisnis dapat berbahaya pada school_finance?",
+          "options": [
+            "Menghapus siswa dapat ikut menghapus histori invoice dan payment",
+            "Cascade membuat primary key tidak unik",
+            "Cascade hanya mengubah format tanggal"
+          ],
+          "answer": 0,
+          "explanation": "Cascade menyebarkan delete ke child. Pada histori keuangan, penghapusan otomatis dapat merusak audit dan rekonsiliasi.",
+          "feedback": [
+            "Benar: kebijakan delete harus mempertimbangkan retention dan audit.",
+            "Uniqueness primary key tidak ditentukan oleh cascade.",
+            "Cascade adalah aksi data, bukan formatter tanggal."
+          ]
+        }
+      ],
+      "hints": [
+        "Ikuti arah referensi: students adalah parent, invoices child pertama, payments child berikutnya.",
+        "Cek apakah seed mendefinisikan ON DELETE CASCADE; jika tidak, child yang masih ada membuat DELETE parent gagal.",
+        "Solusi membungkus DELETE dalam BEGIN/ROLLBACK lalu membaca kembali student_id=1; expected row tetap 1,Alya Putri."
+      ],
+      "solutionSql": "BEGIN;\nDELETE FROM school.students WHERE student_id = 1;\nROLLBACK;\nSELECT student_id::text, full_name FROM school.students WHERE student_id = 1;",
+      "solutionExplanation": "DELETE diuji secara terisolasi. Foreign key pada invoices membuat statement gagal karena invoice 101 dan 102 masih merujuk Alya. ROLLBACK menutup eksperimen tanpa mutasi permanen; SELECT akhir menjadi bukti bahwa parent masih ada.",
+      "critical": false,
+      "solutionError": "23503"
+    },
+    "reflection": "Jika sekolah ingin mempertahankan histori pembayaran ketika siswa tidak aktif, apakah Anda memilih menghapus parent, memakai is_active, atau kebijakan lain? Jelaskan trade-off dan sebutkan invariant yang masih harus dijaga di luar foreign key."
+  },
+  {
+    "id": "l0m02l01",
+    "version": "1.0.0",
+    "difficulty": "beginner",
+    "tags": ["sql", "deklaratif", "postgresql", "school-finance"],
+    "hook": "Kepala sekolah meminta 'semua jenjang aktif beserta jumlah siswanya'. Anda menjelaskan hasil yang diinginkan; PostgreSQL memilih cara membaca barisnya. Memahami perbedaan spesifikasi dan strategi membuat Anda tidak salah mengira query sebagai program loop manual.",
+    "objectives": [
+      "Menjelaskan SQL sebagai bahasa deklaratif yang menyatakan result set dan constraint hasil.",
+      "Membaca peran SELECT, FROM, WHERE, GROUP BY, dan ORDER BY pada query agregasi sederhana.",
+      "Membedakan kebenaran hasil dari strategi eksekusi yang dapat dipilih optimizer PostgreSQL."
+    ],
+    "sections": [
+      {
+        "title": "Menyatakan tujuan, bukan langkah mesin",
+        "paragraphs": [
+          "SQL deklaratif meminta database menghasilkan himpunan baris yang memenuhi syarat. Pada query laporan aktif, kita menyatakan sumbernya students, kondisi `is_active = true`, pengelompokan berdasarkan grade, dan hitungan setiap grup. Kita tidak menulis instruksi 'ambil baris pertama, simpan counter, lalu lompat ke baris berikutnya'. PostgreSQL bebas memilih scan tabel, index scan, atau strategi agregasi selama hasilnya sesuai semantik query.",
+          "Ini tidak berarti SQL tanpa urutan logika. Klausa memiliki makna: FROM menyediakan sumber, WHERE menyaring baris, GROUP BY membentuk grup, SELECT memproyeksikan nilai, dan ORDER BY mengurutkan result set akhir. Urutan penulisan di editor tetap berbeda dari cara mesin dapat mengeksekusi. Memahami keduanya membantu membaca query tanpa menganggap optimizer mengikuti baris teks satu per satu."
+        ]
+      },
+      {
+        "title": "Intuisi dan batas deklaratif",
+        "paragraphs": [
+          "Analogi yang berguna adalah memesan daftar di perpustakaan: Anda menentukan kategori dan informasi yang diminta, lalu petugas memilih rak dan urutan pencarian. Analogi ini berhenti ketika strategi berdampak pada performa atau locking. Result set yang sama dapat memerlukan biaya berbeda, dan query dengan fungsi non-deterministik atau tanpa ORDER BY mungkin tidak menjamin susunan baris.",
+          "Deklaratif juga bukan sinonim 'selalu cepat' atau 'selalu aman'. Query buruk dapat membaca terlalu banyak data, JOIN pada grain yang salah, atau menggunakan transaksi yang terlalu luas. Lesson ini membahas cara membaca maksud query, sementara execution plan dan tuning datang pada level berikutnya. Jangan mengganti kebenaran hasil dengan tebakan tentang strategi internal."
+        ]
+      },
+      {
+        "title": "Worked query pada fixture",
+        "paragraphs": [
+          "Query worked menghitung siswa aktif per grade. `WHERE` menyaring empat dimensi? Tidak: ia hanya menyaring baris students berdasarkan boolean, kemudian `GROUP BY grade` membentuk tiga grup yang tersisa: SD, SMP, dan TK. `COUNT(*)` menghitung baris di setiap grup. `::text` dipakai agar expected rows eksplisit sebagai string; ia tidak mengubah cara PostgreSQL menyimpan grade atau is_active.",
+          "ORDER BY grade` memberi urutan alfabetis pada result set. Tanpa klausa itu, tiga grup mungkin keluar dengan urutan berbeda walaupun count benar. Jadi 'hasil benar' mencakup isi dan, bila latihan meminta posisi, urutan yang dinyatakan. Alias `active_count` memberi nama kolom yang mudah dibaca tanpa membuat kolom baru di tabel."
+        ]
+      },
+      {
+        "title": "Kesalahan interpretasi",
+        "paragraphs": [
+          "Pemula sering mengira COUNT(*) pada query ini menghitung semua siswa karena tabel students adalah sumbernya. Padahal WHERE diterapkan lebih dulu secara semantik, sehingga Danu yang inactive tidak masuk. Kesalahan lain adalah percaya bahwa SQL akan selalu membaca baris dari student_id terkecil. Tanpa ORDER BY, urutan tidak dijanjikan; jangan menilai query hanya dari satu output kebetulan.",
+          "Aktivitas meminta Anda memprediksi result set, bukan menebak rencana eksekusi. Setelah menjawab, jelaskan bagaimana perubahan filter atau pengelompokan mengubah hasil. Kemampuan memisahkan 'apa yang diminta' dari 'bagaimana mesin melakukannya' menjadi dasar untuk membaca SELECT sederhana di lesson berikutnya."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "SELECT grade, COUNT(*)::text AS active_count\nFROM school.students\nWHERE is_active = true\nGROUP BY grade\nORDER BY grade;",
+      "columns": ["grade", "active_count"],
+      "rows": [
+        ["SD", "2"],
+        ["SMP", "2"],
+        ["TK", "1"]
+      ],
+      "explanation": "WHERE membuang Danu yang is_active=false sebelum pengelompokan. Count per grade kemudian menghasilkan SD 2, SMP 2, dan TK 1. ORDER BY membuat urutan grade deterministik."
+    },
+    "checks": [
+      {
+        "id": "l0m02l01-check-declarative",
+        "question": "Pernyataan mana yang paling tepat menggambarkan SQL deklaratif?",
+        "options": [
+          "Kita menjelaskan result set yang diinginkan; PostgreSQL memilih strategi eksekusi",
+          "Kita harus menulis loop untuk setiap baris tabel",
+          "PostgreSQL selalu menjalankan klausa tepat dari kiri ke kanan tanpa optimasi"
+        ],
+        "answer": 0,
+        "explanation": "SQL menyatakan apa yang harus dikembalikan. Optimizer dapat memilih rencana berbeda selama semantik hasil tetap benar.",
+        "feedback": [
+          "Benar: spesifikasi hasil dipisahkan dari strategi mesin.",
+          "Loop manual adalah gaya prosedural, bukan keharusan SQL.",
+          "PostgreSQL memiliki optimizer dan tidak menjanjikan urutan eksekusi seperti teks query."
+        ]
+      },
+      {
+        "id": "l0m02l01-check-where-group",
+        "question": "Pada worked query, mengapa Danu tidak menambah count SD?",
+        "options": [
+          "Danu tidak memiliki grade",
+          "WHERE is_active = true menyaring Danu sebelum GROUP BY",
+          "COUNT(*) selalu mengabaikan baris dengan grade SD"
+        ],
+        "answer": 1,
+        "explanation": "Danu memiliki grade SD tetapi is_active=false, sehingga dikeluarkan oleh WHERE sebelum grup dibentuk.",
+        "feedback": [
+          "Danu memiliki grade SD pada fixture.",
+          "Benar: filter aktif berlaku sebelum pengelompokan secara semantik.",
+          "COUNT(*) menghitung baris grup, termasuk grade SD jika baris lolos filter."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi result set query active_count per grade pada fixture enam siswa. Jelaskan baris mana yang dikeluarkan oleh WHERE sebelum GROUP BY dan mengapa output tidak boleh dianggap urut tanpa ORDER BY.",
+      "setup": "Gunakan school.students dari seed. Kolom is_active adalah BOOLEAN NOT NULL dan nilai CSV PostgreSQL untuk boolean adalah t/f bila dibaca langsung.",
+      "starterSql": "SELECT grade, COUNT(*)::text AS active_count\nFROM school.students\nWHERE is_active = true\nGROUP BY grade\nORDER BY grade;",
+      "variants": [
+        {
+          "id": "l0m02l01-activity-variant-a",
+          "question": "Jika WHERE is_active = true dihapus, berapa active_count untuk SD?",
+          "options": ["2", "3", "1"],
+          "answer": 1,
+          "explanation": "Tanpa filter aktif, Alya, Bima, dan Danu semuanya masuk grade SD, sehingga count SD menjadi tiga.",
+          "feedback": [
+            "Dua adalah count SD ketika Danu disaring.",
+            "Benar: tiga baris SD masuk tanpa WHERE.",
+            "Satu tidak mencerminkan tiga siswa SD pada fixture."
+          ]
+        },
+        {
+          "id": "l0m02l01-activity-variant-b",
+          "question": "Jika `ORDER BY grade` dihapus tetapi semua klausa lain tetap, apa yang tetap dapat dipastikan?",
+          "options": [
+            "Isi dan count grup tetap, urutan baris tidak dijamin",
+            "Baris selalu diurutkan berdasarkan student_id",
+            "Semua grup hilang karena GROUP BY perlu ORDER BY"
+          ],
+          "answer": 0,
+          "explanation": "ORDER BY mengatur urutan result set, bukan keanggotaan grup. Tanpanya, isi tetap benar tetapi posisi tidak boleh diasumsikan.",
+          "feedback": [
+            "Benar: bedakan correctness isi dari jaminan urutan.",
+            "Tidak ada student_id di result set untuk memaksa urutan itu.",
+            "GROUP BY tetap valid tanpa ORDER BY."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l0m02l01-edge-count-column",
+          "question": "Apa perbedaan penting antara COUNT(*) dan COUNT(grade) bila grade boleh NULL?",
+          "options": [
+            "COUNT(*) menghitung baris, COUNT(grade) mengabaikan nilai grade yang NULL",
+            "Keduanya selalu menghasilkan nilai berbeda pada setiap tabel",
+            "COUNT(*) hanya menghitung primary key"
+          ],
+          "answer": 0,
+          "explanation": "COUNT(*) menghitung baris grup; COUNT(expression) hanya menghitung expression yang tidak NULL.",
+          "feedback": [
+            "Benar: perbedaan ini penting pada data dengan NULL.",
+            "Pada grade NOT NULL keduanya dapat sama, jadi tidak selalu berbeda.",
+            "COUNT(*) tidak terbatas pada primary key."
+          ]
+        },
+        {
+          "id": "l0m02l01-edge-boolean",
+          "question": "Pada fixture, nilai boolean yang setara dengan `is_active = true` saat ditampilkan sebagai psql CSV adalah ...",
+          "options": ["aktif", "t", "1"],
+          "answer": 1,
+          "explanation": "PostgreSQL menampilkan boolean true sebagai `t` dan false sebagai `f` dalam keluaran teks standar.",
+          "feedback": [
+            "`aktif` bukan representasi boolean seed.",
+            "Benar: true tampil sebagai t.",
+            "1 adalah representasi umum pada sebagian aplikasi, bukan keluaran boolean PostgreSQL ini."
+          ]
+        }
+      ],
+      "hints": [
+        "Tulis kalimat hasilnya dulu: 'satu baris per grade untuk siswa aktif'.",
+        "Gunakan FROM students, WHERE boolean, GROUP BY grade, lalu COUNT(*) dan ORDER BY untuk urutan.",
+        "Solusi tepat adalah SELECT grade, COUNT(*)::text AS active_count FROM school.students WHERE is_active = true GROUP BY grade ORDER BY grade."
+      ],
+      "solutionSql": "SELECT grade, COUNT(*)::text AS active_count\nFROM school.students\nWHERE is_active = true\nGROUP BY grade\nORDER BY grade;",
+      "solutionExplanation": "Query menyatakan grain satu baris per grade, menyaring Danu sebelum agregasi, lalu mengurutkan grade. PostgreSQL bebas memilih scan yang berbeda; validator membandingkan result set dan urutan yang diminta, bukan teks query identik.",
+      "critical": false
+    },
+    "reflection": "Sebutkan bagian query yang menjawab 'data mana yang dihitung', 'bagaimana dikelompokkan', dan 'bagaimana ditampilkan'. Kapan Anda perlu peduli pada execution plan walaupun result set deklaratifnya tetap sama?"
+  },
+  {
+    "id": "l0m02l02",
+    "version": "1.0.0",
+    "difficulty": "beginner",
+    "tags": ["select", "proyeksi", "alias", "school-finance"],
+    "hook": "Laporan wali kelas hanya membutuhkan ID dan nama siswa aktif, tetapi query pertama Anda mengirim semua kolom termasuk tanggal pendaftaran. Memilih kolom secara sengaja mengurangi kebisingan dan membuat kontrak result set dapat dibaca.",
+    "objectives": [
+      "Menulis SELECT dan FROM untuk memproyeksikan kolom tertentu dari school.students.",
+      "Menggunakan alias sebagai nama keluaran tanpa mengubah schema atau tipe data sumber.",
+      "Menetapkan filter dan ORDER BY agar result set sederhana memiliki makna dan urutan deterministik."
+    ],
+    "sections": [
+      {
+        "title": "SELECT sebagai proyeksi",
+        "paragraphs": [
+          "Query pertama yang berguna tidak harus kompleks. `FROM school.students` memilih relation sumber, lalu `SELECT` memilih atribut yang ingin dikirim ke laporan. Memilih `student_id` dan `full_name` adalah proyeksi: baris tetap mewakili siswa, tetapi kolom yang keluar lebih sedikit. Ini berbeda dari menghapus kolom pada tabel. Schema tetap memiliki grade, is_active, dan enrolled_at untuk kebutuhan lain.",
+          "Gunakan nama schema secara eksplisit pada materi ini karena database memiliki ruang nama. `school.students` menjelaskan tabel mana yang dibaca dan mengurangi kejutan jika ada tabel students pada schema lain. Alias seperti `student_name` hanya mengganti nama header result set. Nilai dan constraint tabel sumber tetap sama."
+        ]
+      },
+      {
+        "title": "Filter dan urutan",
+        "paragraphs": [
+          "`WHERE is_active = true` memilih subset siswa aktif. Filter ini tidak mengubah data; ia hanya menentukan baris yang masuk result set. `ORDER BY student_id` kemudian memberi urutan yang stabil untuk tampilan dan expected rows. Tanpa ORDER BY, PostgreSQL tidak menjanjikan urutan walaupun pada satu percobaan hasil terlihat menaik. `LIMIT` sebaiknya dipakai bersama order ketika yang diminta adalah beberapa baris pertama.",
+          "Filter juga harus memakai tipe yang sesuai. is_active adalah BOOLEAN, sehingga literal true tepat; teks 'true' dapat mengalami konversi konteks tertentu tetapi tidak menjelaskan maksud sebaik boolean. `student_id` adalah BIGINT dan dapat dicast ke text hanya untuk expected CSV. Jangan menjadikan cast tampilan sebagai alasan untuk menyimpan ID sebagai text di schema."
+        ]
+      },
+      {
+        "title": "Bekerja dari kebutuhan laporan",
+        "paragraphs": [
+          "Worked example menampilkan tiga siswa aktif pertama berdasarkan student_id. Result set memakai alias `id` dan `student_name` agar kontrak laporan ringkas. Alya, Bima, dan Citra keluar; Danu tersaring karena inactive; Elina dan Farhan berada setelah LIMIT. Tiga baris ini tidak berarti database hanya memiliki tiga siswa. LIMIT membatasi keluaran, bukan isi relation.",
+          "SELECT * mungkin cepat ditulis, tetapi kontraknya lemah: kolom baru dapat mengubah bentuk hasil dan mengirim data yang tidak diperlukan. Untuk laporan yang dipakai aplikasi, daftar kolom eksplisit lebih mudah ditinjau. Namun proyeksi bukan pengganti hak akses; menentukan kolom saja tidak otomatis membuat data sensitif aman dari semua caller."
+        ]
+      },
+      {
+        "title": "Salah kaprah dan latihan",
+        "paragraphs": [
+          "Alias tidak dapat dipakai untuk mengubah nama kolom permanen, dan `ORDER BY` tidak mengubah urutan fisik tabel. `SELECT` juga bukan perintah untuk mengedit row; perubahan membutuhkan INSERT, UPDATE, atau DELETE yang berada di luar scope lesson ini. Jika Anda ingin menyaring invoice Alya, gunakan student_id pada WHERE, bukan menebak bahwa nama selalu unik.",
+          "Aktivitas meminta prediksi result set sederhana lalu memberi edge case yang sering muncul: `SELECT *` terlalu lebar dan LIMIT tanpa order tidak deterministik. Setelah memahami proyeksi, Anda siap menggabungkan tabel dengan JOIN tanpa kehilangan kendali atas grain dan kolom keluaran."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "SELECT student_id::text AS id, full_name AS student_name\nFROM school.students\nWHERE is_active = true\nORDER BY student_id\nLIMIT 3;",
+      "columns": ["id", "student_name"],
+      "rows": [
+        ["1", "Alya Putri"],
+        ["2", "Bima Pratama"],
+        ["3", "Citra Rahma"]
+      ],
+      "explanation": "Proyeksi hanya mengeluarkan ID dan nama. Filter boolean membuang Danu, ORDER BY menetapkan urutan, dan LIMIT mengambil tiga siswa aktif pertama. Cast ID ke text membuat nilai expected eksplisit tanpa mengubah tipe sumber BIGINT."
+    },
+    "checks": [
+      {
+        "id": "l0m02l02-check-alias",
+        "question": "Apa dampak `full_name AS student_name` pada SELECT?",
+        "options": [
+          "Mengganti nama kolom di schema school.students",
+          "Mengubah header kolom pada result set saja",
+          "Mengubah semua nama siswa menjadi string baru"
+        ],
+        "answer": 1,
+        "explanation": "Alias adalah label ekspresi pada result set. Ia tidak melakukan DDL atau mengubah nilai sumber.",
+        "feedback": [
+          "Pengubahan schema memerlukan ALTER TABLE, bukan alias.",
+          "Benar: aplikasi menerima label student_name pada hasil query.",
+          "Alias tidak mengubah nilai full_name."
+        ]
+      },
+      {
+        "id": "l0m02l02-check-filter",
+        "question": "Mengapa Danu tidak berada pada tiga baris worked example?",
+        "options": [
+          "Danu memiliki is_active=false sehingga tersaring",
+          "Danu tidak ada di table students",
+          "Danu memiliki student_id lebih besar dari 3"
+        ],
+        "answer": 0,
+        "explanation": "Danu ada pada seed dengan student_id=4, tetapi filter hanya memilih siswa aktif.",
+        "feedback": [
+          "Benar: WHERE is_active = true membuang barisnya.",
+          "Danu ada di fixture sebagai siswa inactive.",
+          "ID lebih besar dari 3 bukan syarat utama dan Elina/Farhan juga lebih besar."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi dua baris invoice Alya dari query proyeksi berikut. Tentukan header result set dan jelaskan mengapa alias `billed_amount` tidak mengubah numeric amount di tabel.",
+      "setup": "Gunakan invoices pada seed; Alya memiliki student_id=1 dan invoice 101 serta 102. Urutkan berdasarkan invoice_id agar dua baris deterministik.",
+      "starterSql": "SELECT invoice_id::text AS id, to_char(amount, 'FM9999999990.00') AS billed_amount\nFROM school.invoices\nWHERE student_id = 1\nORDER BY invoice_id;",
+      "variants": [
+        {
+          "id": "l0m02l02-activity-variant-a",
+          "question": "Berapa baris yang keluar untuk student_id=1 pada starter query?",
+          "options": ["1", "2", "6"],
+          "answer": 1,
+          "explanation": "Seed memiliki dua invoice untuk Alya: 101 dan 102.",
+          "feedback": [
+            "Satu bukan jumlah invoice Alya pada fixture.",
+            "Benar: kedua periode Alya menghasilkan dua baris.",
+            "Enam adalah jumlah siswa, bukan invoice Alya."
+          ]
+        },
+        {
+          "id": "l0m02l02-activity-variant-b",
+          "question": "Header hasil starter query adalah ...",
+          "options": [
+            "invoice_id, amount",
+            "id, billed_amount",
+            "student_id, full_name"
+          ],
+          "answer": 1,
+          "explanation": "Alias id dan billed_amount menjadi nama kolom pada result set.",
+          "feedback": [
+            "Itu nama sumber sebelum alias, bukan header hasil.",
+            "Benar: alias menentukan header keluaran.",
+            "Kolom tersebut berasal dari tabel students dan tidak dipilih."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l0m02l02-edge-star",
+          "question": "Mengapa `SELECT * FROM school.students` kurang cocok sebagai kontrak laporan aplikasi?",
+          "options": [
+            "Ia mengeluarkan semua kolom dan bentuk hasil dapat berubah ketika schema bertambah",
+            "Ia selalu menghapus index",
+            "Ia tidak pernah dapat membaca row"
+          ],
+          "answer": 0,
+          "explanation": "Wildcard mengambil semua kolom; tambahan schema atau data yang tidak diperlukan dapat memperlebar kontrak dan payload.",
+          "feedback": [
+            "Benar: daftar kolom eksplisit lebih stabil untuk consumer.",
+            "SELECT * tidak menghapus index.",
+            "SELECT * tetap membaca row, hanya proyeksinya luas."
+          ]
+        },
+        {
+          "id": "l0m02l02-edge-limit",
+          "question": "Apa risiko `LIMIT 2` tanpa `ORDER BY` ketika mengambil dua siswa pertama?",
+          "options": [
+            "Dua baris yang dipilih tidak dijamin dan dapat berubah",
+            "PostgreSQL menambahkan student_id secara otomatis",
+            "LIMIT menghapus dua siswa dari tabel"
+          ],
+          "answer": 0,
+          "explanation": "Tanpa order, istilah 'pertama' tidak memiliki definisi deterministik pada result set.",
+          "feedback": [
+            "Benar: nyatakan ORDER BY jika posisi baris dinilai.",
+            "Database tidak menambahkan order implicit.",
+            "LIMIT hanya membatasi hasil baca dan tidak menghapus data."
+          ]
+        }
+      ],
+      "hints": [
+        "Tentukan kolom yang dibutuhkan dan aliasnya sebelum menulis filter.",
+        "Filter Alya memakai student_id = 1; order by invoice_id menjaga urutan kedua periodenya.",
+        "Solusi memilih invoice_id::text AS id dan to_char(amount, 'FM9999999990.00') AS billed_amount dari school.invoices."
+      ],
+      "solutionSql": "SELECT invoice_id::text AS id, to_char(amount, 'FM9999999990.00') AS billed_amount\nFROM school.invoices\nWHERE student_id = 1\nORDER BY invoice_id;",
+      "solutionExplanation": "Query membaca dua invoice yang student_id-nya 1, mengeluarkan dua kolom beralias, dan mengurutkan berdasarkan ID. to_char hanya memformat nilai numeric pada result set agar expected CSV konsisten.",
+      "critical": false
+    },
+    "reflection": "Pilih sebuah laporan sederhana yang pernah Anda buat. Kolom mana yang sebenarnya diperlukan consumer, kolom mana yang hanya ikut karena SELECT *, dan urutan apa yang harus dinyatakan agar hasil dapat diuji ulang?"
+  },
+  {
+    "id": "l0m02l03",
+    "version": "1.0.0",
+    "difficulty": "beginner",
+    "tags": ["transaksi", "rollback", "safety", "postgresql", "school-finance"],
+    "hook": "Anda ingin mencoba menaikkan amount invoice untuk memahami UPDATE, tetapi database yang dipakai bersama berisi histori nyata. Satu eksperimen tanpa batas transaksi dapat menjadi perubahan bisnis sungguhan. Lingkungan disposable dan ROLLBACK membuat latihan bisa dibatalkan.",
+    "objectives": [
+      "Menjelaskan mengapa database latihan terpisah dan transaction boundary diperlukan sebelum eksperimen tulis.",
+      "Memprediksi perbedaan keadaan sebelum, selama, dan sesudah ROLLBACK pada perubahan sementara.",
+      "Membedakan ROLLBACK dari COMMIT serta mengenali bahwa rollback tidak dapat membatalkan perubahan yang sudah committed."
+    ],
+    "sections": [
+      {
+        "title": "Safety sebelum SQL",
+        "paragraphs": [
+          "SQL yang valid tetap dapat berbahaya bila diarahkan ke database yang salah. UPDATE amount pada invoice sekolah bukan sekadar contoh sintaks; ia mengubah angka yang dapat dipakai laporan dan rekonsiliasi. Karena itu latihan harus memakai database disposable seperti fixture school_finance_seed.sql, role berizin minimum, dan transaksi pendek. Pemisahan database menurunkan blast radius, sedangkan transaksi memberi titik keputusan untuk commit atau membatalkan perubahan.",
+          "Transaksi dimulai dengan BEGIN. Perubahan setelahnya terlihat dalam sesi transaksi tersebut, tetapi belum menjadi keadaan permanen yang dibaca sesi lain sesuai isolation level. COMMIT menjadikannya permanen; ROLLBACK membatalkan perubahan yang belum commit. Perintah ini tidak memperbaiki data yang sudah lebih dulu di-commit, sehingga 'nanti rollback saja' bukan alasan untuk bereksperimen di produksi."
+        ]
+      },
+      {
+        "title": "Intuisi dan batasan rollback",
+        "paragraphs": [
+          "Bayangkan transaksi sebagai amplop perubahan. Anda dapat memeriksa isi amplop, lalu membuang seluruh amplop sebelum dikirim. Setelah COMMIT, amplop sudah masuk arsip dan ROLLBACK berikutnya tidak dapat menghapusnya. ROLLBACK juga bukan undo universal untuk efek eksternal seperti email atau API yang sudah dipanggil; lesson ini hanya membahas perubahan database pada fixture yang terisolasi.",
+          "Temporary table berguna untuk latihan karena dapat menyalin subset data ke ruang kerja sesi. Namun temp table bukan pengganti database sandbox untuk semua kasus: ia tetap memakai koneksi dan dapat menghabiskan resource. DDL tertentu memiliki aturan transaksi dan lock tersendiri. Untuk latihan dasar, buat ruang kerja kecil, jalankan perubahan yang jelas, baca hasilnya, lalu rollback dan bersihkan."
+        ]
+      },
+      {
+        "title": "Worked example yang dapat dibatalkan",
+        "paragraphs": [
+          "Contoh mengubah amount invoice 102 sebesar 10000 di dalam BEGIN, lalu langsung ROLLBACK. SELECT terakhir membaca kembali invoice yang sama dan menghasilkan 500000.00, nilai seed semula. Contoh ini benar-benar memakai kolom yang ada: invoices memiliki invoice_id dan amount, tidak memiliki default student_id ataupun status invoice. Command UPDATE tetap merupakan write, jadi hanya aman pada database disposable dan dalam scope rollback.",
+          "Satu result set terakhir sengaja dipakai sebagai bukti keadaan sesudah rollback. Tidak cukup berkata 'seharusnya batal'; baca baris yang sama dan bandingkan expected value. Di sistem nyata, validasi juga dapat memakai audit log, row count, dan koneksi terpisah, tetapi jangan memperluas latihan ini menjadi runner SQL arbitrer."
+        ]
+      },
+      {
+        "title": "Kesalahan yang merusak data",
+        "paragraphs": [
+          "Kesalahan paling berbahaya adalah lupa BEGIN, menjalankan COMMIT terlalu cepat, atau menjalankan target database yang salah. ROLLBACK setelah COMMIT tidak mengembalikan amount. Kesalahan lain adalah menganggap temporary table membuat database produksi aman; temp table tetap tidak mengizinkan Anda mengubah tabel produksi tanpa risiko lock dan hak akses. Safety adalah kombinasi target yang benar, scope transaksi, permission, dan verifikasi.",
+          "Aktivitas meminta prediksi amount setelah UPDATE lalu ROLLBACK, serta dua edge case tentang COMMIT dan DDL di luar transaksi. Semua pertanyaan kritis karena satu jawaban keliru dapat membentuk kebiasaan operasional berbahaya. Jalankan contoh hanya pada fixture disposable bila Anda mempraktikkannya; player Taalmo memakai prediction, bukan arbitrary SQL runner."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "BEGIN;\nUPDATE school.invoices\nSET amount = amount + 10000\nWHERE invoice_id = 102;\nROLLBACK;\nSELECT invoice_id::text, to_char(amount, 'FM9999999990.00') AS amount\nFROM school.invoices\nWHERE invoice_id = 102;",
+      "columns": ["invoice_id", "amount"],
+      "rows": [["102", "500000.00"]],
+      "explanation": "UPDATE menaikkan amount sementara, lalu ROLLBACK membuang perubahan yang belum commit. SELECT akhir membaca kembali nilai seed 500000.00. Query ini hanya aman pada database latihan disposable dengan transaksi yang benar-benar dijalankan."
+    },
+    "checks": [
+      {
+        "id": "l0m02l03-check-rollback",
+        "question": "Apa yang dijamin ROLLBACK pada transaksi yang belum COMMIT?",
+        "options": [
+          "Membatalkan perubahan database dalam transaksi itu",
+          "Menghapus seluruh database school",
+          "Membatalkan email yang sudah dikirim aplikasi"
+        ],
+        "answer": 0,
+        "explanation": "ROLLBACK membatalkan perubahan database yang belum committed pada transaksi saat ini. Ia tidak menghapus database atau membatalkan efek eksternal.",
+        "feedback": [
+          "Benar: perubahan amount dalam contoh kembali ke nilai semula.",
+          "ROLLBACK tidak menghapus schema atau database.",
+          "Efek eksternal di luar database memerlukan mekanisme kompensasi lain."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l0m02l03-check-target",
+        "question": "Praktik minimum yang paling aman sebelum mencoba UPDATE pada lesson ini adalah ...",
+        "options": [
+          "Menjalankan UPDATE di database mana pun lalu berharap dapat rollback",
+          "Memastikan target disposable, memakai BEGIN, membatasi WHERE, dan memverifikasi hasil sebelum rollback",
+          "Menghapus WHERE agar semua baris konsisten berubah"
+        ],
+        "answer": 1,
+        "explanation": "Safety memerlukan target terisolasi, transaction boundary, predicate sempit, dan bukti keadaan. ROLLBACK bukan pengganti pemilihan target yang benar.",
+        "feedback": [
+          "Database target yang salah tetap berisiko meskipun Anda berniat rollback.",
+          "Benar: langkah ini membatasi blast radius dan membuat eksperimen dapat diverifikasi.",
+          "Tanpa WHERE, seluruh invoice dapat berubah dan blast radius membesar."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Pada fixture disposable, temporary table menyalin invoice 102. UPDATE menaikkan amount 10000 di dalam BEGIN lalu ROLLBACK. Prediksi satu row result set setelah rollback dan jelaskan mengapa nilai kembali ke seed.",
+      "setup": "Gunakan koneksi PostgreSQL disposable berisi school_finance_seed.sql. Temporary table `lab_invoice` dibuat hanya untuk sesi latihan; jangan arahkan aktivitas ke database produksi.",
+      "starterSql": "CREATE TEMP TABLE lab_invoice AS\nSELECT invoice_id, amount\nFROM school.invoices\nWHERE invoice_id = 102;\nBEGIN;\nUPDATE lab_invoice SET amount = amount + 10000 WHERE invoice_id = 102;\nROLLBACK;\nSELECT invoice_id::text, to_char(amount, 'FM9999999990.00') AS amount\nFROM lab_invoice\nWHERE invoice_id = 102;\nDROP TABLE lab_invoice;",
+      "variants": [
+        {
+          "id": "l0m02l03-activity-variant-a",
+          "question": "Apa amount yang diprediksi dari SELECT lab_invoice setelah UPDATE lalu ROLLBACK?",
+          "options": ["510000.00", "500000.00", "NULL"],
+          "answer": 1,
+          "explanation": "Perubahan 10000 belum commit dan dibatalkan, sehingga copy invoice kembali ke 500000.00.",
+          "feedback": [
+            "510000.00 adalah nilai selama transaksi sebelum rollback.",
+            "Benar: rollback mengembalikan nilai awal pada temp table.",
+            "Rollback tidak mengubah amount menjadi NULL."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l0m02l03-activity-variant-b",
+          "question": "Mengapa SELECT pada temp table tetap dapat dijalankan setelah ROLLBACK pada starter state?",
+          "options": [
+            "Temp table dibuat sebelum BEGIN dan rollback hanya membatalkan update di dalam transaksi",
+            "ROLLBACK selalu membuat semua tabel permanen",
+            "SELECT otomatis menjalankan COMMIT"
+          ],
+          "answer": 0,
+          "explanation": "CREATE TEMP TABLE berada sebelum BEGIN. ROLLBACK membatalkan UPDATE, bukan menghapus table yang dibuat sebelum transaksi.",
+          "feedback": [
+            "Benar: urutan statement menentukan scope perubahan.",
+            "ROLLBACK tidak membuat tabel permanen.",
+            "SELECT tidak otomatis commit transaksi."
+          ],
+          "critical": true
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l0m02l03-edge-commit",
+          "question": "Jika COMMIT dijalankan sebelum ROLLBACK pada update invoice 102, apa yang terjadi?",
+          "options": [
+            "Amount tetap 510000.00; ROLLBACK berikutnya tidak dapat mengembalikannya",
+            "Amount selalu kembali 500000.00",
+            "Database otomatis mematikan constraint invoice"
+          ],
+          "answer": 0,
+          "explanation": "COMMIT menjadikan perubahan permanen. ROLLBACK setelah transaksi selesai tidak membatalkan commit yang sudah terjadi.",
+          "feedback": [
+            "Benar: commit menutup peluang rollback untuk perubahan itu.",
+            "Itu hanya benar bila perubahan belum commit.",
+            "Commit/rollback tidak mematikan constraint."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l0m02l03-edge-target",
+          "question": "Mengapa ROLLBACK bukan alasan yang cukup untuk menjalankan UPDATE langsung pada production?",
+          "options": [
+            "Target bisa salah, efek eksternal/lock dapat terjadi, dan commit dapat terlanjur dijalankan",
+            "Karena PostgreSQL tidak mendukung ROLLBACK",
+            "Karena UPDATE selalu membaca seluruh schema"
+          ],
+          "answer": 0,
+          "explanation": "Safety membutuhkan isolasi target dan permission. Rollback tidak membatalkan semua efek di luar transaksi dan kesalahan operator tetap mungkin.",
+          "feedback": [
+            "Benar: database disposable mengurangi blast radius sebelum latihan.",
+            "PostgreSQL mendukung ROLLBACK sebagai fitur transaksi.",
+            "UPDATE dapat dibatasi WHERE, walaupun predicate tetap harus diverifikasi."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Ikuti timeline: CREATE temp table, BEGIN, UPDATE, ROLLBACK, lalu SELECT.",
+        "Tentukan statement mana yang berada di dalam transaksi; hanya perubahan yang belum commit yang dibatalkan.",
+        "Expected solusi membaca lab_invoice 102 sebagai 500000.00 setelah rollback, lalu membersihkan temp table dengan DROP TABLE."
+      ],
+      "solutionSql": "CREATE TEMP TABLE lab_invoice AS\nSELECT invoice_id, amount\nFROM school.invoices\nWHERE invoice_id = 102;\nBEGIN;\nUPDATE lab_invoice SET amount = amount + 10000 WHERE invoice_id = 102;\nROLLBACK;\nSELECT invoice_id::text, to_char(amount, 'FM9999999990.00') AS amount\nFROM lab_invoice\nWHERE invoice_id = 102;\nDROP TABLE lab_invoice;",
+      "solutionExplanation": "Ruang kerja kecil dibuat pada temp table, kemudian perubahan dibatasi dengan WHERE di dalam BEGIN. ROLLBACK membatalkan UPDATE sehingga result set menunjukkan amount awal. DROP TABLE membersihkan ruang kerja setelah bukti dibaca; seluruh aktivitas tetap hanya untuk koneksi dan fixture disposable.",
+      "critical": true
+    },
+    "reflection": "Tuliskan checklist tiga langkah sebelum menjalankan eksperimen tulis: bagaimana memastikan target, bagaimana membatasi transaction scope, dan bukti apa yang Anda baca sebelum memutuskan commit atau rollback. Jelaskan mengapa rollback tidak menggantikan backup atau permission yang tepat."
+  }
+]

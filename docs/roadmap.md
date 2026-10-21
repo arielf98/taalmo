@@ -11,11 +11,17 @@
 - English/Indonesian interface, learning content, quizzes, simulation explanations, diagram labels, and activity dates; a device-local language preference preserves learning state. Server metadata stays English.
 - Device-local progress for six milestones, light/dark themes, responsive layout. Existing tests come from the initial MVP; follow the no-test policy in `AGENTS.md` for subsequent work.
 
-## Recommended next milestone: sandbox discovery
+## Database Zero to Master slice
 
-Make the three implemented labs easier to discover from the Sandbox navigation. Reuse the existing lab catalog for a compact lab overview with learning links and device-local completion status. Keep existing direct lab URLs and progress IDs stable; no backend or new dependencies are needed.
+The new path registers all 10 levels, 40 modules and 120 canonical IDs. L0–L1 has 21 published Indonesian lessons with 129 graded questions, practice variants/edge cases, progressive hints, reflection, versioned resume and module/level assessment gates. L2–L9 remains 99 draft lessons, not available player content. SQL examples are verified on disposable PostgreSQL; the website uses prediction-based formative activities and has no arbitrary SQL runner or account-backed certification.
+
+## Recommended next milestone: L2M01 authoring
+
+Continue with Subquery/EXISTS/IN, CTE and UNION/INTERSECT/EXCEPT, following `database-path-remaining.md` and the authoring contract. Add real teaching content and grounded activities before publishing. Preserve IDs and existing progress. An isolated SQL runner is a separate future capability, not a reason to expose unrestricted database execution.
 
 ## Later learning improvements
+
+- A compact Sandbox overview using the existing three-lab catalog.
 
 - Expand meaningful accessibility checks and Safari/Firefox/mobile browser coverage.
 - Distinguish reading completion from checkpoint mastery if the product needs both.

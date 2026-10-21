@@ -144,6 +144,11 @@ export function Workspace({
       label: "Learning paths",
       icon: BookOpen,
     },
+    {
+      href: "/learn/database-zero-to-master",
+      label: "Database Zero to Master",
+      icon: Database,
+    },
     { href: "/challenges", label: "Challenges", icon: FlaskConical },
   ];
   return (

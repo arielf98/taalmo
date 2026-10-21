@@ -327,7 +327,13 @@
     "id": "l1m01l03",
     "version": "1.0.0",
     "difficulty": "beginner",
-    "tags": ["sql", "null", "three-valued-logic", "not-exists", "school-finance"],
+    "tags": [
+      "sql",
+      "null",
+      "three-valued-logic",
+      "not-exists",
+      "school-finance"
+    ],
     "hook": "Query WHERE paid_at = NULL mengembalikan nol baris, padahal ada payment pending dan failed tanpa timestamp. Tim finance juga menyebut invoice tanpa pembayaran dan invoice yang baru dibayar sebagian sebagai 'belum lunas'. Apakah ketiganya benar-benar sama?",
     "objectives": [
       "Menggunakan IS NULL dan IS NOT NULL untuk menguji ketiadaan nilai.",
@@ -359,7 +365,13 @@
     ],
     "worked": {
       "sql": "SELECT i.invoice_id, COUNT(p.payment_id) FILTER (WHERE p.paid_at IS NULL) AS null_paid_at_rows, COALESCE(SUM(p.amount) FILTER (WHERE p.status = 'succeeded'), 0::numeric(12,2)) AS succeeded_amount, i.amount - COALESCE(SUM(p.amount) FILTER (WHERE p.status = 'succeeded'), 0::numeric(12,2)) AS outstanding, CASE WHEN COALESCE(SUM(p.amount) FILTER (WHERE p.status = 'succeeded'), 0::numeric(12,2)) = 0::numeric(12,2) THEN 'no_succeeded_payment' WHEN COALESCE(SUM(p.amount) FILTER (WHERE p.status = 'succeeded'), 0::numeric(12,2)) < i.amount THEN 'partial' ELSE 'paid' END AS payment_state FROM school.invoices i LEFT JOIN school.payments p ON p.invoice_id = i.invoice_id WHERE i.invoice_id IN (101, 102, 104, 105, 108) GROUP BY i.invoice_id, i.amount ORDER BY i.invoice_id;",
-      "columns": ["invoice_id", "null_paid_at_rows", "succeeded_amount", "outstanding", "payment_state"],
+      "columns": [
+        "invoice_id",
+        "null_paid_at_rows",
+        "succeeded_amount",
+        "outstanding",
+        "payment_state"
+      ],
       "rows": [
         ["101", "0", "500000.00", "0.00", "paid"],
         ["102", "0", "200000.00", "300000.00", "partial"],
@@ -548,7 +560,8 @@
         ["104", "2026-09-01", "2026-09-10", "450000.00"],
         ["102", "2026-09-01", "2026-09-10", "500000.00"]
       ],
-      "explanation": "period_month DESC menempatkan September sebelum Agustus, lalu invoice_id DESC memberi urutan deterministik di dalam September. Semua lima hasil berasal dari periode 2026-09-01. due_date ditampilkan sebagai konteks tetapi tidak menjadi kolom utama pengurutan pada definisi ini."
+      "explanation": "period_month DESC menempatkan September sebelum Agustus, lalu invoice_id DESC memberi urutan deterministik di dalam September. Semua lima hasil berasal dari periode 2026-09-01. due_date ditampilkan sebagai konteks tetapi tidak menjadi kolom utama pengurutan pada definisi ini.",
+      "ordered": true
     },
     "checks": [
       {
@@ -705,7 +718,12 @@
     ],
     "worked": {
       "sql": "WITH paid AS (SELECT invoice_id, SUM(amount) FILTER (WHERE status = 'succeeded') AS succeeded_amount FROM school.payments GROUP BY invoice_id), classified AS (SELECT i.invoice_id, i.due_date, i.amount, COALESCE(p.succeeded_amount, 0::numeric(12,2)) AS succeeded_amount FROM school.invoices i LEFT JOIN paid p ON p.invoice_id = i.invoice_id) SELECT invoice_id, succeeded_amount, amount - succeeded_amount AS outstanding, CASE WHEN amount - succeeded_amount <= 0::numeric(12,2) THEN 'paid' WHEN due_date < DATE '2026-09-15' THEN 'overdue' ELSE 'open' END AS billing_state FROM classified WHERE invoice_id IN (101, 102, 104, 108) ORDER BY invoice_id;",
-      "columns": ["invoice_id", "succeeded_amount", "outstanding", "billing_state"],
+      "columns": [
+        "invoice_id",
+        "succeeded_amount",
+        "outstanding",
+        "billing_state"
+      ],
       "rows": [
         ["101", "500000.00", "0.00", "paid"],
         ["102", "200000.00", "300000.00", "overdue"],
@@ -1331,7 +1349,13 @@
     "id": "l1m03l03",
     "version": "1.0.0",
     "difficulty": "beginner",
-    "tags": ["sql", "one-to-many", "double-counting", "preaggregation", "school-finance"],
+    "tags": [
+      "sql",
+      "one-to-many",
+      "double-counting",
+      "preaggregation",
+      "school-finance"
+    ],
     "hook": "Laporan total tagihan membesar setelah invoice di-join ke banyak payment dan baris diskon. Setiap relasi one-to-many memperbanyak baris sebelum SUM berjalan. Bagaimana menghitung total tanpa membayar invoice yang sama berkali-kali?",
     "objectives": [
       "Menjelaskan bagaimana dua relasi one-to-many dapat menghasilkan perkalian baris.",
@@ -1363,7 +1387,12 @@
     ],
     "worked": {
       "sql": "WITH paid AS (SELECT invoice_id, SUM(amount) FILTER (WHERE status = 'succeeded') AS succeeded_paid FROM school.payments GROUP BY invoice_id) SELECT i.invoice_id, i.amount AS billed_amount, COALESCE(p.succeeded_paid, 0::numeric(12,2)) AS succeeded_paid, i.amount - COALESCE(p.succeeded_paid, 0::numeric(12,2)) AS outstanding FROM school.invoices i LEFT JOIN paid p ON p.invoice_id = i.invoice_id WHERE i.invoice_id IN (101, 102, 103) ORDER BY i.invoice_id;",
-      "columns": ["invoice_id", "billed_amount", "succeeded_paid", "outstanding"],
+      "columns": [
+        "invoice_id",
+        "billed_amount",
+        "succeeded_paid",
+        "outstanding"
+      ],
       "rows": [
         ["101", "500000.00", "500000.00", "0.00"],
         ["102", "500000.00", "200000.00", "300000.00"],

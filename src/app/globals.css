@@ -3605,3 +3605,160 @@ td {
   font-size: 16px;
   color: var(--green);
 }
+
+/* Curriculum screens reuse the existing cards, quiz, table and lesson styles. */
+.database-course-card {
+  padding: 26px;
+  margin-bottom: 28px;
+}
+.database-course-card h2 {
+  margin: 15px 0 10px;
+}
+.database-course-card p {
+  line-height: 1.8;
+  color: var(--muted);
+}
+.database-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  margin-top: 18px;
+}
+.database-level {
+  margin-top: 42px;
+  scroll-margin-top: 100px;
+}
+.database-level .section-heading {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.database-level .section-heading > div {
+  min-width: 0;
+}
+.database-level h2 {
+  font-size: 28px;
+}
+.database-module {
+  padding: 24px;
+  margin: 18px 0;
+  scroll-margin-top: 100px;
+}
+.database-module p,
+.database-reader p {
+  line-height: 1.85;
+}
+.database-module summary,
+.database-assessment summary,
+.database-hints summary {
+  cursor: pointer;
+  font-weight: 600;
+  line-height: 1.7;
+}
+.database-lesson-list {
+  padding: 0;
+  list-style: none;
+}
+.database-lesson-list a,
+.draft-lesson {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 17px 0;
+  border-top: 1px solid var(--border);
+}
+.database-lesson-list a > span {
+  flex: 1;
+  min-width: 0;
+}
+.database-lesson-list small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.database-lesson-list a:hover {
+  color: var(--ink);
+}
+.database-assessment {
+  border-top: 1px solid var(--border);
+  margin-top: 20px;
+  padding-top: 18px;
+}
+.database-assessment .quiz {
+  margin-top: 20px;
+}
+.database-reader {
+  max-width: 900px;
+  margin: 0 auto;
+  overflow-wrap: anywhere;
+}
+.database-reader .lesson-section {
+  margin-top: 34px;
+}
+.database-reader .lesson-section h2 {
+  margin-top: 24px;
+}
+.database-reader ul {
+  padding-left: 22px;
+  line-height: 1.9;
+}
+.database-reader .quiz {
+  margin-top: 22px;
+}
+.database-reader pre {
+  overflow-wrap: normal;
+  max-width: 100%;
+}
+.database-hints {
+  padding: 20px 0;
+}
+.database-hints details {
+  margin-top: 18px;
+}
+.database-reflection {
+  display: block;
+  margin-top: 24px;
+  line-height: 1.8;
+  font-weight: 600;
+}
+.database-reflection textarea {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin-top: 12px;
+  padding: 14px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 400;
+  resize: vertical;
+}
+.database-completion {
+  padding: 24px;
+  margin-top: 28px;
+}
+@media (max-width: 760px) {
+  .database-course-card,
+  .database-module,
+  .database-completion {
+    padding: 18px;
+  }
+  .database-actions .button {
+    white-space: normal;
+    text-align: center;
+  }
+  .database-level h2 {
+    font-size: 24px;
+  }
+  .database-lesson-list a,
+  .draft-lesson {
+    align-items: flex-start;
+  }
+  .database-path .simulation-notice {
+    line-height: 1.8;
+  }
+}

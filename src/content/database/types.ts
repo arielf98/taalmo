@@ -12,6 +12,7 @@ export interface WorkedExample {
   setupSql?: string;
   columns: string[];
   rows: (string | null)[][];
+  ordered?: boolean;
   explanation: string;
 }
 export interface AuthoredLesson {
@@ -33,6 +34,7 @@ export interface AuthoredLesson {
     edgeCases: ConceptCheck[];
     hints: [string, string, string];
     solutionSql: string;
+    solutionError?: string;
     solutionExplanation: string;
     critical: boolean;
   };

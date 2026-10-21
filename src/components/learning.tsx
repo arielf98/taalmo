@@ -23,6 +23,7 @@ import { useProgress } from "@/lib/progress";
 import { Badge, Completion, Workspace } from "./shell";
 import { Button } from "./ui/button";
 import { Quiz } from "./quiz";
+import { DatabaseCourseCard } from "./database-learning";
 
 export function Dashboard() {
   const { t, locale } = useLocale();
@@ -67,6 +68,7 @@ export function Dashboard() {
           <Sparkles size={30} />
         </span>
       </div>
+      <DatabaseCourseCard />
       <section className="continue-card">
         <div>
           <Badge>

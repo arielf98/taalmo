@@ -1,0 +1,1071 @@
+[
+  {
+    "id": "l1m04l01",
+    "version": "1.0.0",
+    "difficulty": "beginner",
+    "tags": [
+      "sql",
+      "aggregation",
+      "count",
+      "sum",
+      "avg",
+      "distinct",
+      "school-finance"
+    ],
+    "hook": "Wali kelas melihat tiga jenjang di laporan, tetapi angka jumlah tagihan dan jumlah siswa tampak sama-sama masuk akal. Bagaimana memastikan satu siswa dengan dua invoice tetap dihitung satu siswa, sementara dua invoice tetap dihitung dua baris?",
+    "objectives": [
+      "Murid dapat membuat ringkasan per jenjang yang memuat jumlah invoice, jumlah siswa unik, total tagihan, dan rata-rata nominal dengan hasil yang tepat.",
+      "Murid dapat menjelaskan perbedaan COUNT(*), COUNT(kolom), dan COUNT(DISTINCT kolom) pada hasil JOIN yang mengandung pengulangan atau NULL.",
+      "Murid dapat memilih metrik agregasi yang sesuai sebelum menjawab pertanyaan operasional tentang tagihan sekolah."
+    ],
+    "sections": [
+      {
+        "title": "Masalah di meja wali kelas",
+        "paragraphs": [
+          "Bayangkan rapat singkat sebelum penagihan SPP. Kepala sekolah meminta jumlah invoice per jenjang, jumlah siswa yang mempunyai invoice, dan rata-rata nominalnya. Dataset latihan memuat Alya dan Bima dengan dua bulan tagihan, Danu dengan satu tagihan, dua siswa SMP dengan dua tagihan masing-masing, serta Elina yang hanya memiliki satu tagihan. Secara bisnis, jumlah baris invoice dan jumlah orang memang menjawab pertanyaan yang berbeda.",
+          "COUNT(*) menghitung setiap baris yang hadir di hasil query. COUNT(i.invoice_id) menghitung nilai invoice yang tidak NULL, sehingga lebih aman ketika sisi invoice berasal dari LEFT JOIN. COUNT(DISTINCT s.student_id) menghapus pengulangan siswa yang muncul karena memiliki beberapa invoice. SUM cocok untuk total uang, sedangkan AVG menghitung rata-rata pada baris yang masuk ke kelompok tersebut."
+        ]
+      },
+      {
+        "title": "Cara membaca angka agregat",
+        "paragraphs": [
+          "Pada fixture School Finance, jenjang SD memiliki lima invoice dari tiga siswa: dua milik Alya, dua milik Bima, dan satu milik Danu. Karena itu invoice_count bernilai lima, tetapi student_count hanya tiga. Totalnya 2.350.000 dan rata-ratanya 470.000. SMP memiliki empat invoice dari dua siswa dengan total 2.600.000, sedangkan TK memiliki satu invoice dari satu siswa.",
+          "DISTINCT bukan obat umum untuk JOIN yang keliru. Jika pembayaran ikut di-join, satu invoice dapat hadir beberapa kali karena pembayaran cicilan. DISTINCT pada student_id mungkin menyelamatkan jumlah orang, tetapi SUM invoice tetap dapat membesar. Untuk laporan uang, pahami dulu grain baris yang dihitung: satu baris per invoice, satu baris per pembayaran, atau satu baris per siswa."
+        ]
+      },
+      {
+        "title": "Batasan dan salah paham",
+        "paragraphs": [
+          "COUNT(column) tidak menghitung NULL. Pada LEFT JOIN siswa ke invoice, siswa tanpa invoice tetap memiliki satu baris hasil dengan kolom invoice NULL; COUNT(*) akan menghitungnya sebagai satu, sedangkan COUNT(i.invoice_id) akan menghitung nol. Perbedaan kecil ini sering membuat laporan jumlah invoice tampak lebih besar ketika sekolah baru menambahkan siswa.",
+          "Rata-rata juga sensitif terhadap grain. AVG(i.amount) setelah join ke payments tidak lagi merata-ratakan satu kali per invoice apabila sebuah invoice memiliki dua pembayaran. Untuk perhitungan yang melibatkan pembayaran, ringkas pembayaran per invoice terlebih dahulu. Lesson ini memakai agregasi sederhana pada students dan invoices; pengamanan terhadap one-to-many payment dibahas pada conditional aggregation."
+        ]
+      },
+      {
+        "title": "Dari ringkasan ke keputusan",
+        "paragraphs": [
+          "Gunakan hasil agregasi untuk bertanya lebih tajam: jenjang mana yang mempunyai invoice paling banyak, dan jenjang mana yang nominal rata-ratanya paling tinggi? Jawaban itu membantu memilih urutan komunikasi, tetapi belum memberi tahu invoice mana yang menunggak. Jangan menyebut jumlah invoice sebagai jumlah keluarga atau jumlah siswa sebelum memilih DISTINCT pada identitas yang benar.",
+          "Saat menulis query, sebutkan grain hasilnya dalam hati sebelum memilih fungsi. Jika satu baris berarti satu invoice, COUNT(invoice_id) dan SUM(amount) memiliki arti langsung. Jika satu baris berarti siswa, jumlah invoice perlu dihitung lewat relasi terpisah atau agregasi yang dirancang khusus. Kebiasaan menyatakan grain ini mencegah angka yang terlihat rapi tetapi salah."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "SELECT s.grade, COUNT(i.invoice_id) AS invoice_count, COUNT(DISTINCT s.student_id) AS student_count, ROUND(SUM(i.amount), 2) AS billed_total, ROUND(AVG(i.amount), 2) AS avg_invoice FROM school.students AS s JOIN school.invoices AS i ON i.student_id = s.student_id GROUP BY s.grade ORDER BY s.grade;",
+      "columns": [
+        "grade",
+        "invoice_count",
+        "student_count",
+        "billed_total",
+        "avg_invoice"
+      ],
+      "rows": [
+        ["SD", "5", "3", "2350000.00", "470000.00"],
+        ["SMP", "4", "2", "2600000.00", "650000.00"],
+        ["TK", "1", "1", "400000.00", "400000.00"]
+      ],
+      "explanation": "Query bekerja pada grain satu baris per invoice karena students di-join ke invoices. COUNT(i.invoice_id) menjawab banyak invoice, sedangkan COUNT(DISTINCT s.student_id) menjawab banyak siswa yang memiliki invoice. SUM dan AVG tidak perlu DISTINCT pada query ini karena setiap invoice hanya muncul sekali. Hasil billed_total seluruh jenjang berjumlah 5.350.000, sesuai fixture. Query ini belum menghitung paid atau outstanding; pembayaran mempunyai grain one-to-many dan harus dipre-aggregate per invoice terlebih dahulu."
+    },
+    "checks": [
+      {
+        "id": "l1m04l01-check-1",
+        "question": "Mengapa COUNT(DISTINCT s.student_id) untuk SD bernilai 3, bukan 5?",
+        "options": [
+          "Karena DISTINCT selalu menghapus semua baris selain baris pertama.",
+          "Karena lima invoice dimiliki oleh tiga student_id yang berbeda.",
+          "Karena COUNT hanya menghitung siswa yang sedang aktif."
+        ],
+        "answer": 1,
+        "explanation": "SD memiliki invoice 101, 102, 103, 104, dan 107. Invoice tersebut berasal dari student_id 1, 1, 2, 2, dan 4, sehingga identitas uniknya ada tiga.",
+        "feedback": [
+          "DISTINCT menghapus nilai berulang, bukan mempertahankan hanya baris pertama secara umum.",
+          "Benar. Pengulangan invoice tidak menambah jumlah identitas siswa yang berbeda.",
+          "Keaktifan bukan syarat query. Danu tetap dihitung karena mempunyai invoice."
+        ]
+      },
+      {
+        "id": "l1m04l01-check-2",
+        "question": "Pada LEFT JOIN siswa ke invoice, fungsi mana yang menghitung nol invoice untuk siswa tanpa invoice?",
+        "options": [
+          "COUNT(*)",
+          "COUNT(DISTINCT s.student_id)",
+          "COUNT(i.invoice_id)"
+        ],
+        "answer": 2,
+        "explanation": "Baris siswa tetap ada pada LEFT JOIN, tetapi i.invoice_id bernilai NULL jika tidak ada pasangan. COUNT(i.invoice_id) mengabaikan NULL dan menghasilkan nol untuk siswa tersebut.",
+        "feedback": [
+          "COUNT(*) tetap menghitung baris siswa dari sisi kiri, sehingga nilainya satu.",
+          "DISTINCT pada student_id menghitung identitas siswa, bukan invoice.",
+          "Benar. COUNT pada kolom invoice yang NULL menghasilkan nol untuk baris tanpa pasangan."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Gunakan fixture School Finance dan prediksi hasil sebelum menulis query. Setiap varian dimulai dari fixture yang sama. Tujuanmu adalah menjaga arti metrik ketika satu siswa memiliki beberapa invoice; aplikasi hanya mencatat pilihan dan alasan, bukan menjalankan SQL bebas di browser.",
+      "setup": "Ada enam siswa, sepuluh invoice, dan payments yang belum perlu di-join untuk tugas ini. Alya dan Bima masing-masing memiliki dua invoice; Danu memiliki satu invoice; Elina memiliki satu invoice.",
+      "starterSql": "SELECT s.grade, COUNT(*) AS row_count, COUNT(DISTINCT s.student_id) AS student_count FROM school.students AS s LEFT JOIN school.invoices AS i ON i.student_id = s.student_id GROUP BY s.grade ORDER BY s.grade;",
+      "variants": [
+        {
+          "id": "l1m04l01-activity-variant-1",
+          "question": "Pada starter query, berapa row_count untuk SD dan student_count untuk SD?",
+          "options": [
+            "row_count 5 dan student_count 3",
+            "row_count 3 dan student_count 5",
+            "row_count 6 dan student_count 3"
+          ],
+          "answer": 0,
+          "explanation": "SD menghasilkan lima pasangan invoice, dan tiga student_id unik. Tidak ada siswa SD tanpa invoice pada fixture sehingga COUNT(*) juga lima untuk kelompok ini.",
+          "feedback": [
+            "Benar: pada fixture ini semua siswa SD mempunyai invoice, tetapi pengulangan invoice tetap membuat row_count lebih besar daripada siswa unik.",
+            "Angka terbalik karena row_count menghitung baris hasil, bukan identitas unik.",
+            "COUNT(*) tidak menambah satu baris tambahan untuk SD karena tidak ada siswa SD tanpa invoice."
+          ]
+        },
+        {
+          "id": "l1m04l01-activity-variant-2",
+          "question": "Jika payments di-join hanya untuk invoice 103, invoice itu memiliki dua payment rows. Berapa COUNT(DISTINCT i.invoice_id) untuk invoice 103?",
+          "options": ["0", "1", "2"],
+          "answer": 1,
+          "explanation": "Invoice 103 dibayar dalam dua cicilan, tetapi invoice_id-nya tetap satu identitas. COUNT biasa atas payment rows dapat bernilai dua; DISTINCT invoice_id mengembalikannya menjadi satu.",
+          "feedback": [
+            "Invoice 103 memiliki payment sukses, jadi bukan nol.",
+            "Benar. Dua baris pembayaran tetap menunjuk satu invoice.",
+            "Dua adalah jumlah payment rows, bukan jumlah invoice unik."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l1m04l01-edge-1",
+          "question": "Sebuah siswa baru ditambahkan tanpa invoice. Untuk menghitung invoice per jenjang dengan LEFT JOIN, penggantian mana yang mencegah siswa itu dihitung sebagai satu invoice?",
+          "options": [
+            "Ganti COUNT(*) menjadi COUNT(i.invoice_id).",
+            "Ganti COUNT(*) menjadi COUNT(s.student_id).",
+            "Tambahkan DISTINCT pada full_name tetapi tetap gunakan COUNT(*)."
+          ],
+          "answer": 0,
+          "explanation": "LEFT JOIN tetap menghasilkan baris siswa baru, tetapi i.invoice_id NULL. COUNT(i.invoice_id) mengabaikan NULL sehingga jumlah invoice tetap nol.",
+          "feedback": [
+            "Benar. Kolom dari sisi kanan adalah indikator adanya invoice.",
+            "student_id dari sisi kiri selalu ada, jadi itu menghitung siswa, bukan invoice.",
+            "DISTINCT full_name tidak menghilangkan baris tanpa invoice dari COUNT(*)."
+          ]
+        },
+        {
+          "id": "l1m04l01-edge-2",
+          "question": "Seorang penulis memakai AVG(i.amount) setelah menambahkan JOIN payments. Invoice 109 memiliki dua payment sukses. Risiko utama apa yang harus diperiksa?",
+          "options": [
+            "Rata-rata dapat memberi bobot ganda pada invoice 109.",
+            "AVG otomatis mengubah amount menjadi integer.",
+            "JOIN payments membuat semua invoice tanpa payment hilang walau memakai LEFT JOIN."
+          ],
+          "answer": 0,
+          "explanation": "Jika payment di-join pada grain pembayaran, invoice 109 hadir dua kali. AVG atas baris itu tidak lagi memberi bobot satu kali per invoice.",
+          "feedback": [
+            "Benar. Agregasikan payment per invoice sebelum menghitung metrik invoice.",
+            "AVG pada numeric tidak otomatis mengubah nilai menjadi integer.",
+            "LEFT JOIN tetap mempertahankan invoice tanpa payment; masalah utamanya adalah pengulangan."
+          ]
+        }
+      ],
+      "hints": [
+        "Mulai dengan menyatakan grain: apakah satu baris hasil mewakili siswa, invoice, atau payment?",
+        "Pilih kolom dari sisi relasi yang ingin dihitung. Gunakan COUNT(DISTINCT ...) untuk identitas unik dan COUNT(kolom anak) untuk mendeteksi pasangan yang ada.",
+        "Solusi ringkasnya adalah GROUP BY grade dengan COUNT(i.invoice_id), COUNT(DISTINCT s.student_id), SUM(i.amount), dan AVG(i.amount); jangan memasukkan payments sebelum grain-nya aman."
+      ],
+      "solutionSql": "SELECT s.grade, COUNT(i.invoice_id) AS invoice_count, COUNT(DISTINCT s.student_id) AS student_count FROM school.students AS s LEFT JOIN school.invoices AS i ON i.student_id = s.student_id GROUP BY s.grade ORDER BY s.grade;",
+      "solutionExplanation": "Query solusi memakai LEFT JOIN agar jenjang atau siswa tanpa invoice tetap dapat dianalisis, COUNT(invoice_id) agar baris NULL tidak menjadi invoice palsu, dan DISTINCT untuk jumlah siswa. Jika kebutuhan berubah menjadi total pembayaran, buat subquery per invoice lebih dulu; jangan memperbaiki double counting hanya dengan DISTINCT pada SUM.",
+      "critical": false
+    },
+    "reflection": "Apa grain setiap angka dalam laporanmu? Jelaskan kapan COUNT(*) dan COUNT(kolom) menghasilkan jawaban berbeda, lalu sebutkan satu perubahan data di sekolah yang dapat membuat query yang sekarang perlu ditinjau ulang."
+  },
+  {
+    "id": "l1m04l02",
+    "version": "1.0.0",
+    "difficulty": "beginner",
+    "tags": [
+      "sql",
+      "group-by",
+      "having",
+      "where",
+      "outstanding",
+      "school-finance"
+    ],
+    "hook": "Bendahara meminta hanya jenjang dengan tunggakan di atas 700.000. Ia tidak ingin melihat sepuluh invoice satu per satu; ia ingin tahu kelompok mana yang perlu ditindaklanjuti setelah semua cicilan sukses dijumlahkan.",
+    "objectives": [
+      "Murid dapat menyusun agregasi per jenjang yang menghitung billed, paid, dan outstanding tanpa menggandakan nominal invoice.",
+      "Murid dapat menempatkan filter baris pada WHERE dan filter hasil kelompok pada HAVING dengan alasan yang benar.",
+      "Murid dapat mempertahankan kelompok tanpa pembayaran dengan COALESCE dan menjelaskan mengapa NULL tidak boleh diperlakukan sebagai nol secara diam-diam."
+    ],
+    "sections": [
+      {
+        "title": "Pertanyaan bendahara",
+        "paragraphs": [
+          "Pertanyaan di meja bendahara berbunyi, jenjang mana yang masih memiliki outstanding lebih dari 700.000? Ini bukan pencarian satu invoice. Nilai outstanding baru ada setelah setiap invoice dikurangi pembayaran sukses yang relevan, lalu semua invoice dalam jenjang dijumlahkan. Karena pembayarannya memiliki beberapa baris, tahap pengurangan perlu menghasilkan satu nilai per invoice terlebih dahulu.",
+          "Fixture memberi SD billed 2.350.000 dan paid 1.600.000, sehingga outstanding-nya 750.000. SMP memiliki billed 2.600.000, paid 1.800.000, dan outstanding 800.000. TK memiliki 400.000 outstanding. Dengan ambang lebih dari 700.000, hasil yang tepat adalah SD dan SMP."
+        ]
+      },
+      {
+        "title": "WHERE sebelum kelompok, HAVING sesudahnya",
+        "paragraphs": [
+          "WHERE menyaring baris sebelum GROUP BY bekerja. Gunakan WHERE untuk batas data seperti tanggal jatuh tempo, siswa aktif, atau periode laporan. HAVING menyaring kelompok setelah SUM, COUNT, atau fungsi agregat selesai. Karena outstanding adalah hasil pengurangan dan penjumlahan per jenjang, syarat 700.000 berada di HAVING, bukan WHERE.",
+          "Query bekerja dengan CTE paid_per_invoice. CTE itu memakai FILTER untuk hanya menjumlahkan payment berstatus succeeded, lalu LEFT JOIN memastikan invoice tanpa pembayaran tetap muncul. Setelah itu GROUP BY grade menghitung total. COALESCE pada SUM pembayaran memberi nol untuk invoice yang tidak mempunyai pembayaran sukses, sehingga nilai tunggakan tidak berubah menjadi NULL."
+        ]
+      },
+      {
+        "title": "Batas ambang dan NULL",
+        "paragraphs": [
+          "Kata di atas berarti operator >, bukan >=. Jika ambangnya tepat 750.000, SD tidak termasuk ketika syaratnya lebih dari 750.000. Kesalahan operator seperti ini dapat mengubah daftar penagihan, terutama saat angka tunggakan berada persis pada batas kebijakan. Selalu tulis arti bahasa bisnis bersamaan dengan operator SQL.",
+          "Payment pending dan failed tidak boleh diperlakukan sebagai penerimaan sukses. Invoice 104 mempunyai payment pending 450.000, tetapi paid suksesnya nol; invoice 105 mempunyai payment failed 650.000, juga bukan penerimaan. Status payment ada pada tabel payments, sedangkan invoice tidak memiliki kolom status. Jangan menyaring dengan kolom yang tidak tersedia di invoice."
+        ]
+      },
+      {
+        "title": "Membaca hasil untuk tindakan",
+        "paragraphs": [
+          "Hasil GROUP BY adalah ringkasan untuk keputusan, bukan bukti bahwa setiap invoice di dalam kelompok memiliki masalah yang sama. SD lolos ambang karena gabungan beberapa invoice, termasuk satu invoice gagal dibayar. Setelah kelompok ditemukan, laporan detail perlu memakai query lain untuk menemukan invoice dan siswa yang harus dihubungi.",
+          "Pisahkan tahap query ketika debugging: lihat paid_per_invoice, periksa total per grade tanpa HAVING, lalu tambahkan HAVING terakhir. Dengan cara itu, kelompok yang hilang dapat dibedakan antara benar-benar di bawah ambang, tersaring oleh WHERE terlalu awal, atau menjadi NULL karena LEFT JOIN pembayaran tidak di-coalesce."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "WITH paid_per_invoice AS (SELECT i.invoice_id, COALESCE(SUM(p.amount) FILTER (WHERE p.status = 'succeeded'), 0::numeric) AS paid_total FROM school.invoices AS i LEFT JOIN school.payments AS p ON p.invoice_id = i.invoice_id GROUP BY i.invoice_id) SELECT s.grade, COUNT(i.invoice_id) AS invoice_count, ROUND(SUM(i.amount), 2) AS billed_total, ROUND(SUM(p.paid_total), 2) AS paid_total, ROUND(SUM(i.amount) - SUM(p.paid_total), 2) AS outstanding_total FROM school.invoices AS i JOIN school.students AS s ON s.student_id = i.student_id JOIN paid_per_invoice AS p ON p.invoice_id = i.invoice_id GROUP BY s.grade HAVING SUM(i.amount) - SUM(p.paid_total) > 700000 ORDER BY s.grade;",
+      "columns": [
+        "grade",
+        "invoice_count",
+        "billed_total",
+        "paid_total",
+        "outstanding_total"
+      ],
+      "rows": [
+        ["SD", "5", "2350000.00", "1600000.00", "750000.00"],
+        ["SMP", "4", "2600000.00", "1800000.00", "800000.00"]
+      ],
+      "explanation": "paid_per_invoice mengubah sebelas payment rows menjadi satu paid_total untuk setiap invoice dan hanya memasukkan payment succeeded. Invoice tanpa pembayaran sukses mendapat nol lewat COALESCE. GROUP BY kemudian bekerja pada grain invoice dan HAVING memilih jenjang dengan outstanding lebih dari 700.000. Danu tetap masuk karena invoice 107 lunas; invoice pending dan failed tidak menambah paid_total."
+    },
+    "checks": [
+      {
+        "id": "l1m04l02-check-1",
+        "question": "Di mana syarat outstanding per jenjang lebih dari 700.000 seharusnya diletakkan?",
+        "options": [
+          "WHERE, sebelum GROUP BY",
+          "HAVING, setelah GROUP BY",
+          "ON pada JOIN students dan invoices"
+        ],
+        "answer": 1,
+        "explanation": "Outstanding yang dibandingkan adalah hasil agregasi kelompok. HAVING dievaluasi setelah kelompok dan fungsi agregat terbentuk.",
+        "feedback": [
+          "WHERE menyaring baris individual sebelum total jenjang tersedia.",
+          "Benar. HAVING menyaring hasil agregasi per kelompok.",
+          "Predikat relasi siswa-invoice tidak sama dengan syarat total outstanding per jenjang."
+        ]
+      },
+      {
+        "id": "l1m04l02-check-2",
+        "question": "Mengapa payment pending 450.000 pada invoice 104 tidak masuk paid_total?",
+        "options": [
+          "Karena FILTER hanya memilih p.status = 'succeeded'.",
+          "Karena semua payment dengan paid_at NULL otomatis dihapus oleh PostgreSQL.",
+          "Karena invoice 104 tidak mempunyai student_id."
+        ],
+        "answer": 0,
+        "explanation": "Status pending ada di payments dan tidak memenuhi FILTER succeeded. Invoice 104 tetap dihitung billed dan outstanding penuh.",
+        "feedback": [
+          "Benar. Filter eksplisit membedakan penerimaan sukses dari pending dan failed.",
+          "NULL tidak otomatis menghapus baris dari SUM; predikat status-lah yang menentukan.",
+          "Invoice 104 memiliki student_id 2 yang valid."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi kelompok yang lolos ambang dari fixture yang sama. Pikirkan urutan WHERE, GROUP BY, dan HAVING, serta pastikan pembayaran dijumlahkan per invoice sebelum dijumlahkan per grade.",
+      "setup": "Data berisi SD outstanding 750.000, SMP outstanding 800.000, dan TK outstanding 400.000 setelah hanya payment succeeded yang dihitung.",
+      "starterSql": "SELECT s.grade, SUM(i.amount) AS billed_total FROM school.students AS s JOIN school.invoices AS i ON i.student_id = s.student_id GROUP BY s.grade HAVING SUM(i.amount) > 2000000 ORDER BY s.grade;",
+      "variants": [
+        {
+          "id": "l1m04l02-activity-variant-1",
+          "question": "Jika ambang outstanding diubah menjadi lebih dari 750.000, kelompok mana yang tersisa?",
+          "options": ["SD dan SMP", "SMP saja", "TK dan SMP"],
+          "answer": 1,
+          "explanation": "SD tepat 750.000 sehingga tidak lolos operator >. SMP 800.000 masih lolos; TK 400.000 tidak.",
+          "feedback": [
+            "SD berada tepat pada batas dan tidak termasuk dalam lebih dari.",
+            "Benar. Hanya SMP yang nilainya benar-benar di atas 750.000.",
+            "TK berada di bawah ambang, sehingga tidak dapat ikut."
+          ]
+        },
+        {
+          "id": "l1m04l02-activity-variant-2",
+          "question": "Jika laporan hanya mencakup invoice dengan due_date sebelum 2026-09-01, filter itu termasuk tahap apa?",
+          "options": [
+            "WHERE sebelum grouping",
+            "HAVING setelah grouping",
+            "DISTINCT setelah hasil dicetak"
+          ],
+          "answer": 0,
+          "explanation": "due_date adalah atribut baris invoice, jadi ia dapat menyaring input sebelum invoice dikelompokkan.",
+          "feedback": [
+            "Benar. WHERE membatasi baris invoice yang menjadi bahan agregasi.",
+            "HAVING untuk hasil agregat seperti total outstanding per grade.",
+            "DISTINCT bukan tahap evaluasi tanggal."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l1m04l02-edge-1",
+          "question": "TK tidak memiliki payment succeeded. Apa yang harus dilakukan agar outstanding TK tetap 400.000 dan bukan NULL?",
+          "options": [
+            "Gunakan COALESCE untuk paid_total menjadi 0 sebelum SUM.",
+            "Hapus TK dari hasil dengan INNER JOIN payments.",
+            "Ganti amount invoice menjadi NULL."
+          ],
+          "answer": 0,
+          "explanation": "Tidak adanya payment adalah kondisi bisnis yang berarti paid nol, bukan outstanding tidak diketahui. COALESCE mempertahankan invoice dan memberi nilai nol.",
+          "feedback": [
+            "Benar. COALESCE menerjemahkan ketiadaan pembayaran sukses menjadi nol secara eksplisit.",
+            "INNER JOIN akan menghilangkan kelompok yang justru perlu dilaporkan.",
+            "Mengubah amount merusak sumber kebenaran tagihan."
+          ]
+        },
+        {
+          "id": "l1m04l02-edge-2",
+          "question": "Seorang penulis memakai WHERE SUM(i.amount) - SUM(paid_total) > 700000. Apa hasilnya?",
+          "options": [
+            "Query valid dan menyaring kelompok.",
+            "Query gagal karena aggregate function tidak boleh berada di WHERE.",
+            "Semua kelompok tetap muncul karena WHERE diabaikan."
+          ],
+          "answer": 1,
+          "explanation": "WHERE dievaluasi sebelum grouping sehingga belum memiliki nilai SUM. Syarat aggregate harus berada di HAVING atau lapisan query setelah agregasi.",
+          "feedback": [
+            "Aggregate tidak tersedia pada tahap WHERE.",
+            "Benar. Pindahkan syarat ke HAVING atau query luar.",
+            "PostgreSQL tidak mengabaikan kesalahan sintaks atau aturan evaluasi ini."
+          ]
+        }
+      ],
+      "hints": [
+        "Tentukan dulu apakah predikat menyaring invoice individual atau hasil satu kelompok jenjang.",
+        "Buat satu nilai paid_total per invoice dengan LEFT JOIN payments, FILTER succeeded, dan COALESCE sebelum GROUP BY grade.",
+        "Jumlahkan billed dan paid pada CTE invoice, lalu letakkan outstanding > 700000 pada HAVING. Gunakan > karena kata soalnya di atas."
+      ],
+      "solutionSql": "WITH paid_per_invoice AS (SELECT i.invoice_id, COALESCE(SUM(p.amount) FILTER (WHERE p.status = 'succeeded'), 0::numeric) AS paid_total FROM school.invoices AS i LEFT JOIN school.payments AS p ON p.invoice_id = i.invoice_id GROUP BY i.invoice_id) SELECT s.grade, ROUND(SUM(i.amount) - SUM(p.paid_total), 2) AS outstanding_total FROM school.invoices AS i JOIN school.students AS s ON s.student_id = i.student_id JOIN paid_per_invoice AS p ON p.invoice_id = i.invoice_id GROUP BY s.grade HAVING SUM(i.amount) - SUM(p.paid_total) > 700000 ORDER BY s.grade;",
+      "solutionExplanation": "Solusi memisahkan agregasi payment dan agregasi grade. Dengan demikian dua payment invoice 103 tidak menggandakan billed, payment pending tidak dianggap paid, dan HAVING benar-benar membandingkan total per jenjang. Query ini hanya membaca data dan cocok untuk prediksi formative.",
+      "critical": false
+    },
+    "reflection": "Pilih satu ambang bisnis yang pernah kamu lihat dalam laporan. Jelaskan apakah ambang itu menyaring baris atau kelompok, apakah batasnya inklusif, dan bagaimana kamu akan memeriksa kelompok tanpa pembayaran sebelum mengirim daftar tindak lanjut."
+  },
+  {
+    "id": "l1m04l03",
+    "version": "1.0.0",
+    "difficulty": "beginner",
+    "tags": [
+      "sql",
+      "conditional-aggregation",
+      "filter",
+      "payments",
+      "monthly-report",
+      "school-finance"
+    ],
+    "hook": "Laporan penerimaan Agustus tiba-tiba lebih besar daripada uang yang benar-benar masuk karena satu invoice dibayar dua kali cicilan. Kamu diminta membuat satu baris per bulan yang tetap menunjukkan billed, paid, outstanding, dan jumlah invoice yang belum lunas.",
+    "objectives": [
+      "Murid dapat menghasilkan metrik billed, paid, outstanding, dan jumlah invoice tanpa pembayaran sukses per bulan dalam satu hasil grouping.",
+      "Murid dapat menghindari double counting dengan mengubah payment rows menjadi satu baris per invoice sebelum conditional aggregation.",
+      "Murid dapat membedakan payment succeeded, pending, dan failed ketika menghitung penerimaan."
+    ],
+    "sections": [
+      {
+        "title": "Satu angka bulan yang menipu",
+        "paragraphs": [
+          "Direktur sekolah membandingkan laporan bulanan dengan rekening bank. Agustus memiliki lima invoice: invoice 103 dibayar dalam dua cicilan, sedangkan invoice 105 memiliki payment failed. Jika query langsung menggabungkan invoices dan payments lalu menjumlahkan amount invoice, invoice 103 muncul dua kali dan billed Agustus membesar. Laporan harus mengenali invoice sebagai unit tagihan dan payment sebagai unit penerimaan.",
+          "Conditional aggregation memungkinkan beberapa metrik dibaca dalam satu kelompok: SUM(amount) untuk billed, SUM(paid_total) untuk paid, SUM(amount - paid_total) untuk outstanding, dan COUNT(*) FILTER (WHERE paid_total = 0) untuk invoice tanpa pembayaran sukses. Syaratnya, paid_total sudah diringkas per invoice."
+        ]
+      },
+      {
+        "title": "Urutan dua tingkat agregasi",
+        "paragraphs": [
+          "CTE paid_per_invoice mempertahankan period_month dan amount dari invoice, kemudian menjumlahkan payment succeeded melalui FILTER. Payment pending dan failed masih boleh ada sebagai baris sumber, tetapi nilainya tidak masuk paid_total. Setelah satu invoice menjadi satu baris, GROUP BY period_month aman untuk membuat laporan bulan.",
+          "Hasil fixture adalah Agustus billed 2.700.000, paid 2.050.000, outstanding 650.000, dan satu invoice belum dibayar sukses. September billed 2.650.000, paid 1.350.000, outstanding 1.300.000, dan dua invoice belum dibayar sukses. Total dua bulan kembali ke 5.350.000 billed dan 3.400.000 paid."
+        ]
+      },
+      {
+        "title": "Batasan metrik pembayaran",
+        "paragraphs": [
+          "Invoice 104 memiliki payment pending sebesar 450.000, tetapi itu bukan penerimaan sukses. Invoice 105 memiliki payment failed sehingga paid_total tetap nol. Menggunakan SUM(p.amount) tanpa filter status akan menyebut uang yang belum berhasil sebagai uang masuk. Kolom paid_at yang NULL juga menjadi petunjuk, tetapi status succeeded adalah aturan yang perlu dinyatakan eksplisit.",
+          "Outstanding pada lesson ini dihitung billed dikurangi payment sukses. Itu tidak otomatis menyelesaikan seluruh aturan keuangan, misalnya refund, reversal, atau overpayment. Jika domain menambahkan keadaan tersebut, definisi paid dan outstanding harus diperbarui bersama source of truth, bukan ditambal dengan DISTINCT pada query laporan."
+        ]
+      },
+      {
+        "title": "Menguji laporan sebelum dipercaya",
+        "paragraphs": [
+          "Periksa tiga invariant sederhana: jumlah billed per bulan harus menjumlah menjadi total 5.350.000, paid hanya berasal dari status succeeded, dan outstanding sama dengan billed dikurangi paid. Ketiganya membantu menemukan query yang tampak benar tetapi menggandakan invoice atau memasukkan payment pending.",
+          "Uji juga bulan dengan invoice tanpa payment, invoice dengan dua cicilan, dan invoice dengan payment failed. Ketiga keadaan itu sudah ada di fixture sehingga tidak perlu mengarang data baru. Laporan yang tidak membedakan keadaan tersebut belum cukup kuat untuk dipakai menentukan prioritas penagihan."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "WITH paid_per_invoice AS (SELECT i.invoice_id, i.period_month, i.amount, COALESCE(SUM(p.amount) FILTER (WHERE p.status = 'succeeded'), 0::numeric) AS paid_total FROM school.invoices AS i LEFT JOIN school.payments AS p ON p.invoice_id = i.invoice_id GROUP BY i.invoice_id, i.period_month, i.amount) SELECT period_month, COUNT(*) AS invoice_count, ROUND(SUM(amount), 2) AS billed_total, ROUND(SUM(paid_total), 2) AS paid_total, ROUND(SUM(amount - paid_total), 2) AS outstanding_total, COUNT(*) FILTER (WHERE paid_total = 0::numeric) AS unpaid_invoice_count FROM paid_per_invoice GROUP BY period_month ORDER BY period_month;",
+      "columns": [
+        "period_month",
+        "invoice_count",
+        "billed_total",
+        "paid_total",
+        "outstanding_total",
+        "unpaid_invoice_count"
+      ],
+      "rows": [
+        ["2026-08-01", "5", "2700000.00", "2050000.00", "650000.00", "1"],
+        ["2026-09-01", "5", "2650000.00", "1350000.00", "1300000.00", "2"]
+      ],
+      "explanation": "CTE membuat satu baris per invoice sebelum laporan bulanan. Invoice 103 hanya menyumbang amount 450.000 sekali walaupun memiliki dua payment succeeded; kedua payment itu dijumlahkan menjadi paid_total 450.000. Payment pending invoice 104 dan payment failed invoice 105 tidak masuk paid_total. Karena query hanya satu SELECT dengan satu hasil akhir, setiap kolom dapat dibandingkan dengan expected rows secara deterministik."
+    },
+    "checks": [
+      {
+        "id": "l1m04l03-check-1",
+        "question": "Mengapa invoice 103 harus diringkas menjadi satu baris sebelum SUM(amount) per bulan?",
+        "options": [
+          "Karena dua payment rows dapat menggandakan amount invoice saat JOIN langsung.",
+          "Karena invoice 103 tidak mempunyai student_id.",
+          "Karena SUM hanya boleh dipakai pada tabel tanpa foreign key."
+        ],
+        "answer": 0,
+        "explanation": "Invoice 103 mempunyai dua payment succeeded. JOIN langsung menghasilkan dua baris invoice sehingga amount 450.000 dapat terhitung dua kali.",
+        "feedback": [
+          "Benar. Pre-aggregation menjaga grain invoice sebelum billed dijumlahkan.",
+          "Invoice 103 memiliki student_id 2 yang valid.",
+          "SUM boleh dipakai pada relasi dengan foreign key; masalahnya adalah multiplicity hasil JOIN."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l1m04l03-check-2",
+        "question": "Berapa paid_total September pada fixture jika hanya payment succeeded yang dihitung?",
+        "options": ["1.300.000", "1.350.000", "2.650.000"],
+        "answer": 1,
+        "explanation": "September menerima 200.000 dari invoice 102, 500.000 dari invoice 106, dan 650.000 dari invoice 110. Payment pending invoice 104 tidak masuk, sehingga totalnya 1.350.000.",
+        "feedback": [
+          "1.300.000 adalah outstanding September, bukan paid_total.",
+          "Benar. Hanya tiga payment succeeded September yang dijumlahkan.",
+          "2.650.000 adalah billed_total September."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Bangun prediksi laporan dua bulan dengan grain invoice. Fokus pada dua jebakan: split payment pada invoice 103 dan payment pending pada invoice 104. Pilihanmu dinilai per varian; tidak ada eksekusi SQL bebas di client.",
+      "setup": "Agustus memiliki invoice 103 dengan dua payment succeeded 250.000 dan 200.000. September memiliki invoice 104 dengan payment pending 450.000. Invoice 105 memiliki payment failed.",
+      "starterSql": "SELECT i.period_month, SUM(i.amount) AS billed_total, SUM(p.amount) AS paid_total FROM school.invoices AS i LEFT JOIN school.payments AS p ON p.invoice_id = i.invoice_id AND p.status = 'succeeded' GROUP BY i.period_month ORDER BY i.period_month;",
+      "variants": [
+        {
+          "id": "l1m04l03-activity-variant-1",
+          "question": "Dengan pre-aggregation yang benar, berapa billed_total Agustus?",
+          "options": ["2.700.000", "3.150.000", "3.800.000"],
+          "answer": 0,
+          "explanation": "Billed Agustus adalah 500.000 + 450.000 + 650.000 + 450.000 + 650.000 = 2.700.000. Payment rows tidak boleh menggandakan amount invoice 103 atau 109.",
+          "feedback": [
+            "Benar. Jumlah billed dihitung satu kali per lima invoice Agustus.",
+            "Angka itu berasal dari join yang menggandakan setidaknya satu invoice.",
+            "Angka itu menghitung beberapa payment rows sebagai pengulangan amount invoice."
+          ]
+        },
+        {
+          "id": "l1m04l03-activity-variant-2",
+          "question": "Apa kontribusi payment pending invoice 104 terhadap paid_total September?",
+          "options": [
+            "450.000",
+            "0",
+            "NULL yang harus dibuang bersama invoice 104"
+          ],
+          "answer": 1,
+          "explanation": "Payment pending bukan payment succeeded. Invoice 104 tetap ada, billed tetap 450.000, tetapi kontribusinya pada paid_total adalah nol.",
+          "feedback": [
+            "450.000 adalah nominal pending dan belum boleh dianggap penerimaan.",
+            "Benar. Filter status succeeded membuat kontribusi paid-nya nol.",
+            "Invoice tidak dibuang; ia tetap memberi billed dan outstanding."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l1m04l03-edge-1",
+          "question": "Jika query langsung JOIN invoices dan payments, apa risiko pada billed_total Agustus ketika invoice 109 memiliki dua payment succeeded?",
+          "options": [
+            "Billed_total dapat membesar karena amount invoice 109 muncul dua kali.",
+            "Billed_total pasti tetap benar karena SUM mengenali primary key.",
+            "Billed_total menjadi nol karena payment_id berbeda."
+          ],
+          "answer": 0,
+          "explanation": "SUM tidak otomatis mengetahui bahwa amount invoice adalah atribut parent. Ia menjumlahkan setiap baris hasil JOIN, sehingga one-to-many harus diringkas lebih dulu.",
+          "feedback": [
+            "Benar. Primary key tidak mencegah pengulangan nilai parent di hasil JOIN.",
+            "SUM tidak memakai primary key untuk menghapus duplikasi.",
+            "Payment_id yang berbeda justru membuat dua baris hasil JOIN."
+          ]
+        },
+        {
+          "id": "l1m04l03-edge-2",
+          "question": "Jika seluruh payment gagal atau pending, bagaimana unpaid_invoice_count dihitung setelah paid_per_invoice dibuat?",
+          "options": [
+            "COUNT(*) FILTER (WHERE paid_total = 0).",
+            "COUNT(*) FILTER (WHERE paid_total IS NULL) tanpa COALESCE.",
+            "Hapus semua invoice yang tidak memiliki payment succeeded."
+          ],
+          "answer": 0,
+          "explanation": "COALESCE mengubah tidak adanya payment sukses menjadi paid_total nol. COUNT dengan FILTER nol lalu menghitung invoice yang belum menerima payment sukses.",
+          "feedback": [
+            "Benar. Ini mempertahankan invoice dan menyatakan keadaan unpaid dengan eksplisit.",
+            "Setelah COALESCE, paid_total bukan NULL lagi.",
+            "Menghapus invoice akan menghilangkan informasi outstanding yang dibutuhkan."
+          ]
+        }
+      ],
+      "hints": [
+        "Tuliskan grain antara dua tahap: pertama satu baris per invoice, kedua satu baris per bulan.",
+        "Pada tahap pertama gunakan SUM(payment.amount) FILTER (WHERE status = 'succeeded') dan COALESCE; jangan menjumlahkan amount invoice pada baris payment.",
+        "Pada tahap kedua gunakan SUM(amount), SUM(paid_total), SUM(amount - paid_total), dan FILTER paid_total = 0."
+      ],
+      "solutionSql": "WITH paid_per_invoice AS (SELECT i.invoice_id, i.period_month, i.amount, COALESCE(SUM(p.amount) FILTER (WHERE p.status = 'succeeded'), 0::numeric) AS paid_total FROM school.invoices AS i LEFT JOIN school.payments AS p ON p.invoice_id = i.invoice_id GROUP BY i.invoice_id, i.period_month, i.amount) SELECT period_month, ROUND(SUM(amount), 2) AS billed_total, ROUND(SUM(paid_total), 2) AS paid_total, ROUND(SUM(amount - paid_total), 2) AS outstanding_total FROM paid_per_invoice GROUP BY period_month ORDER BY period_month;",
+      "solutionExplanation": "Solusi mengunci grain invoice lebih dulu, lalu membuat metrik bulanan dari kolom yang sudah aman. Ini menjaga billed 2.700.000 untuk Agustus walaupun invoice 103 dan 109 mempunyai beberapa payment rows, serta menjaga pending dan failed tetap tidak masuk paid_total.",
+      "critical": true
+    },
+    "reflection": "Tulis satu kalimat yang mendefinisikan grain laporan bulananmu. Lalu jelaskan bagaimana kamu akan mengubah query jika domain menambahkan refund, dan metrik mana yang harus tetap dapat direkonsiliasi dengan total billed 5.350.000."
+  },
+  {
+    "id": "l1m05l01",
+    "version": "1.0.0",
+    "difficulty": "beginner",
+    "tags": [
+      "sql",
+      "insert",
+      "returning",
+      "identity",
+      "default",
+      "school-finance"
+    ],
+    "hook": "Layar pendaftaran berhasil menyimpan siswa baru, tetapi aplikasi tidak tahu ID yang dibuat database. Sumber fixture sekolah memakai student_id wajib tanpa DEFAULT, jadi kamu harus membedakan perilaku schema asli dari contoh identity yang sengaja dibuat untuk latihan.",
+    "objectives": [
+      "Murid dapat menulis INSERT dengan daftar kolom eksplisit dan RETURNING untuk mengambil identitas baris yang baru dibuat.",
+      "Murid dapat menjelaskan mengapa fixture school.students asli tidak boleh diasumsikan memiliki DEFAULT atau identity pada student_id.",
+      "Murid dapat menggunakan tabel TEMP ber-identity sebagai adaptasi terisolasi tanpa mengubah seed School Finance."
+    ],
+    "sections": [
+      {
+        "title": "Masalah ID setelah pendaftaran",
+        "paragraphs": [
+          "Ketika operator menambahkan Gita Lestari, aplikasi perlu ID yang benar untuk membuat relasi berikutnya atau menampilkan tautan profil. Menebak ID dari jumlah baris rapuh karena transaksi lain dapat menyisipkan baris, dan meminta aplikasi membuat angka sendiri dapat berbenturan dengan data yang sudah ada. RETURNING membuat database mengembalikan nilai baris yang benar-benar tersimpan.",
+          "Namun seed School Finance sengaja mendefinisikan school.students.student_id sebagai BIGINT PRIMARY KEY tanpa DEFAULT. INSERT yang melewatkan student_id pada tabel asli akan gagal karena kolomnya NOT NULL secara implisit dari primary key. Lesson ini membuat tabel TEMP lesson_students dengan identity mulai 7 agar konsep server-generated ID dapat dipelajari tanpa memalsukan schema sumber."
+        ]
+      },
+      {
+        "title": "Daftar kolom dan RETURNING",
+        "paragraphs": [
+          "Daftar kolom pada INSERT adalah kontrak yang mudah dibaca: full_name, grade, is_active, dan enrolled_at diisi oleh lesson, sedangkan student_id disediakan identity. RETURNING student_id, full_name, is_active mengembalikan hasil insert dalam satu result set. Tidak perlu SELECT MAX(student_id), karena MAX dapat mengambil baris milik transaksi lain.",
+          "Identity pada tabel TEMP disetel GENERATED BY DEFAULT dan dimulai dari 7 setelah data 1 sampai 6 disalin. GENERATED BY DEFAULT masih mengizinkan explicit value ketika fixture atau migrasi membutuhkannya, tetapi INSERT tanpa student_id memakai sequence. Di schema produksi, keputusan mengubah kolom menjadi identity adalah migrasi yang harus ditinjau, bukan asumsi yang dibuat oleh query aplikasi."
+        ]
+      },
+      {
+        "title": "Batas adaptasi fixture",
+        "paragraphs": [
+          "Tabel sementara hanya hidup pada koneksi latihan dan tidak mengubah school.students. Setup menyalin enam siswa ke lesson_students lalu membuat identity berikutnya bernilai 7. Dengan begitu expected row dapat diprediksi tanpa mengandalkan keadaan database di luar fixture. Jangan menjalankan DROP atau ALTER pada tabel school asli untuk mencoba contoh ini.",
+          "Menambahkan identity juga tidak otomatis membuat nama siswa unik. Jika aturan bisnis melarang nama duplikat, diperlukan business key atau constraint lain yang disepakati. Lesson ini hanya mengajarkan sumber identitas dan hasil INSERT; validasi domain seperti grade yang diizinkan tetap harus dirancang terpisah."
+        ]
+      },
+      {
+        "title": "Kegagalan yang dapat dipulihkan",
+        "paragraphs": [
+          "Jika INSERT gagal karena full_name NULL, transaksi PostgreSQL masuk keadaan aborted sampai ROLLBACK atau ROLLBACK TO SAVEPOINT dilakukan. Aplikasi tidak boleh langsung mencoba statement berikutnya seolah-olah error sudah hilang. Untuk alur pendaftaran dengan beberapa langkah, savepoint memungkinkan bagian yang gagal dibatalkan tanpa membatalkan pekerjaan yang memang ingin dipertahankan.",
+          "RETURNING hanya mengembalikan baris yang berhasil dimodifikasi. Jika INSERT menabrak primary key karena explicit ID yang bentrok, tidak ada ID baru yang dapat dipercaya. Tangani error dari database, pulihkan transaksi, lalu gunakan jalur identity atau input yang valid; jangan mengulang dengan angka tebakan yang sama."
+        ]
+      }
+    ],
+    "worked": {
+      "setupSql": "DROP TABLE IF EXISTS pg_temp.lesson_students; CREATE TEMP TABLE lesson_students (student_id BIGINT GENERATED BY DEFAULT AS IDENTITY (START WITH 7) PRIMARY KEY, full_name TEXT NOT NULL, grade TEXT NOT NULL, is_active BOOLEAN NOT NULL, enrolled_at DATE NOT NULL); INSERT INTO lesson_students (student_id, full_name, grade, is_active, enrolled_at) SELECT student_id, full_name, grade, is_active, enrolled_at FROM school.students ORDER BY student_id;",
+      "sql": "INSERT INTO lesson_students (full_name, grade, is_active, enrolled_at) VALUES ('Gita Lestari', 'SD', true, DATE '2026-10-01') RETURNING student_id, full_name, is_active;",
+      "columns": ["student_id", "full_name", "is_active"],
+      "rows": [["7", "Gita Lestari", "t"]],
+      "explanation": "Setup membuat tabel TEMP terisolasi dengan identity START WITH 7 dan menyalin enam siswa fixture. Seed asli tidak memiliki DEFAULT student_id, jadi adaptasi ini sengaja tidak mengubah school.students. INSERT melewatkan student_id, lalu RETURNING mengambil ID yang benar-benar dibuat server. Pemetaan boolean mengikuti tampilan psql: true menjadi t."
+    },
+    "checks": [
+      {
+        "id": "l1m05l01-check-1",
+        "question": "Mengapa worked example tidak langsung melakukan INSERT tanpa student_id ke school.students asli?",
+        "options": [
+          "Karena student_id pada fixture asli BIGINT PRIMARY KEY tanpa DEFAULT atau identity.",
+          "Karena PostgreSQL tidak mendukung RETURNING pada tabel biasa.",
+          "Karena INSERT selalu harus memakai SELECT MAX(student_id)."
+        ],
+        "answer": 0,
+        "explanation": "Primary key mewajibkan nilai dan seed tidak mendefinisikan generator. Lesson memakai TEMP identity sebagai adaptasi eksplisit.",
+        "feedback": [
+          "Benar. Schema fixture dan schema identity adalah dua hal berbeda.",
+          "RETURNING didukung pada INSERT ke tabel biasa maupun TEMP.",
+          "MAX bukan cara aman untuk menghasilkan identitas baru."
+        ]
+      },
+      {
+        "id": "l1m05l01-check-2",
+        "question": "Apa manfaat utama RETURNING pada INSERT Gita?",
+        "options": [
+          "Menghapus semua siswa lama setelah insert.",
+          "Mengambil ID baris yang baru dibuat tanpa query MAX yang rentan race.",
+          "Mengubah student_id menjadi NULL supaya sequence berjalan."
+        ],
+        "answer": 1,
+        "explanation": "RETURNING mengembalikan nilai dari baris yang dimodifikasi oleh statement itu sendiri.",
+        "feedback": [
+          "RETURNING tidak menghapus baris apa pun.",
+          "Benar. Database mengembalikan identitas hasil insert secara atomik.",
+          "Identity menghasilkan nilai, bukan NULL yang menggantikan primary key."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Gunakan tabel TEMP lesson_students dari setup. Prediksi ID dan kolom hasil RETURNING untuk dua pendaftaran yang berjalan dari setup bersih. Fokus pada daftar kolom dan sumber ID; client hanya memberi formative feedback.",
+      "setup": "Buat lesson_students dengan GENERATED BY DEFAULT AS IDENTITY START WITH 7, lalu salin student_id 1 sampai 6 dari school.students. Setiap varian menggunakan koneksi/setup bersih.",
+      "starterSql": "INSERT INTO lesson_students (full_name, grade, is_active, enrolled_at) VALUES ('Gita Lestari', 'SD', true, DATE '2026-10-01') RETURNING student_id, full_name;",
+      "variants": [
+        {
+          "id": "l1m05l01-activity-variant-1",
+          "question": "Pada setup bersih, apa row hasil pendaftaran Gita dengan INSERT yang melewatkan student_id?",
+          "options": [
+            "student_id 6 dan Gita Lestari",
+            "student_id 7 dan Gita Lestari",
+            "student_id NULL dan Gita Lestari"
+          ],
+          "answer": 1,
+          "explanation": "Identity sequence dimulai pada 7 setelah enam nilai fixture disalin. INSERT tanpa student_id mengambil nilai 7.",
+          "feedback": [
+            "6 adalah ID terakhir fixture, bukan nilai identity berikutnya.",
+            "Benar. Identity menyediakan 7 dan RETURNING mengembalikannya.",
+            "Primary key identity tidak menghasilkan NULL untuk insert valid."
+          ]
+        },
+        {
+          "id": "l1m05l01-activity-variant-2",
+          "question": "Pada setup bersih kedua, pendaftaran Hadi dengan INSERT yang sama tetapi nama berbeda akan menerima ID berapa?",
+          "options": ["7", "8", "Tidak ada ID karena full_name bukan unique"],
+          "answer": 0,
+          "explanation": "Setiap varian dimulai dari setup bersih, sehingga sequence belum dipakai dan Hadi menerima 7. Nama bukan unique constraint pada tabel latihan.",
+          "feedback": [
+            "Benar. Reset setup mengembalikan sequence ke keadaan awal lesson.",
+            "8 hanya benar jika Gita sudah diinsert pada koneksi yang sama sebelum Hadi.",
+            "Ketiadaan unique name tidak menghalangi insert valid."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l1m05l01-edge-1",
+          "question": "Jika sebuah explicit INSERT memakai student_id 7 lalu insert identity berikutnya juga mencoba 7, isu apa yang harus diantisipasi?",
+          "options": [
+            "Sequence dapat belum mengetahui nilai explicit itu sehingga insert berikutnya berpotensi bentrok primary key.",
+            "RETURNING akan menghapus bentrokan secara otomatis.",
+            "Identity selalu melompati semua explicit value tanpa perlu set sequence."
+          ],
+          "answer": 0,
+          "explanation": "GENERATED BY DEFAULT mengizinkan explicit value dan sequence tidak otomatis diselaraskan oleh semua explicit insert. Migrasi perlu mengatur sequence bila explicit values digunakan.",
+          "feedback": [
+            "Benar. Sequence dan explicit key harus dikelola bersama bila jalur explicit dipakai.",
+            "RETURNING hanya melaporkan hasil; ia tidak memperbaiki konflik constraint.",
+            "Jangan mengasumsikan sequence selalu mendeteksi explicit value."
+          ]
+        },
+        {
+          "id": "l1m05l01-edge-2",
+          "question": "Setelah INSERT gagal karena full_name NULL di dalam BEGIN, langkah pemulihan minimum sebelum mencoba INSERT valid adalah apa?",
+          "options": [
+            "ROLLBACK atau ROLLBACK TO SAVEPOINT, lalu ulangi statement valid.",
+            "Jalankan SELECT MAX(student_id) tanpa memulihkan transaksi.",
+            "Abaikan error dan langsung COMMIT."
+          ],
+          "answer": 0,
+          "explanation": "Error statement membuat transaksi aborted. ROLLBACK penuh atau rollback ke savepoint mengembalikan transaksi ke keadaan yang dapat menerima statement baru.",
+          "feedback": [
+            "Benar. Transaksi harus dipulihkan sebelum statement berikutnya.",
+            "MAX tidak mengubah keadaan aborted dan tidak aman untuk ID.",
+            "COMMIT pada transaksi aborted tidak menyelesaikan pemulihan."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Periksa apakah student_id disediakan di daftar kolom. Jika tidak, identity-lah yang menentukan nilainya.",
+        "Setup menyalin enam baris dan memulai identity pada 7; RETURNING hanya menampilkan baris insert saat ini.",
+        "Solusi menggunakan INSERT (full_name, grade, is_active, enrolled_at) VALUES (...) RETURNING student_id, full_name; untuk kegagalan transaksi, pulihkan dengan ROLLBACK atau savepoint."
+      ],
+      "solutionSql": "INSERT INTO lesson_students (full_name, grade, is_active, enrolled_at) VALUES ('Hadi Pratama', 'SMP', true, DATE '2026-10-02') RETURNING student_id, full_name;",
+      "solutionExplanation": "Solusi membiarkan identity menghasilkan ID dan meminta database mengembalikan ID itu lewat RETURNING. Ia tidak mengubah source fixture dan tidak bergantung pada MAX. Jika alur insert gagal karena constraint, transaksi harus di-rollback atau dikembalikan ke savepoint sebelum retry.",
+      "critical": true
+    },
+    "reflection": "Bandingkan schema fixture asli dengan schema lesson_students. Dalam sistem yang kamu bangun, siapa yang menjadi source of truth untuk ID, bagaimana kamu mengambil ID setelah insert, dan apa rencana pemulihan jika langkah setelah insert gagal?"
+  },
+  {
+    "id": "l1m05l02",
+    "version": "1.0.0",
+    "difficulty": "beginner",
+    "tags": [
+      "sql",
+      "update",
+      "where",
+      "transaction",
+      "rollback",
+      "due-date",
+      "school-finance"
+    ],
+    "hook": "Invoice 102 ternyata memiliki tanggal jatuh tempo yang salah. Kamu harus memperbaiki satu due_date dengan sasaran yang dapat diaudit, membuktikan baris yang berubah, dan punya jalan pulang jika koreksi ternyata salah.",
+    "objectives": [
+      "Murid dapat melakukan UPDATE due_date dengan WHERE primary key dan RETURNING sehingga jumlah serta isi perubahan terlihat.",
+      "Murid dapat menjelaskan mengapa preview, transaction boundary, dan ROLLBACK melindungi data dari filter yang terlalu luas.",
+      "Murid dapat membedakan due_date yang tersedia pada fixture dari kolom invoice status yang memang tidak ada."
+    ],
+    "sections": [
+      {
+        "title": "Koreksi yang kecil tetapi berisiko",
+        "paragraphs": [
+          "Permintaan koreksi berbunyi, ubah jatuh tempo invoice 102 dari 2026-09-10 menjadi 2026-09-15. Ini target yang spesifik: satu invoice berdasarkan invoice_id. UPDATE tanpa WHERE dapat mengubah seluruh sepuluh invoice dan mengubah perilaku penagihan sekolah. Karena itu, perubahan harus dimulai dengan preview SELECT yang memakai predicate sama dengan UPDATE.",
+          "Fixture School Finance tidak memiliki invoice.status. Kolom yang tersedia antara lain invoice_id, student_id, period_month, due_date, dan amount. Lesson ini sengaja mengubah due_date sesuai schema aktual. Status pending atau succeeded adalah status payment pada tabel payments, bukan kolom yang dapat di-update pada invoices."
+        ]
+      },
+      {
+        "title": "Target, bukti, dan transaksi",
+        "paragraphs": [
+          "Daftar kolom UPDATE sebaiknya sesempit kebutuhan: SET due_date = DATE '2026-09-15' WHERE invoice_id = 102. RETURNING invoice_id, due_date menjadi bukti langsung bahwa baris target berubah. Worked example memakai tabel TEMP salinan agar latihan mutasi dapat dibuang bersama koneksi dan tidak menyentuh seed sumber.",
+          "Dalam pekerjaan nyata, bungkus koreksi dalam BEGIN. Jalankan preview, UPDATE, dan pemeriksaan hasil; COMMIT hanya setelah nilai cocok dengan permintaan. Jika operator menemukan tanggal salah atau langkah lanjutan gagal, ROLLBACK memulihkan nilai lama. Savepoint berguna ketika koreksi adalah bagian dari transaksi yang lebih besar."
+        ]
+      },
+      {
+        "title": "Batas filter dan DELETE",
+        "paragraphs": [
+          "WHERE invoice_id = 102 menggunakan primary key sehingga targetnya paling sempit. Filter due_date lama juga dapat dipakai sebagai guard, misalnya WHERE invoice_id = 102 AND due_date = DATE '2026-09-10', agar update tidak menimpa perubahan orang lain secara diam-diam. Jika RETURNING menghasilkan nol baris, jangan menganggap koreksi berhasil.",
+          "DELETE mengikuti bahaya yang sama, bahkan lebih sulit dipulihkan jika sudah di-commit. Lesson ini tidak menjalankan DELETE pada fixture; praktik aman adalah preview target, gunakan transaksi, dan pastikan foreign key serta kebutuhan audit dipahami sebelum menghapus. Koreksi due_date tidak memerlukan penghapusan baris apa pun."
+        ]
+      },
+      {
+        "title": "Memulihkan transaksi gagal",
+        "paragraphs": [
+          "Jika statement UPDATE melanggar constraint, transaksi PostgreSQL menjadi aborted. Statement berikutnya akan ditolak sampai dilakukan ROLLBACK atau ROLLBACK TO SAVEPOINT. Untuk koreksi due_date, nilai DATE yang valid dan target primary key membuat worked query aman; edge case tetap meminta kamu memprediksi langkah pemulihan, bukan menjalankan error ke database aplikasi.",
+          "Perbedaan antara nol baris dan error juga penting. WHERE invoice_id = 999 dapat berhasil secara teknis tetapi mengubah nol baris; itu bukan bukti bahwa invoice ada. Kode aplikasi perlu memeriksa row count atau hasil RETURNING dan memutuskan apakah keadaan tersebut berarti data hilang, sudah berubah, atau permintaan memang idempotent."
+        ]
+      }
+    ],
+    "worked": {
+      "setupSql": "DROP TABLE IF EXISTS pg_temp.lesson_invoices; CREATE TEMP TABLE lesson_invoices AS TABLE school.invoices; ALTER TABLE lesson_invoices ADD PRIMARY KEY (invoice_id);",
+      "sql": "WITH updated AS (UPDATE lesson_invoices SET due_date = DATE '2026-09-15' WHERE invoice_id = 102 RETURNING invoice_id, due_date) SELECT invoice_id, due_date FROM updated;",
+      "columns": ["invoice_id", "due_date"],
+      "rows": [["102", "2026-09-15"]],
+      "explanation": "Setup menyalin invoices ke tabel TEMP agar perubahan terisolasi. CTE data-modifying menjalankan satu UPDATE yang menargetkan invoice_id 102 lalu SELECT akhir mengembalikan tepat satu result set. Perubahan yang diajarkan adalah due_date karena itu kolom yang benar-benar ada pada fixture; invoice.status tidak ada. Dalam transaksi nyata, statement yang sama dapat dipreview lalu di-COMMIT atau di-ROLLBACK sesuai pemeriksaan."
+    },
+    "checks": [
+      {
+        "id": "l1m05l02-check-1",
+        "question": "Mengapa UPDATE lesson ini memakai due_date, bukan status pada school.invoices?",
+        "options": [
+          "Karena due_date ada di schema fixture, sedangkan invoice.status tidak ada.",
+          "Karena UPDATE tidak dapat mengubah kolom TEXT.",
+          "Karena status payment selalu sama dengan due_date."
+        ],
+        "answer": 0,
+        "explanation": "Seed mendefinisikan due_date pada invoices dan status pada payments. Query harus mengikuti kolom yang benar-benar ada.",
+        "feedback": [
+          "Benar. Nama kolom berasal dari schema aktual, bukan asumsi domain.",
+          "UPDATE dapat mengubah TEXT; alasan di sini adalah kolom tidak tersedia.",
+          "Status payment dan tanggal jatuh tempo adalah konsep berbeda."
+        ]
+      },
+      {
+        "id": "l1m05l02-check-2",
+        "question": "Apa fungsi ROLLBACK setelah preview menunjukkan koreksi due_date salah?",
+        "options": [
+          "Memaksa UPDATE berjalan pada semua invoice.",
+          "Membatalkan perubahan dalam transaksi dan mengembalikan nilai sebelumnya.",
+          "Menghasilkan student_id baru untuk invoice."
+        ],
+        "answer": 1,
+        "explanation": "ROLLBACK membatalkan perubahan yang belum di-commit pada transaksi tersebut.",
+        "feedback": [
+          "ROLLBACK tidak memperluas target UPDATE.",
+          "Benar. ROLLBACK adalah jalur pemulihan untuk perubahan yang belum dikomit.",
+          "Invoice tidak memperoleh student_id dari ROLLBACK."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Koreksi due_date invoice 102 pada tabel TEMP lesson_invoices. Prediksi baris yang berubah dan keadaan akhir setelah COMMIT atau ROLLBACK. Pilih berdasarkan target dan transaction boundary, bukan berdasarkan asumsi adanya invoice status.",
+      "setup": "Salin school.invoices ke TEMP lesson_invoices. Nilai awal invoice 102 adalah due_date 2026-09-10; invoice lain memiliki due_date 2026-08-10 atau 2026-09-10.",
+      "starterSql": "SELECT invoice_id, due_date FROM lesson_invoices WHERE invoice_id = 102;",
+      "variants": [
+        {
+          "id": "l1m05l02-activity-variant-1",
+          "question": "Setelah UPDATE WHERE invoice_id = 102 SET due_date = 2026-09-15 dan COMMIT, berapa baris yang seharusnya berubah?",
+          "options": ["0", "1", "10"],
+          "answer": 1,
+          "explanation": "invoice_id adalah primary key dan hanya baris 102 memenuhi predicate. RETURNING seharusnya mengembalikan satu baris.",
+          "feedback": [
+            "Nol berarti target tidak ditemukan atau predicate salah.",
+            "Benar. Primary key menargetkan satu invoice.",
+            "Sepuluh terjadi bila WHERE dihilangkan, bukan pada query aman ini."
+          ]
+        },
+        {
+          "id": "l1m05l02-activity-variant-2",
+          "question": "Jika UPDATE yang sama dijalankan dalam BEGIN lalu ROLLBACK, apa due_date invoice 102 setelah transaksi selesai?",
+          "options": ["2026-09-10", "2026-09-15", "NULL"],
+          "answer": 0,
+          "explanation": "ROLLBACK membatalkan update yang belum di-commit, sehingga nilai awal kembali.",
+          "feedback": [
+            "Benar. Nilai awal fixture dipulihkan.",
+            "2026-09-15 hanya bertahan jika transaksi di-commit.",
+            "ROLLBACK tidak mengubah due_date menjadi NULL."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l1m05l02-edge-1",
+          "question": "Apa risiko menjalankan UPDATE lesson_invoices SET due_date = DATE '2026-09-15' tanpa WHERE?",
+          "options": [
+            "Semua sepuluh invoice dapat berubah.",
+            "PostgreSQL otomatis memilih satu invoice secara acak.",
+            "Tidak ada perubahan karena WHERE wajib secara sintaksis."
+          ],
+          "answer": 0,
+          "explanation": "WHERE bersifat opsional secara sintaksis. Tanpanya, UPDATE menargetkan semua baris pada tabel dan perlu dipulihkan dengan rollback bila belum commit.",
+          "feedback": [
+            "Benar. Filter adalah pengaman cakupan perubahan.",
+            "PostgreSQL tidak memilih satu baris secara acak.",
+            "UPDATE tanpa WHERE valid dan justru berisiko luas."
+          ]
+        },
+        {
+          "id": "l1m05l02-edge-2",
+          "question": "Sesudah sebuah UPDATE gagal karena constraint di dalam BEGIN, apa urutan pemulihan yang benar sebelum koreksi valid?",
+          "options": [
+            "ROLLBACK atau ROLLBACK TO SAVEPOINT, kemudian jalankan koreksi valid.",
+            "Langsung COMMIT lalu jalankan koreksi pada transaksi yang sama.",
+            "Abaikan error karena statement berikutnya otomatis membuka transaksi baru."
+          ],
+          "answer": 0,
+          "explanation": "Transaction block yang mengalami error berada pada keadaan aborted sampai dipulihkan. Savepoint dapat mempertahankan pekerjaan lain dalam transaksi.",
+          "feedback": [
+            "Benar. Pulihkan transaction state sebelum mencoba statement berikutnya.",
+            "COMMIT tidak memperbaiki transaksi aborted.",
+            "PostgreSQL tidak otomatis membuka transaction block baru setelah error."
+          ]
+        }
+      ],
+      "hints": [
+        "Preview memakai WHERE yang sama dengan UPDATE. Cari dulu invoice_id 102 dan nilai due_date awalnya.",
+        "Gunakan CTE data-modifying atau RETURNING untuk memastikan satu baris target; bungkus perubahan dalam transaksi saat keputusan belum final.",
+        "Solusi aman adalah UPDATE due_date dengan WHERE invoice_id = 102, periksa RETURNING, lalu COMMIT jika benar atau ROLLBACK jika salah."
+      ],
+      "solutionSql": "WITH updated AS (UPDATE lesson_invoices SET due_date = DATE '2026-09-15' WHERE invoice_id = 102 RETURNING invoice_id, due_date) SELECT invoice_id, due_date FROM updated;",
+      "solutionExplanation": "Solusi hanya mengubah due_date invoice 102 dan mengembalikan bukti satu baris. Karena query menggunakan tabel TEMP, latihan tidak merusak seed. Dalam alur aplikasi, lakukan preview sebelum statement ini dan pilih COMMIT atau ROLLBACK setelah memeriksa hasil; DELETE memerlukan kehati-hatian yang sama dan tidak diperlukan untuk koreksi ini.",
+      "critical": true
+    },
+    "reflection": "Tulis checklist tiga langkah sebelum UPDATE massal: bagaimana mempreview target, bagaimana memastikan cakupan, dan kapan melakukan rollback. Jelaskan juga bagaimana kamu membedakan nol baris karena target tidak ada dari error transaksi."
+  },
+  {
+    "id": "l1m05l03",
+    "version": "1.0.0",
+    "difficulty": "beginner",
+    "tags": [
+      "sql",
+      "constraints",
+      "primary-key",
+      "foreign-key",
+      "unique",
+      "check",
+      "transaction-recovery",
+      "school-finance"
+    ],
+    "hook": "Validasi di form pembayaran terlewat: seseorang mencoba membuat invoice untuk student_id 999, nominal negatif, dan periode yang sudah memiliki invoice. Database harus menjadi pagar terakhir sebelum data itu masuk ke laporan sekolah.",
+    "objectives": [
+      "Murid dapat menghubungkan pelanggaran primary key, foreign key, UNIQUE, dan CHECK dengan aturan pada schema School Finance.",
+      "Murid dapat memprediksi mengapa invoice dengan student_id asing, amount negatif, atau pasangan siswa-periode duplikat ditolak.",
+      "Murid dapat memulihkan transaction block yang gagal dengan ROLLBACK atau ROLLBACK TO SAVEPOINT sebelum mencoba statement valid."
+    ],
+    "sections": [
+      {
+        "title": "Validasi aplikasi bukan pagar tunggal",
+        "paragraphs": [
+          "Aplikasi mungkin memeriksa nominal dan student_id, tetapi request dari job lama, admin script, atau integrasi lain dapat melewati form. Schema invoices mempunyai PRIMARY KEY pada invoice_id, FOREIGN KEY student_id ke students, CHECK amount >= 0, dan UNIQUE pada kombinasi student_id serta period_month. Keempat aturan itu menjaga hal yang berbeda dan tidak saling menggantikan.",
+          "Worked example membaca catalog constraint secara aman agar kamu melihat pagar yang benar-benar terpasang pada school.invoices. Query tidak mencoba memasukkan baris rusak ke fixture. Prediksi pelanggaran dibahas di activity; client memberi umpan balik formative, bukan menjalankan arbitrary SQL atau mengklaim telah menguji database produksi."
+        ]
+      },
+      {
+        "title": "Empat jenis aturan",
+        "paragraphs": [
+          "Primary key memastikan invoice_id unik dan tidak NULL. Foreign key memastikan student_id menunjuk siswa yang ada. UNIQUE pada (student_id, period_month) mencegah dua invoice untuk siswa yang sama pada bulan yang sama. CHECK amount >= 0 menolak nominal negatif, tetapi tidak otomatis menentukan apakah nominal nol boleh secara bisnis; aturan itu perlu dibaca dari schema dan kebutuhan domain.",
+          "Nama constraint dan contype pada catalog memberi peta mekanisme, bukan pengganti pemahaman business rule. invoices_amount_check adalah check, invoices_student_id_fkey adalah foreign key, invoices_pkey adalah primary key, dan invoice_student_month_uniq adalah unique. Saat error muncul, gunakan nama atau SQLSTATE untuk memberi pesan pemulihan yang tepat."
+        ]
+      },
+      {
+        "title": "Duplikat, nominal, dan referensi",
+        "paragraphs": [
+          "INSERT invoice_id baru dengan student_id 999 gagal karena parent siswa tidak ada. INSERT nominal -1 gagal karena amount >= 0. INSERT kedua untuk student_id 1 dan period_month 2026-08-01 gagal karena Alya sudah memiliki invoice 101 pada periode itu. Masing-masing kegagalan mengarah pada perbaikan berbeda: pilih siswa valid, koreksi nominal, atau gunakan invoice yang sudah ada sesuai proses bisnis.",
+          "Jangan menyiasati constraint dengan menghapus baris lama atau mematikan constraint di query aplikasi. Constraint melindungi laporan dan relasi semua consumer. Jika data lama perlu dikoreksi, buat migrasi yang dapat diaudit dan pertimbangkan transaksi, foreign key, serta source of truth sebelum mengubah schema."
+        ]
+      },
+      {
+        "title": "Pemulihan transaction block",
+        "paragraphs": [
+          "Di dalam BEGIN, satu error constraint membuat transaction block berada pada keadaan aborted. Statement valid berikutnya pun ditolak sampai ROLLBACK atau ROLLBACK TO SAVEPOINT. Savepoint berguna jika proses memiliki beberapa bagian: batalkan percobaan invoice yang salah, pertahankan pekerjaan yang valid, lalu lanjutkan dengan data yang diperbaiki.",
+          "Jika error terjadi di luar transaction block eksplisit, driver dapat membuat setiap statement menjadi transaksi sendiri, tetapi perilaku ini harus dipahami dari konfigurasi koneksi. Lesson ini mengajarkan prinsip yang sama di PostgreSQL: jangan meneruskan transaksi yang gagal seolah-olah database sudah pulih, dan jangan menjadikan constraint sebagai sesuatu yang hanya diperiksa setelah laporan salah."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "SELECT conname, CASE contype WHEN 'p' THEN 'primary_key' WHEN 'f' THEN 'foreign_key' WHEN 'u' THEN 'unique' WHEN 'c' THEN 'check' END AS constraint_kind FROM pg_constraint WHERE conrelid = 'school.invoices'::regclass ORDER BY conname;",
+      "columns": ["conname", "constraint_kind"],
+      "rows": [
+        ["invoice_student_month_uniq", "unique"],
+        ["invoices_amount_check", "check"],
+        ["invoices_pkey", "primary_key"],
+        ["invoices_student_id_fkey", "foreign_key"]
+      ],
+      "explanation": "Query membaca constraint yang terpasang pada school.invoices dari catalog PostgreSQL dan menghasilkan satu result set tanpa sengaja men-trigger error. Nama constraint menunjukkan aturan yang perlu dipahami: pasangan student_id dan period_month unik, amount memiliki CHECK nonnegatif, invoice_id adalah primary key, dan student_id adalah foreign key. Contoh invalid FK, amount negatif, serta duplicate dibahas sebagai prediksi agar fixture tidak dirusak."
+    },
+    "checks": [
+      {
+        "id": "l1m05l03-check-1",
+        "question": "Constraint mana yang menjaga agar student_id pada invoice harus merujuk ke siswa yang ada?",
+        "options": [
+          "invoices_amount_check",
+          "invoices_student_id_fkey",
+          "invoice_student_month_uniq"
+        ],
+        "answer": 1,
+        "explanation": "Foreign key invoices_student_id_fkey merujuk school.students(student_id), sehingga student_id asing ditolak.",
+        "feedback": [
+          "Itu adalah CHECK untuk amount nonnegatif.",
+          "Benar. Foreign key menjaga referensi parent-child.",
+          "UNIQUE mencegah pasangan siswa-periode duplikat, bukan student_id asing."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l1m05l03-check-2",
+        "question": "Apa yang ditolak oleh invoice_student_month_uniq?",
+        "options": [
+          "Nominal amount -1",
+          "student_id 999 yang belum ada",
+          "Invoice kedua untuk student_id dan period_month yang sama"
+        ],
+        "answer": 2,
+        "explanation": "UNIQUE komposit bekerja pada pasangan kolom student_id, period_month dan mencegah dua invoice periode yang sama untuk siswa yang sama.",
+        "feedback": [
+          "Nominal negatif ditangani invoices_amount_check.",
+          "Student asing ditangani invoices_student_id_fkey.",
+          "Benar. Kombinasi siswa dan periode harus unik pada fixture."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Baca aturan pada school.invoices lalu prediksi constraint yang akan menolak setiap skenario. Soal tidak meminta client menjalankan INSERT invalid; cukup jelaskan pagar dan langkah pemulihan transaction block.",
+      "setup": "Fixture memiliki invoice 101 untuk student_id 1 pada 2026-08-01, student_id 1 sampai 6, dan CHECK amount >= 0.",
+      "starterSql": "SELECT conname, contype FROM pg_constraint WHERE conrelid = 'school.invoices'::regclass ORDER BY conname;",
+      "variants": [
+        {
+          "id": "l1m05l03-activity-variant-1",
+          "question": "Percobaan invoice_id 111, student_id 999, period_month 2026-10-01, amount 500000 melanggar aturan mana?",
+          "options": [
+            "Foreign key student_id",
+            "CHECK amount",
+            "UNIQUE student_id + period_month"
+          ],
+          "answer": 0,
+          "explanation": "student_id 999 tidak ada pada school.students. Nilai amount nonnegatif dan pasangan period baru tidak menjadi sumber error pada skenario ini.",
+          "feedback": [
+            "Benar. Parent student_id harus tersedia terlebih dahulu.",
+            "500000 memenuhi CHECK amount >= 0.",
+            "Periode 2026-10-01 belum menduplikasi pasangan siswa-periode yang ada."
+          ]
+        },
+        {
+          "id": "l1m05l03-activity-variant-2",
+          "question": "Percobaan invoice_id 112, student_id 1, period_month 2026-08-01, amount 450000 melanggar aturan mana?",
+          "options": [
+            "Primary key invoice_id",
+            "UNIQUE student_id + period_month",
+            "CHECK amount >= 0"
+          ],
+          "answer": 1,
+          "explanation": "invoice_id 112 masih baru dan amount positif, tetapi student_id 1 sudah memiliki invoice periode 2026-08-01 melalui invoice 101.",
+          "feedback": [
+            "ID 112 tidak sama dengan invoice_id yang ada sehingga bukan konflik primary key.",
+            "Benar. Pasangan siswa-periode sudah dipakai invoice 101.",
+            "450000 memenuhi CHECK amount >= 0."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l1m05l03-edge-1",
+          "question": "Percobaan invoice valid secara referensi tetapi amount = -1. Constraint apa yang harus dijelaskan kepada operator?",
+          "options": [
+            "invoices_amount_check",
+            "invoices_student_id_fkey",
+            "invoices_pkey"
+          ],
+          "answer": 0,
+          "explanation": "Schema menetapkan CHECK amount >= 0. Referensi siswa dan keunikan ID tidak menggantikan validasi nominal.",
+          "feedback": [
+            "Benar. CHECK menolak nilai negatif di trust boundary database.",
+            "Foreign key hanya memeriksa keberadaan student_id.",
+            "Primary key memeriksa identitas invoice, bukan nominalnya."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l1m05l03-edge-2",
+          "question": "Dalam BEGIN, INSERT duplicate terkena unique violation. Sebelum mencoba INSERT yang sudah diperbaiki, apa tindakan yang benar?",
+          "options": [
+            "ROLLBACK atau ROLLBACK TO SAVEPOINT, lalu lanjutkan dengan statement valid.",
+            "Langsung jalankan INSERT kedua pada transaction block yang aborted.",
+            "Matikan constraint unique untuk sesi tersebut."
+          ],
+          "answer": 0,
+          "explanation": "Error constraint membuat transaction block aborted. Savepoint atau rollback memulihkan state tanpa mematikan pagar integritas.",
+          "feedback": [
+            "Benar. Pulihkan transaction state dan pertahankan constraint.",
+            "Statement berikutnya akan ditolak sampai rollback dilakukan.",
+            "Mematikan constraint menghilangkan perlindungan dan bukan pemulihan yang aman."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l1m05l03-edge-3",
+          "question": "Operator ingin mengganti invoice duplikat dengan menghapus invoice 101 langsung. Risiko apa yang harus diperiksa lebih dulu?",
+          "options": [
+            "Foreign key payments dapat masih menunjuk invoice 101 dan data audit bisa hilang.",
+            "DELETE otomatis membuat invoice baru dengan ID berbeda.",
+            "UNIQUE akan berubah menjadi CHECK setelah DELETE."
+          ],
+          "answer": 0,
+          "explanation": "Invoice 101 memiliki payment 201. Penghapusan dapat ditolak oleh foreign key atau menghilangkan riwayat yang dibutuhkan; perbaikan duplicate harus mengikuti proses bisnis dan audit.",
+          "feedback": [
+            "Benar. Relasi payments dan kebutuhan audit harus diperiksa sebelum delete.",
+            "DELETE tidak membuat pengganti otomatis.",
+            "Constraint tidak berubah jenis karena satu baris dihapus."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Baca jenis masalahnya: identitas invoice, referensi siswa, pasangan unik, atau rentang nominal.",
+        "Cocokkan invoice_id dengan primary key, student_id dengan foreign key, pasangan siswa-periode dengan UNIQUE, dan amount dengan CHECK.",
+        "Untuk error di dalam BEGIN, gunakan ROLLBACK atau ROLLBACK TO SAVEPOINT sebelum retry; jangan menonaktifkan constraint atau menghapus data terkait secara membabi buta."
+      ],
+      "solutionSql": "SELECT conname, CASE contype WHEN 'p' THEN 'primary_key' WHEN 'f' THEN 'foreign_key' WHEN 'u' THEN 'unique' WHEN 'c' THEN 'check' END AS constraint_kind FROM pg_constraint WHERE conrelid = 'school.invoices'::regclass ORDER BY conname;",
+      "solutionExplanation": "Solusi memetakan catalog constraint ke aturan yang bisa diprediksi tanpa menjalankan INSERT invalid. Setelah constraint violation, pemulihan dilakukan di transaction boundary dengan rollback atau savepoint; validasi aplikasi boleh memberi pesan lebih awal, tetapi database tetap menjadi pagar terakhir.",
+      "critical": true
+    },
+    "reflection": "Ambil satu input invalid dari activity dan jelaskan empat hal: data apa yang salah, constraint yang menolak, perbaikan yang aman, dan cara memulihkan transaksi jika error terjadi setelah BEGIN."
+  }
+]
