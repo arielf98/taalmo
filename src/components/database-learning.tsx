@@ -12,8 +12,10 @@ import {
   databaseLevels,
   databasePathHref,
   databaseVersion,
+  draftLessonCount,
   lessonRecordKey,
   publishedLessons,
+  publishedModules,
   type DatabaseLesson,
 } from "@/content/database/catalog";
 import {
@@ -46,8 +48,8 @@ export function DatabaseCourseCard() {
           publishedLessons.filter((lesson) => lessonPassed(lesson, curriculum))
             .length
         }{" "}
-        / {publishedLessons.length} lesson tersedia selesai · 99 lesson lanjutan
-        masih draft
+        / {publishedLessons.length} lesson tersedia selesai · {draftLessonCount}{" "}
+        lesson lanjutan masih draft
       </p>
       <div className="database-actions">
         <Button asChild>
@@ -86,7 +88,8 @@ export function DatabasePath() {
         </div>
         <DatabaseCourseCard />
         <p className="simulation-notice">
-          L0–L1 tersedia: 7 modul, 21 lesson. L2–L9 adalah draft. Aktivitas
+          Tersedia: {publishedModules.length} modul, {publishedLessons.length}{" "}
+          lesson. {draftLessonCount} lesson lainnya masih draft. Aktivitas
           memakai prediksi hasil dan analisis skenario; aplikasi belum
           mengeksekusi SQL pengguna. Progres untuk learner browser ini, tanpa
           sinkronisasi akun.
@@ -393,8 +396,8 @@ export function DatabaseLessonPlayer({ lesson }: { lesson: DatabaseLesson }) {
         </div>
         <div className="lesson-heading">
           <Badge>
-            {lesson.levelId.toUpperCase()} · {lesson.moduleId.toUpperCase()} ·
-            PEMULA
+            {lesson.levelId.toUpperCase()} · {lesson.moduleId.toUpperCase()} ·{" "}
+            {content.difficulty === "intermediate" ? "MENENGAH" : "PEMULA"}
           </Badge>
           <h1>{lesson.title}</h1>
           <p>

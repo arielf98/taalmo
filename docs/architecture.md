@@ -24,7 +24,7 @@ Components translate display copy without changing keys, progress IDs, quiz answ
 
 ## Database Zero to Master
 
-`src/content/database/catalog.ts` adapts the canonical JSON hierarchy without changing its IDs/order. The Indonesian authored JSON records cover L0–L1; other lessons are draft. The existing `/lessons/[slug]` entry point selects the legacy or extended player and statically permits only published slugs. Shared Quiz adds optional graded callbacks, per-option feedback and saved answers without changing legacy completion behavior.
+`src/content/database/catalog.ts` adapts the canonical JSON hierarchy without changing its IDs/order. The Indonesian authored JSON records cover L0–L1 and L2M01; other lessons are draft. The existing `/lessons/[slug]` entry point selects the legacy or extended player and statically permits only published slugs. Shared Quiz adds optional graded callbacks, per-option feedback and saved answers without changing legacy completion behavior.
 
 The same `taalmo.progress.v1` repository stores an optional `curriculum` extension: versioned lesson/exam records, immutable passed snapshots and a resume ID. `src/lib/curriculum.ts` derives mastery from the actual answers, required activities and canonical module prerequisites. Retakes keep earned mastery. The module/level thresholds are 80%/85% and critical questions cannot be overridden by the aggregate score. There is no calendar gating or account service.
 

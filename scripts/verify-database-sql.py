@@ -26,7 +26,7 @@ def transaction(query):
     return query if re.search(r'\b(?:BEGIN|COMMIT|ROLLBACK)\s*;', query, re.I) else 'BEGIN;\n' + query + '\nROLLBACK;'
 
 seed = (root/'curriculum/taalmo-database-zero-to-master/school_finance_seed.sql').read_text()
-lessons = sum([json.loads((root/f'src/content/database/{file}.json').read_text()) for file in ['l0','l1-query','l1-mutation']], [])
+lessons = sum([json.loads((root/f'src/content/database/{file}.json').read_text()) for file in ['l0','l1-query','l1-mutation','l2-subqueries']], [])
 try:
     run(docker + ['run', '--pull=never', '-d', '--name', name, '--label', 'taalmo.curriculum-check=true', '--network', 'none', '--memory', '512m', '--cpus', '1', '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', '-e', 'POSTGRES_DB=taalmo_curriculum_check', 'postgres:17-alpine', 'postgres', '-c', 'shared_buffers=32MB', '-c', 'max_connections=10'])
     for _ in range(100):
@@ -87,12 +87,16 @@ try:
         ("SELECT SUM(i.amount) AS inflated_billed FROM school.invoices i LEFT JOIN school.payments p ON p.invoice_id=i.invoice_id;", [['inflated_billed'],['6450000.00']]),
         ("SELECT SUM(amount) AS billed FROM school.invoices;", [['billed'],['5350000.00']]),
         ("SELECT SUM(amount) AS paid FROM school.payments WHERE status='succeeded';", [['paid'],['3400000.00']]),
+        ("SELECT s.student_id FROM school.students s WHERE NOT EXISTS (SELECT 1 FROM school.invoices i JOIN school.payments p ON p.invoice_id=i.invoice_id WHERE i.student_id=s.student_id AND p.status='succeeded') ORDER BY s.student_id;", [['student_id'],['5']]),
+        ("SELECT EXISTS (SELECT NULL) AS exists_null, 5 NOT IN (SELECT x FROM (VALUES (1),(NULL)) v(x)) AS not_in_null, NOT EXISTS (SELECT 1 FROM (VALUES (1),(NULL)) v(x) WHERE x=5) AS anti_null, 5 IN (SELECT x FROM (VALUES (1)) v(x) WHERE false) AS in_empty;", [['exists_null','not_in_null','anti_null','in_empty'],['t','__TAALMO_NULL__','t','f']]),
+        ("WITH billed AS (SELECT SUM(amount) AS amount FROM school.invoices), received AS (SELECT SUM(amount) AS amount FROM school.payments WHERE status='succeeded') SELECT b.amount AS billed, r.amount AS paid, b.amount-r.amount AS outstanding FROM billed b CROSS JOIN received r;", [['billed','paid','outstanding'],['5350000.00','3400000.00','1950000.00']]),
+        ("WITH aug AS (SELECT DISTINCT i.student_id FROM school.invoices i JOIN school.payments p USING (invoice_id) WHERE p.status='succeeded' AND p.paid_at >= TIMESTAMPTZ '2026-08-01 00:00:00+00' AND p.paid_at < TIMESTAMPTZ '2026-09-01 00:00:00+00'), sep AS (SELECT DISTINCT i.student_id FROM school.invoices i JOIN school.payments p USING (invoice_id) WHERE p.status='succeeded' AND p.paid_at >= TIMESTAMPTZ '2026-09-01 00:00:00+00' AND p.paid_at < TIMESTAMPTZ '2026-10-01 00:00:00+00') SELECT (SELECT COUNT(*) FROM (SELECT * FROM aug UNION SELECT * FROM sep) u) AS either, (SELECT COUNT(*) FROM (SELECT * FROM aug UNION ALL SELECT * FROM sep) u) AS combined, (SELECT string_agg(student_id::text,',' ORDER BY student_id) FROM (SELECT * FROM aug INTERSECT SELECT * FROM sep) u) AS both, (SELECT string_agg(student_id::text,',' ORDER BY student_id) FROM (SELECT * FROM aug EXCEPT SELECT * FROM sep) u) AS august_only;", [['either','combined','both','august_only'],['5','7','1,6','2,4']]),
     ]
     for query, expected in cases:
         actual = list(csv.reader(io.StringIO(sql(query))))
         if actual != expected:
             raise AssertionError(f'Fixture edge case mismatch: {actual} != {expected}')
-    print('Fixture integrity passed: 4 rejected mutations, 5 semantic edge cases, persistent namesake tables preserved.')
+    print(f'Fixture integrity passed: {len(failures)} rejected mutations, {len(cases)} semantic edge cases, persistent namesake tables preserved.')
     print(f'PostgreSQL verification passed: {len(lessons)} worked results and {len(lessons)} reference solutions; disposable container removed on exit.')
 except subprocess.CalledProcessError as error:
     print(error.stderr)

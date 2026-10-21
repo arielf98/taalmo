@@ -1,10 +1,11 @@
 # Database Zero to Master — implementation plan
 
-**Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
+**Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
+**Current publication:** L0–L1 plus L2M01: 24 published / 96 draft. The original implementation evidence below is retained as release history; see the L2M01 continuation for current validation.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
-## Audit and mapping
+## Initial release audit and mapping
 
 | Requirement                        | Existing capability                                 | Minimum addition                                                                                                     |
 | ---------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
@@ -42,7 +43,7 @@
 
 Corrupt/old localStorage must preserve valid legacy progress. Draft or unknown IDs must not render published lessons. Wrong answers/reflection-only clicks must not pass activities or safety gates. Retakes must clear current responses and vary scenarios/options. All SQL is confined to a disposable fixture; no production connection is accepted. Stage exams cannot bypass module prerequisites. Content imports do not write learner data.
 
-## Evidence and remaining work
+## Initial L0–L1 release evidence
 
 Validated on 21 October 2026:
 
@@ -55,4 +56,21 @@ Validated on 21 October 2026:
 
 Review fixes: qualify temporary setup drops with `pg_temp`, preserve records before any arbitrary truncation, restore generated type references, explicitly label the reflection textarea, and reject unknown/draft static lesson parameters before rendering. Lesson progression follows canonical module prerequisites; no invented per-lesson gate is added.
 
-Remaining limits: prediction/debugging decisions are formative client-side assessment, not arbitrary SQL execution or secure certification. Progress is local to the browser learner. Reflection is stored, not machine-graded. The 99 L2–L9 lessons still require real authoring and appropriate fixtures/simulators; see `database-path-remaining.md`. Only Chromium integration and specified widths were checked; no full WCAG or cross-browser conformance claim.
+Remaining limits: prediction/debugging decisions are formative client-side assessment, not arbitrary SQL execution or secure certification. Progress is local to the browser learner. Reflection is stored, not machine-graded. The remaining 96 lessons require real authoring and appropriate fixtures/simulators; see `database-path-remaining.md`. Only Chromium integration and specified widths were checked; no full WCAG or cross-browser conformance claim.
+
+## L2M01 continuation — 21 October 2026
+
+Published all three canonical lessons of **Subquery dan Set Thinking** in `src/content/database/l2-subqueries.json`: Subquery/EXISTS/IN, CTE/readability and UNION/INTERSECT/EXCEPT. Each includes substantial Indonesian explanation, grounded worked output, concept checks with per-option feedback, two practice variants, two graded edge cases, progressive hints, reference SQL and reflection. The new records use difficulty `intermediate`, displayed as MENENGAH.
+
+The existing catalog/player/progress contract is reused. Counts derive from published records instead of the original 21/99 constants. L2M01 requires L1M05 for official completion; theory remains explorable. Other L2 modules remain draft, so no full L2 stage assessment is exposed. Existing lesson versions, IDs and progress keys are unchanged.
+
+Validation results:
+
+- Content audit: **24 published / 96 draft**, eight fully published modules, **148 graded questions**; all 10 levels, 40 modules and 120 canonical IDs retained.
+- Disposable PostgreSQL **17.11**: **24 exact worked results and 24 reference solutions passed**. Four invalid mutations rejected and nine semantic fixture checks passed. Added checks cover correlated anti-join, EXISTS/NOT IN/empty-set NULL behavior, independent CTE aggregates and monthly set multiplicities. Corrected an extra closing parenthesis discovered by PostgreSQL in the new set-operation example. No validation containers remained afterward.
+- `npm run test:curriculum -- --workers=1`: **3/3 passed**, including completion of all 24 lessons, eight module checkpoints and the two complete L0/L1 stage assessments. The suite additionally checks the intermediate label, L2 prerequisite gate, hidden L2 stage assessment, next draft route (`l2m02l01`) returning HTTP 404 and new L2 content at 390/768px without document overflow.
+- `npm run test:e2e -- tests/e2e/learning.spec.ts --workers=1`: **6/6 passed** for the legacy learning journey. Responsive viewport transitions logged React Flow container-size warnings; the journey assertions and runtime-error checks passed.
+- `npm run lint` and `npm run typecheck`: passed. `TAALMO_DIST_DIR=.next-e2e npm run build`: passed with **38 static pages**, including all 24 curriculum lessons. Generated `next-env.d.ts` references restored to the checkout defaults and typecheck repeated afterward.
+- No new unit tests, dependencies, arbitrary learner SQL execution, progress migration, account backend, push or deployment. Prediction-based assessment and browser-local progress remain the documented limits; Chromium and the specified widths were checked, not full cross-browser or accessibility conformance.
+
+Next authoring milestone: **L2M02 — Window Functions**, following the remaining checklist and the same publication/validation contract.

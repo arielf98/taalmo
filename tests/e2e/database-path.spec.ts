@@ -2,8 +2,9 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 import foundation from "../../src/content/database/l0.json" with { type: "json" };
 import queries from "../../src/content/database/l1-query.json" with { type: "json" };
 import mutations from "../../src/content/database/l1-mutation.json" with { type: "json" };
+import subqueries from "../../src/content/database/l2-subqueries.json" with { type: "json" };
 import type { ConceptCheck } from "../../src/content/database/types";
-const content = [...foundation, ...queries, ...mutations];
+const content = [...foundation, ...queries, ...mutations, ...subqueries];
 const path = "/learn/database-zero-to-master";
 async function answer(
   scope: Page | Locator,
@@ -19,7 +20,7 @@ async function answer(
   await quiz.getByRole("button", { name: "Check answer" }).click();
 }
 
-test("complete 21 lessons, module and level gates, resume, and preserve mastery on retake", async ({
+test("complete published lessons, module and level gates, resume, and preserve mastery on retake", async ({
   page,
 }) => {
   test.setTimeout(240000);
@@ -30,6 +31,9 @@ test("complete 21 lessons, module and level gates, resume, and preserve mastery 
     page
       .getByRole("heading", { name: "Database Zero to Master", exact: true })
       .first(),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Tersedia: 8 modul, 24 lesson.", { exact: false }),
   ).toBeVisible();
   for (const moduleId of [
     ...new Set(content.map((lesson) => lesson.id.slice(0, 5))),
@@ -188,10 +192,22 @@ test("complete 21 lessons, module and level gates, resume, and preserve mastery 
 test("draft routes, prerequisites, local progress compatibility and mobile access", async ({
   page,
 }) => {
-  const response = await page.goto("/lessons/l2m01l01");
+  const response = await page.goto("/lessons/l2m02l01");
   expect(response?.status()).toBe(404);
   await page.goto(path);
-  await expect(page.locator('a[href="/lessons/l2m01l01"]')).toHaveCount(0);
+  await expect(page.locator('a[href="/lessons/l2m02l01"]')).toHaveCount(0);
+  await expect(page.locator('a[href="/lessons/l2m01l01"]')).toBeVisible();
+  const level = page
+    .locator(".database-level")
+    .filter({ has: page.locator("#title-l2") });
+  await expect(level.locator(":scope > .database-assessment")).toHaveCount(0);
+  await page.goto("/lessons/l2m01l01");
+  await expect(
+    page.getByText("L2 · L2M01 · MENENGAH", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Catat lesson selesai" }),
+  ).toBeDisabled();
   await page.goto("/lessons/l1m05l03");
   await expect(
     page.getByText("Eksplorasi teori terbuka.", { exact: false }),
@@ -242,7 +258,7 @@ test("draft routes, prerequisites, local progress compatibility and mobile acces
   expect(stored.curriculum.resume).toBe("l0m01l01");
   for (const width of [390, 768]) {
     await page.setViewportSize({ width, height: 844 });
-    for (const route of [path, "/lessons/l1m01l03"]) {
+    for (const route of [path, "/lessons/l1m01l03", "/lessons/l2m01l03"]) {
       await page.goto(route);
       expect(
         await page.evaluate(

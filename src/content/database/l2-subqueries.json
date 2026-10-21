@@ -1,0 +1,529 @@
+[
+  {
+    "id": "l2m01l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": ["sql", "subquery", "exists", "in", "anti-join", "school-finance"],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/functions-subquery.html"
+    ],
+    "hook": "Kepala sekolah ingin tahu siswa yang belum pernah memiliki pembayaran berhasil. Apakah cukup mencari student_id yang tidak ada di daftar pembayaran, dan apa yang terjadi jika daftar pembanding mengandung NULL?",
+    "objectives": [
+      "Menjelaskan perbedaan subquery IN yang menghasilkan nilai dengan EXISTS yang menguji keberadaan baris.",
+      "Menulis EXISTS dan NOT EXISTS yang berkorelasi dengan baris students atau invoices.",
+      "Memilih NOT EXISTS untuk anti-join yang tetap jelas ketika NULL dapat muncul pada himpunan pembanding."
+    ],
+    "sections": [
+      {
+        "title": "Subquery sebagai pertanyaan di dalam pertanyaan",
+        "paragraphs": [
+          "Subquery adalah query yang dipakai oleh query lain. Bayangkan query luar sebagai daftar siswa yang sedang diperiksa satu demi satu, lalu query dalam sebagai pertanyaan kecil: apakah ada payment succeeded yang terhubung ke siswa ini? EXISTS tidak meminta nilai payment_id atau jumlah baris. Ia hanya bernilai TRUE ketika subquery menghasilkan setidaknya satu baris dan FALSE ketika tidak ada baris. Karena itu SELECT 1 di dalam EXISTS adalah kebiasaan yang jujur: nilai 1 tidak dipakai, keberadaannya yang penting.",
+          "Subquery berkorelasi menyebut kolom dari query luar. Pada NOT EXISTS, kondisi i.student_id = s.student_id mengaitkan pencarian payment dengan siswa yang sedang diperiksa. Invoice 104 dan 105 tidak mempunyai payment succeeded, sedangkan invoice 108 tidak memiliki payment row sama sekali; ketiganya termasuk invoice tanpa pembayaran berhasil. Jika pertanyaannya dinaikkan ke grain siswa, student_id 5 adalah satu-satunya siswa yang tidak memiliki succeeded payment pada invoice mana pun miliknya."
+        ]
+      },
+      {
+        "title": "IN dan EXISTS menjawab kebutuhan yang berbeda",
+        "paragraphs": [
+          "IN membandingkan satu ekspresi dengan nilai-nilai yang dikembalikan subquery. Contohnya i.invoice_id IN (SELECT p.invoice_id FROM school.payments p WHERE p.status = 'succeeded') membaca seperti daftar invoice yang invoice_id-nya muncul pada himpunan pembayaran berhasil. Untuk daftar sederhana yang tidak memiliki NULL, IN dan EXISTS sering menghasilkan anggota himpunan yang sama. EXISTS lebih langsung ketika yang dibutuhkan adalah relasi atau keberadaan baris, terutama saat query perlu menambahkan beberapa kondisi pada tabel terkait.",
+          "NOT IN memiliki jebakan penting. Jika daftar di sebelah kanan berisi NULL, perbandingan yang tidak cocok tidak dapat dipastikan TRUE atau FALSE; hasil logikanya UNKNOWN. WHERE hanya menyimpan TRUE, sehingga NOT IN dapat mengembalikan nol baris secara mengejutkan. Kolom foreign key invoice_id pada payments di seed bersifat NOT NULL, jadi jebakan ini tidak bisa diproduksi dari invoice_id payments yang asli. Untuk menunjukkan semantik tanpa mengarang data seed, contoh edge case memakai VALUES dengan satu integer dan satu NULL secara lokal."
+        ]
+      },
+      {
+        "title": "Anti-join yang dapat dibaca dan diperiksa",
+        "paragraphs": [
+          "NOT EXISTS biasanya menjadi pilihan aman untuk pertanyaan 'belum pernah memiliki'. Query luar menyimpan entitas yang ingin dilaporkan, sedangkan query dalam mendefinisikan bukti yang menggugurkan laporan itu. Pada daftar siswa tanpa pembayaran berhasil, bukti penggugur adalah satu payment berstatus succeeded pada invoice milik siswa tersebut. Payment pending invoice 104, payment failed invoice 105, dan invoice tanpa baris payment 108 tidak dihitung sebagai bukti succeeded.",
+          "Tetap periksa grain sebelum memilih bentuk subquery. Jika pertanyaan meminta invoice, korelasikan langsung invoices dengan payments dan hasilnya 104, 105, 108. Jika pertanyaan meminta siswa, korelasikan students melalui invoices lalu payments dan hasilnya hanya Elina. Jangan menyimpulkan 'belum lunas' dari NOT EXISTS succeeded: invoice 102 memiliki pembayaran berhasil 200000 tetapi masih outstanding 300000. Keberadaan pembayaran dan pelunasan penuh adalah dua pertanyaan bisnis yang berbeda."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "SELECT s.student_id, s.full_name FROM school.students s WHERE NOT EXISTS (SELECT 1 FROM school.invoices i JOIN school.payments p ON p.invoice_id = i.invoice_id WHERE i.student_id = s.student_id AND p.status = 'succeeded') ORDER BY s.student_id;",
+      "columns": ["student_id", "full_name"],
+      "rows": [["5", "Elina Zahra"]],
+      "explanation": "Subquery berkorelasi pada student_id siswa luar dan hanya menganggap payment berstatus succeeded sebagai bukti. Siswa 1, 2, 3, 4, dan 6 memiliki setidaknya satu payment succeeded, sedangkan Elina tidak memiliki payment succeeded; invoice 108 bahkan tidak memiliki payment row. Pada grain invoice, pola yang sama menghasilkan invoice 104, 105, dan 108."
+    },
+    "checks": [
+      {
+        "id": "l2m01l01-check-1",
+        "question": "Apa yang diuji EXISTS pada subquery pembayaran di lesson ini?",
+        "options": [
+          "Nilai amount payment harus sama dengan amount invoice.",
+          "Apakah setidaknya satu baris payment succeeded yang berkorelasi ditemukan.",
+          "Apakah subquery mengembalikan tepat satu kolom bernama exists."
+        ],
+        "answer": 1,
+        "explanation": "EXISTS menguji ada atau tidaknya baris; nilai SELECT di dalamnya tidak menjadi nilai output.",
+        "feedback": [
+          "Belum tepat. Kecocokan nominal bukan syarat EXISTS pada query ini.",
+          "Benar. Satu baris yang memenuhi korelasi dan status sudah cukup untuk TRUE.",
+          "Belum tepat. EXISTS tidak membutuhkan kolom atau alias bernama exists."
+        ]
+      },
+      {
+        "id": "l2m01l01-check-2",
+        "question": "Mengapa NOT EXISTS pada grain siswa hanya mengembalikan student_id 5?",
+        "options": [
+          "Siswa 5 adalah satu-satunya siswa tanpa invoice apa pun di seed.",
+          "NOT EXISTS selalu memilih primary key terbesar.",
+          "Siswa 5 tidak memiliki payment succeeded pada invoice miliknya, sementara siswa lain memiliki setidaknya satu."
+        ],
+        "answer": 2,
+        "explanation": "Invoice 108 milik siswa 5 tidak memiliki pembayaran; payment pending atau failed juga tidak memenuhi status succeeded.",
+        "feedback": [
+          "Belum tepat. Siswa 5 memiliki invoice 108.",
+          "Belum tepat. EXISTS tidak bergantung pada besar kecilnya primary key.",
+          "Benar. Anti-join mencari ketiadaan bukti pembayaran berhasil pada semua invoice siswa."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi hasil query starter, lalu ubah bentuknya menjadi NOT EXISTS untuk menemukan siswa yang belum pernah memiliki payment succeeded.",
+      "setup": "Gunakan schema school dari school_finance_seed.sql. Aktivitas hanya memprediksi hasil query terkurasi; UI tidak menyediakan SQL runner bebas. Payment pending dan failed bukan pembayaran berhasil. Pada seed, invoice tanpa succeeded adalah 104, 105, dan 108, sedangkan siswa tanpa succeeded hanya student_id 5.",
+      "starterSql": "SELECT s.student_id, s.full_name FROM school.students s WHERE s.student_id NOT IN (SELECT i.student_id FROM school.invoices i JOIN school.payments p ON p.invoice_id = i.invoice_id WHERE p.status = 'succeeded') ORDER BY s.student_id;",
+      "variants": [
+        {
+          "id": "l2m01l01-variant-1",
+          "question": "Jika pertanyaan diubah dari siswa ke invoice, hasil anti-join mana yang benar untuk seed?",
+          "options": [
+            "Invoice 104, 105, dan 108 karena tidak memiliki payment succeeded.",
+            "Invoice 101, 103, dan 109 karena memiliki lebih dari satu payment.",
+            "Tidak ada invoice karena semua invoice memiliki setidaknya satu payment row."
+          ],
+          "answer": 0,
+          "explanation": "Korelasi langsung i.invoice_id terhadap payments memeriksa keberadaan succeeded per invoice; pending, failed, dan ketiadaan row semuanya tidak lolos EXISTS.",
+          "feedback": [
+            "Benar. 104 pending, 105 failed, dan 108 tidak punya payment row succeeded.",
+            "Belum tepat. Banyaknya payment tidak menjadikan invoice tanpa succeeded.",
+            "Belum tepat. Ketiadaan payment succeeded berbeda dari ketiadaan semua payment row."
+          ]
+        },
+        {
+          "id": "l2m01l01-variant-2",
+          "question": "Kapan EXISTS lebih tepat dibaca daripada IN pada pertanyaan ini?",
+          "options": [
+            "Saat query harus mengembalikan nilai payment_id dari subquery sebagai kolom otomatis.",
+            "Saat semua kolom foreign key diubah menjadi nullable.",
+            "Saat yang dibutuhkan adalah menguji keberadaan payment yang memenuhi beberapa kondisi terkait baris luar."
+          ],
+          "answer": 2,
+          "explanation": "EXISTS mengekspresikan pertanyaan keberadaan dan dapat mengaitkan beberapa predicate tanpa membawa daftar nilai sebagai hasil.",
+          "feedback": [
+            "Belum tepat. EXISTS hanya mengembalikan boolean logis pada predicate luar.",
+            "Belum tepat. Nullable bukan syarat agar EXISTS dapat dipakai.",
+            "Benar. Korelasi dan beberapa kondisi relasi membuat maksud EXISTS mudah diaudit."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l2m01l01-edge-1",
+          "question": "Apa hasil logis NOT IN ketika himpunan pembanding lokal berisi 1 dan NULL?",
+          "options": [
+            "Hanya siswa dengan student_id 2 ke atas selalu lolos.",
+            "Semua siswa lolos karena NULL diabaikan oleh NOT IN.",
+            "Tidak ada student_id yang dapat dipastikan lolos; perbandingan dengan NULL menjadi UNKNOWN untuk nilai yang tidak sama dengan 1."
+          ],
+          "answer": 2,
+          "explanation": "NOT IN setara dengan rangkaian <> yang digabung AND; satu pembanding NULL membuat hasil yang tidak cocok menjadi UNKNOWN.",
+          "feedback": [
+            "Belum tepat. SQL tidak mengubah NULL menjadi rentang angka.",
+            "Belum tepat. NULL tidak diabaikan dalam logika NOT IN.",
+            "Benar. Gunakan NOT EXISTS atau hilangkan NULL secara eksplisit bila semantiknya memang diperlukan."
+          ]
+        },
+        {
+          "id": "l2m01l01-edge-2",
+          "question": "Mengapa contoh NOT IN dengan NULL harus memakai VALUES lokal, bukan mengklaim payments seed mengandung invoice_id NULL?",
+          "options": [
+            "Karena invoice_id pada payments adalah foreign key NOT NULL di seed.",
+            "Karena VALUES tidak boleh memuat NULL.",
+            "Karena PostgreSQL tidak mendukung subquery dari tabel payments."
+          ],
+          "answer": 0,
+          "explanation": "Schema seed mendefinisikan payments.invoice_id BIGINT NOT NULL REFERENCES invoices(invoice_id), sehingga fixture asli tidak menyediakan NULL pada kolom itu.",
+          "feedback": [
+            "Benar. VALUES membuat contoh semantik terisolasi tanpa mengubah atau memalsukan fixture.",
+            "Belum tepat. VALUES dapat memuat NULL secara eksplisit.",
+            "Belum tepat. Subquery terhadap payments didukung PostgreSQL."
+          ]
+        }
+      ],
+      "hints": [
+        "Tentukan grain pertanyaan lebih dulu: siswa membutuhkan students sebagai query luar, sedangkan invoice dapat menghubungkan invoices langsung ke payments.",
+        "Ganti daftar NOT IN dengan NOT EXISTS yang mengorelasikan i.student_id = s.student_id dan menyaring p.status = 'succeeded'.",
+        "Solusi lengkapnya adalah SELECT s.student_id, s.full_name FROM school.students s WHERE NOT EXISTS (SELECT 1 FROM school.invoices i JOIN school.payments p ON p.invoice_id = i.invoice_id WHERE i.student_id = s.student_id AND p.status = 'succeeded') ORDER BY s.student_id;"
+      ],
+      "solutionSql": "SELECT s.student_id, s.full_name FROM school.students s WHERE NOT EXISTS (SELECT 1 FROM school.invoices i JOIN school.payments p ON p.invoice_id = i.invoice_id WHERE i.student_id = s.student_id AND p.status = 'succeeded') ORDER BY s.student_id;",
+      "solutionExplanation": "NOT EXISTS mempertahankan siswa hanya jika tidak ditemukan satu pun payment succeeded melalui invoice miliknya. Hasil deterministik adalah student_id 5, Elina Zahra. Bentuk ini menghindari ketergantungan pada daftar nilai dan tetap aman bila sumber pembanding yang relevan dapat mengandung NULL; edge case NULL didemonstrasikan terpisah dengan VALUES karena foreign key seed tidak nullable.",
+      "critical": true
+    },
+    "reflection": "Jelaskan perbedaan grain antara 'invoice tanpa payment succeeded' dan 'siswa tanpa payment succeeded'. Mengapa NOT EXISTS lebih aman daripada NOT IN ketika daftar pembanding dapat mengandung NULL, dan kapan hasil anti-join belum cukup untuk menyatakan invoice lunas atau belum lunas?"
+  },
+  {
+    "id": "l2m01l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": ["sql", "cte", "readability", "preaggregation", "school-finance"],
+    "officialRefs": ["https://www.postgresql.org/docs/17/queries-with.html"],
+    "hook": "Laporan finance perlu membandingkan total tagihan dan total pembayaran berhasil tanpa menggandakan invoice yang memiliki beberapa payment. Bagaimana memecah query menjadi langkah yang bisa diaudit tanpa menganggap CTE otomatis membuat query lebih cepat?",
+    "objectives": [
+      "Menggunakan CTE untuk memberi nama tahap logis pada agregasi invoice dan payment.",
+      "Menjaga grain satu baris per invoice atau satu ringkasan laporan sebelum menggabungkan hasil.",
+      "Menjelaskan bahwa CTE meningkatkan keterbacaan tetapi bukan jaminan performa atau materialisasi."
+    ],
+    "sections": [
+      {
+        "title": "CTE sebagai nama untuk langkah berpikir",
+        "paragraphs": [
+          "Common table expression atau CTE adalah bagian WITH yang memberi nama pada result set sementara selama satu statement. Nama seperti invoice_totals dan successful_payments membuat pembaca melihat dua pertanyaan terpisah: berapa total yang ditagihkan, dan berapa total payment berstatus succeeded. SELECT akhir kemudian menggabungkan dua ringkasan itu dengan CROSS JOIN karena masing-masing hanya menghasilkan satu baris. CTE membantu menulis urutan pemikiran, tetapi tetap merupakan bagian dari statement yang sama.",
+          "Keterbacaan paling berguna ketika setiap tahap mempunyai grain yang jelas. invoice_totals pada worked example memiliki satu baris untuk seluruh laporan. successful_payments juga satu baris. Pada laporan per invoice, CTE paid seharusnya menghasilkan paling banyak satu baris per invoice_id sebelum ditempelkan ke invoices. Tuliskan grain di kepala ketika membaca query: jika tahap anak masih memiliki dua payment untuk invoice 103, aggregate parent belum aman dijumlahkan."
+        ]
+      },
+      {
+        "title": "Menghindari overcount dari join one-to-many",
+        "paragraphs": [
+          "Invoice 103 memiliki dua payment succeeded, dan invoice 109 juga memiliki dua. Jika semua invoices langsung di-LEFT JOIN ke payments lalu SUM(i.amount) dihitung, nominal parent ikut berulang untuk setiap payment. Total billed menjadi lebih besar daripada 5.350.000,00 walaupun total payment yang dijumlahkan masih dapat terlihat masuk akal. Sumber kesalahannya adalah cardinality hasil join, bukan fungsi SUM. Agregasikan sisi anak secara terpisah atau agregasikan pada grain invoice sebelum membuat total laporan.",
+          "Pembayaran pending invoice 104 dan failed invoice 105 tidak termasuk total succeeded. Invoice tanpa succeeded seperti 108 tetap berkontribusi pada billed, tetapi tidak menambah succeeded. COALESCE penting ketika ringkasan child ditempelkan memakai LEFT JOIN dan tidak memiliki baris pasangan. Pada worked example kedua ringkasan tidak perlu LEFT JOIN karena keduanya selalu mempunyai satu baris aggregate, tetapi prinsip grain dan status tetap sama."
+        ]
+      },
+      {
+        "title": "CTE bukan tombol performa",
+        "paragraphs": [
+          "CTE memisahkan maksud query, bukan menjanjikan rencana eksekusi tertentu. PostgreSQL dapat meng-inline CTE yang sesuai atau memilih mematerialisasinya, dan keputusan itu dipengaruhi bentuk query serta versi dan planner. Menulis WITH tidak otomatis lebih cepat daripada subquery atau query langsung. Jika performa penting, ukur query pada data yang relevan dengan EXPLAIN (ANALYZE) di lingkungan yang aman dan periksa indeks, cardinality, serta biaya agregasi.",
+          "Materialisasi juga bukan makna default yang boleh diasumsikan sebagai cache permanen. Jika kebutuhan memang memerlukan perilaku materialisasi atau tidak materialisasi, PostgreSQL menyediakan petunjuk eksplisit pada versi yang mendukungnya, tetapi itu keputusan tuning yang berbeda dari tujuan belajar lesson ini. Di sini CTE dipilih karena tahapnya mudah diperiksa: billed 5.350.000,00 dikurangi succeeded 3.400.000,00 menghasilkan outstanding 1.950.000,00 tanpa join yang menggandakan parent."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "WITH invoice_totals AS (SELECT SUM(amount)::numeric(12,2) AS billed FROM school.invoices), successful_payments AS (SELECT COALESCE(SUM(amount), 0::numeric(12,2))::numeric(12,2) AS succeeded FROM school.payments WHERE status = 'succeeded') SELECT i.billed, p.succeeded, (i.billed - p.succeeded)::numeric(12,2) AS outstanding FROM invoice_totals i CROSS JOIN successful_payments p;",
+      "columns": ["billed", "succeeded", "outstanding"],
+      "rows": [["5350000.00", "3400000.00", "1950000.00"]],
+      "explanation": "invoice_totals dan successful_payments dihitung terpisah, sehingga payment berulang pada invoice 103 dan 109 tidak menggandakan billed. Hanya payment status succeeded yang masuk ringkasan kedua; pending dan failed diabaikan. Nilai seed yang diharapkan adalah billed 5.350.000,00, succeeded 3.400.000,00, dan outstanding 1.950.000,00."
+    },
+    "checks": [
+      {
+        "id": "l2m01l02-check-1",
+        "question": "Mengapa SUM(i.amount) setelah direct join invoices ke payments dapat menghasilkan billed yang terlalu besar?",
+        "options": [
+          "Invoice dengan beberapa payment direpresentasikan beberapa kali sebelum SUM berjalan.",
+          "SUM selalu menambahkan satu juta pada setiap numeric.",
+          "Status succeeded mengubah amount invoice menjadi NULL."
+        ],
+        "answer": 0,
+        "explanation": "Join one-to-many memperbanyak baris parent; SUM kemudian menjumlahkan salinan amount yang sah secara sintaks tetapi salah secara grain.",
+        "feedback": [
+          "Benar. Invoice 103 dan 109 memiliki dua payment succeeded, sehingga billed parent dapat terhitung berulang.",
+          "Belum tepat. SUM tidak menambahkan konstanta otomatis.",
+          "Belum tepat. Filter status hanya menentukan baris payment yang ikut, bukan mengubah amount invoice menjadi NULL."
+        ]
+      },
+      {
+        "id": "l2m01l02-check-2",
+        "question": "Apa peran utama nama invoice_totals dan successful_payments pada worked example?",
+        "options": [
+          "Memaksa PostgreSQL membuat tabel permanen baru.",
+          "Memberi nama pada tahap logis sehingga grain dan sumber setiap angka dapat diaudit.",
+          "Menjamin kedua aggregate selalu memakai indeks yang sama."
+        ],
+        "answer": 1,
+        "explanation": "CTE berlaku dalam statement dan memperjelas langkah, tetapi bukan DDL, cache permanen, atau jaminan indeks.",
+        "feedback": [
+          "Belum tepat. CTE tidak membuat tabel permanen.",
+          "Benar. Nama tahap membantu pembaca memeriksa billed dan succeeded secara terpisah.",
+          "Belum tepat. CTE tidak menjamin pilihan indeks planner."
+        ]
+      },
+      {
+        "id": "l2m01l02-check-3",
+        "question": "Apa yang dapat disimpulkan tentang performa hanya dari keberadaan kata WITH?",
+        "options": [
+          "CTE selalu lebih cepat daripada subquery.",
+          "CTE selalu dimaterialisasi satu kali.",
+          "Tidak ada jaminan performa; planner dapat meng-inline atau mematerialisasi sesuai kondisi dan versi."
+        ],
+        "answer": 2,
+        "explanation": "CTE adalah alat struktur query. Performa harus diperiksa dari rencana dan data nyata, bukan dari sintaks WITH saja.",
+        "feedback": [
+          "Belum tepat. CTE tidak otomatis mengurangi biaya.",
+          "Belum tepat. Materialisasi bukan jaminan yang boleh diasumsikan dari semua CTE.",
+          "Benar. Keterbacaan dan performa adalah keputusan yang perlu dievaluasi terpisah."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi angka yang salah dari direct join pada query starter, lalu pisahkan aggregate invoice dan payment ke CTE agar billed dan succeeded dapat dibandingkan pada grain laporan.",
+      "setup": "Gunakan sepuluh invoice dan sebelas payment dari school_finance_seed.sql. Target hasil adalah billed 5350000.00, succeeded 3400000.00, outstanding 1950000.00. Invoice 103 dan 109 masing-masing memiliki dua payment succeeded; invoice 104 pending, 105 failed, dan 108 tanpa payment. UI hanya memberikan aktivitas prediksi terkurasi, bukan SQL runner bebas.",
+      "starterSql": "SELECT SUM(i.amount)::numeric(12,2) AS billed, COALESCE(SUM(p.amount), 0::numeric(12,2))::numeric(12,2) AS succeeded FROM school.invoices i LEFT JOIN school.payments p ON p.invoice_id = i.invoice_id AND p.status = 'succeeded';",
+      "variants": [
+        {
+          "id": "l2m01l02-variant-1",
+          "question": "Perbaikan mana yang menjaga billed tidak dikalikan oleh beberapa payment?",
+          "options": [
+            "Agregasikan payment succeeded per invoice atau sebagai ringkasan terpisah, lalu gabungkan dengan aggregate invoice pada grain yang sama.",
+            "Gunakan SUM(DISTINCT i.amount) setelah semua join agar semua invoice dengan nominal sama menyatu.",
+            "Hapus invoice_id dari kondisi JOIN supaya setiap invoice hanya bertemu satu payment."
+          ],
+          "answer": 0,
+          "explanation": "Pre-aggregation menjaga relasi child menjadi satu ringkasan per parent atau satu ringkasan laporan sebelum total akhir dihitung.",
+          "feedback": [
+            "Benar. Grain harus ditetapkan sebelum billed dan succeeded dijumlahkan bersama.",
+            "Belum tepat. Dua invoice berbeda dapat memiliki amount sama, sehingga DISTINCT pada nilai menghapus data sah.",
+            "Belum tepat. Menghapus key join justru membuat pasangan lintas invoice dan merusak hasil."
+          ]
+        },
+        {
+          "id": "l2m01l02-variant-2",
+          "question": "Mengapa payment pending invoice 104 tidak menambah successful_payments?",
+          "options": [
+            "Karena payment dengan amount besar otomatis dibuang.",
+            "Karena invoice 104 tidak memiliki payment row sama sekali.",
+            "Karena CTE successful_payments menyaring status = 'succeeded', sementara status 104 adalah pending."
+          ],
+          "answer": 2,
+          "explanation": "Status adalah definisi pembayaran yang diterima pada lesson ini; keberadaan payment row saja tidak cukup.",
+          "feedback": [
+            "Belum tepat. Besar amount bukan kondisi filter.",
+            "Belum tepat. Invoice 104 memiliki payment pending 205.",
+            "Benar. Pending tetap tercatat tetapi tidak masuk total succeeded."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l2m01l02-edge-1",
+          "question": "Jika invoice tidak memiliki payment succeeded, apa yang perlu dipertahankan ketika laporan dibuat per invoice?",
+          "options": [
+            "Invoice harus hilang agar SUM tidak menghasilkan NULL.",
+            "Invoice dipertahankan dengan LEFT JOIN dan nilai aggregate payment diubah menjadi 0 memakai COALESCE.",
+            "Invoice otomatis diberi succeeded sebesar amount-nya."
+          ],
+          "answer": 1,
+          "explanation": "Sisi parent tetap diperlukan untuk laporan tagihan; ketiadaan child bukan bukti pembayaran penuh.",
+          "feedback": [
+            "Belum tepat. Menghilangkan invoice membuat billed dan outstanding tidak lengkap.",
+            "Benar. LEFT JOIN menjaga parent, dan COALESCE memberi nilai numerik untuk perhitungan.",
+            "Belum tepat. Tidak ada payment succeeded berarti nilai pembayaran berhasil adalah nol, bukan billed penuh."
+          ]
+        },
+        {
+          "id": "l2m01l02-edge-2",
+          "question": "Pernyataan mana yang tepat ketika seseorang berkata 'CTE pasti lebih cepat karena materialized sekali'?",
+          "options": [
+            "Pernyataan itu selalu benar pada semua versi PostgreSQL.",
+            "Pernyataan itu hanya benar jika jumlah baris kurang dari satu juta.",
+            "Pernyataan itu tidak dapat diasumsikan; planner dapat memilih inline atau materialisasi dan performa perlu diukur."
+          ],
+          "answer": 2,
+          "explanation": "CTE membantu struktur dan audit query, sedangkan perilaku eksekusi bergantung pada planner, versi, dan konteks query.",
+          "feedback": [
+            "Belum tepat. Sintaks WITH tidak memberi jaminan universal.",
+            "Belum tepat. Tidak ada ambang baris sederhana yang menentukan perilaku tersebut.",
+            "Benar. Gunakan rencana eksekusi dan pengukuran aman jika performa menjadi pertanyaan."
+          ]
+        }
+      ],
+      "hints": [
+        "Tulis target grain sebelum query: satu ringkasan billed dan satu ringkasan succeeded, bukan satu baris untuk setiap kombinasi invoice-payment.",
+        "Buat CTE invoice_totals dari SUM(invoices.amount) dan successful_payments dari SUM(payments.amount) dengan WHERE status = 'succeeded', lalu CROSS JOIN dua baris aggregate itu.",
+        "Solusi menghasilkan billed 5350000.00, succeeded 3400000.00, lalu hitung outstanding sebagai billed - succeeded; jangan memakai direct SUM(i.amount) setelah join child."
+      ],
+      "solutionSql": "WITH invoice_totals AS (SELECT SUM(amount)::numeric(12,2) AS billed FROM school.invoices), successful_payments AS (SELECT COALESCE(SUM(amount), 0::numeric(12,2))::numeric(12,2) AS succeeded FROM school.payments WHERE status = 'succeeded') SELECT i.billed, p.succeeded, (i.billed - p.succeeded)::numeric(12,2) AS outstanding FROM invoice_totals i CROSS JOIN successful_payments p;",
+      "solutionExplanation": "Dua CTE mengagregasi sumber secara terpisah sehingga one-to-many payments tidak menggandakan billed. Hasil exact seed adalah 5350000.00, 3400000.00, dan 1950000.00. Pola ini juga menjadi dasar laporan per invoice: aggregate payment succeeded per invoice_id lebih dahulu, kemudian LEFT JOIN ke invoices dan COALESCE nilai yang tidak ada.",
+      "critical": true
+    },
+    "reflection": "Tuliskan grain setiap CTE pada solusi dan jelaskan mengapa billed harus dihitung terpisah dari payment. Mengapa CTE membantu pembaca, tetapi tidak boleh dipakai sebagai klaim bahwa query pasti lebih cepat atau pasti materialized?"
+  },
+  {
+    "id": "l2m01l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "sql",
+      "set-operations",
+      "union",
+      "intersect",
+      "except",
+      "school-finance"
+    ],
+    "officialRefs": ["https://www.postgresql.org/docs/17/queries-union.html"],
+    "hook": "Tim sekolah ingin membandingkan siswa yang membayar pada Agustus dan September. Apakah daftar itu harus digabung, dicari irisan, atau dikurangi, dan bulan mana yang sebenarnya harus dibaca: period_month invoice atau paid_at payment?",
+    "objectives": [
+      "Membedakan UNION, UNION ALL, INTERSECT, dan EXCEPT sebagai operasi himpunan dengan kolom yang kompatibel.",
+      "Menggunakan paid_at payment untuk membentuk daftar siswa per bulan lalu membandingkan hasil secara deterministik.",
+      "Menjelaskan bahwa operasi set biasa menghapus duplikasi, sedangkan UNION ALL mempertahankan multiplicity."
+    ],
+    "sections": [
+      {
+        "title": "Set dibangun dari hasil query",
+        "paragraphs": [
+          "Operasi set menggabungkan dua result set yang memiliki jumlah kolom dan tipe yang kompatibel. UNION mengambil anggota dari kedua sisi lalu menghapus duplikasi. INTERSECT mengambil anggota yang muncul di kedua sisi. EXCEPT mengambil anggota sisi kiri yang tidak muncul di sisi kanan; urutan sisi penting karena A EXCEPT B berbeda dari B EXCEPT A. Operasi ini bekerja pada nilai result set, sehingga kolom identitas yang dipilih menentukan apa yang dianggap sama.",
+          "Untuk pertanyaan siswa yang membayar pada suatu bulan, result set terbaik adalah satu kolom student_id yang sudah DISTINCT per bulan. Payment 209 dan 210 sama-sama untuk Farhan pada Agustus, tetapi daftar siswa Agustus tetap memuat student_id 6 sekali. Setelah daftar Aug dan Sep dibentuk, UNION memberi semua siswa yang muncul setidaknya di salah satu bulan, INTERSECT memberi siswa yang muncul di keduanya, dan EXCEPT memberi siswa yang hanya muncul di sisi kiri."
+        ]
+      },
+      {
+        "title": "Bulan pembayaran bukan bulan invoice",
+        "paragraphs": [
+          "Seed memiliki period_month pada invoices dan paid_at pada payments. Keduanya menjawab pertanyaan waktu yang berbeda. period_month adalah periode tagihan, sedangkan paid_at adalah waktu pembayaran aktual. Lesson ini sengaja menggunakan paid_at untuk membandingkan perilaku pembayaran Agustus dan September. Filter memakai rentang inklusif-eksklusif pada timestamptz agar batas awal masuk dan batas bulan berikutnya tidak tumpang tindih. Status succeeded disaring supaya pending atau failed tidak disebut pembayaran berhasil.",
+          "Dengan paid_at dan status succeeded, daftar siswa Agustus adalah 1, 2, 4, 6; September adalah 1, 3, 6. Dalam contoh ini batas rentang bulan ditulis dalam UTC (+00), dari awal bulan secara inklusif sampai awal bulan berikutnya secara eksklusif. INTERSECT menghasilkan 1 dan 6. Aug EXCEPT Sep menghasilkan 2 dan 4. UNION menghasilkan 1, 2, 3, 4, 6. Seed kebetulan menempatkan payment succeeded pada bulan yang sama dengan period_month invoice, tetapi query yang benar tetap membaca paid_at karena definisi laporan adalah bulan uang diterima."
+        ]
+      },
+      {
+        "title": "Distinct versus multiplicity",
+        "paragraphs": [
+          "UNION, INTERSECT, dan EXCEPT memiliki semantik distinct pada operasi set biasa. Karena itu pengulangan Farhan dari dua payment Agustus hilang ketika CTE aug menggunakan SELECT DISTINCT, dan pengulangan 1 serta 6 di dua daftar hilang pada UNION. UNION ALL sengaja mempertahankan semua kemunculan. Jika kedua CTE yang sudah DISTINCT digabung dengan UNION ALL, urutan terurut student_id menjadi 1, 1, 2, 3, 4, 6, 6. Angka pengulangan dapat penting untuk menghitung transaksi, tetapi salah jika pertanyaannya adalah daftar siswa unik.",
+          "Set operation juga bukan pengganti aturan bisnis. Kedua query harus mengembalikan bentuk yang kompatibel dan memakai definisi filter yang sebanding. Untuk membandingkan siswa, pilih student_id, bukan full_name yang dapat sama pada data lain. Untuk menghitung jumlah payment, pertahankan baris payment dan gunakan UNION ALL atau aggregate sesuai pertanyaan. Selalu tulis ORDER BY pada query akhir jika hasil belajar atau laporan perlu urutan yang dapat diperiksa."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "WITH aug AS (SELECT DISTINCT i.student_id FROM school.invoices i JOIN school.payments p ON p.invoice_id = i.invoice_id WHERE p.status = 'succeeded' AND p.paid_at >= TIMESTAMPTZ '2026-08-01 00:00:00+00' AND p.paid_at < TIMESTAMPTZ '2026-09-01 00:00:00+00'), sep AS (SELECT DISTINCT i.student_id FROM school.invoices i JOIN school.payments p ON p.invoice_id = i.invoice_id WHERE p.status = 'succeeded' AND p.paid_at >= TIMESTAMPTZ '2026-09-01 00:00:00+00' AND p.paid_at < TIMESTAMPTZ '2026-10-01 00:00:00+00') SELECT 'aug' AS set_name, student_id FROM aug UNION ALL SELECT 'aug_minus_sep', student_id FROM (SELECT student_id FROM aug EXCEPT SELECT student_id FROM sep) x UNION ALL SELECT 'intersection', student_id FROM (SELECT student_id FROM aug INTERSECT SELECT student_id FROM sep) x UNION ALL SELECT 'sep', student_id FROM sep UNION ALL SELECT 'union', student_id FROM (SELECT student_id FROM aug UNION SELECT student_id FROM sep) x UNION ALL SELECT 'union_all', student_id FROM (SELECT student_id FROM aug UNION ALL SELECT student_id FROM sep) x ORDER BY set_name, student_id;",
+      "columns": ["set_name", "student_id"],
+      "rows": [
+        ["aug", "1"],
+        ["aug", "2"],
+        ["aug", "4"],
+        ["aug", "6"],
+        ["aug_minus_sep", "2"],
+        ["aug_minus_sep", "4"],
+        ["intersection", "1"],
+        ["intersection", "6"],
+        ["sep", "1"],
+        ["sep", "3"],
+        ["sep", "6"],
+        ["union", "1"],
+        ["union", "2"],
+        ["union", "3"],
+        ["union", "4"],
+        ["union", "6"],
+        ["union_all", "1"],
+        ["union_all", "1"],
+        ["union_all", "2"],
+        ["union_all", "3"],
+        ["union_all", "4"],
+        ["union_all", "6"],
+        ["union_all", "6"]
+      ],
+      "ordered": true,
+      "explanation": "aug dan sep dibentuk dari actual payment paid_at, bukan period_month invoice. DISTINCT menjaga satu student_id per daftar bulan. Hasil exact adalah Aug {1,2,4,6}, Sep {1,3,6}, Aug INTERSECT Sep {1,6}, Aug EXCEPT Sep {2,4}, UNION {1,2,3,4,6}, dan UNION ALL {1,1,2,3,4,6,6}; label pada result set membuat semua perbandingan dapat dibaca dalam satu output terurut."
+    },
+    "checks": [
+      {
+        "id": "l2m01l03-check-1",
+        "question": "Apa hasil Aug INTERSECT Sep pada seed ketika daftar dibentuk dari payment succeeded berdasarkan paid_at?",
+        "options": [
+          "student_id 2 dan 4",
+          "student_id 1 dan 6",
+          "student_id 1, 2, 3, 4, dan 6"
+        ],
+        "answer": 1,
+        "explanation": "Alya dan Farhan memiliki payment succeeded pada kedua bulan; Bima hanya Agustus dan Citra hanya September.",
+        "feedback": [
+          "Belum tepat. 2 dan 4 hanya berada di Aug sehingga termasuk Aug EXCEPT Sep.",
+          "Benar. INTERSECT hanya mempertahankan anggota yang ada di kedua set.",
+          "Belum tepat. Itu hasil UNION, bukan irisan."
+        ]
+      },
+      {
+        "id": "l2m01l03-check-2",
+        "question": "Mengapa query lesson memakai p.paid_at, bukan i.period_month, untuk label bulan pembayaran?",
+        "options": [
+          "period_month adalah waktu pembayaran aktual, sedangkan paid_at hanya label invoice.",
+          "Keduanya selalu identik sehingga tidak ada alasan teknis memilih salah satunya.",
+          "paid_at menyimpan timestamp pembayaran aktual; period_month hanya menyatakan periode invoice yang ditagihkan."
+        ],
+        "answer": 2,
+        "explanation": "Definisi laporan membandingkan kapan uang diterima, sehingga sumber waktunya adalah timestamp pada payment.",
+        "feedback": [
+          "Belum tepat. period_month berada pada invoices dan bukan waktu penerimaan.",
+          "Belum tepat. Seed kebetulan selaras, tetapi data nyata dapat menerima pembayaran lintas periode.",
+          "Benar. Rentang p.paid_at menjawab bulan aktual transaksi succeeded."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Bandingkan daftar siswa dengan payment succeeded pada Agustus dan September. Perbaiki starter agar bulan diambil dari paid_at, lalu pilih operasi set sesuai pertanyaan: UNION, INTERSECT, EXCEPT, atau UNION ALL.",
+      "setup": "Gunakan payments.status = 'succeeded' dan timestamp payments.paid_at dari seed. Daftar expected: Aug {1,2,4,6}, Sep {1,3,6}, intersection {1,6}, Aug EXCEPT Sep {2,4}, union {1,2,3,4,6}. UNION ALL mempertahankan multiplicity menjadi {1,1,2,3,4,6,6}. Jangan memakai period_month sebagai pengganti waktu payment aktual.",
+      "starterSql": "WITH aug AS (SELECT DISTINCT i.student_id FROM school.invoices i JOIN school.payments p ON p.invoice_id = i.invoice_id WHERE p.status = 'succeeded' AND i.period_month = DATE '2026-08-01'), sep AS (SELECT DISTINCT i.student_id FROM school.invoices i JOIN school.payments p ON p.invoice_id = i.invoice_id WHERE p.status = 'succeeded' AND i.period_month = DATE '2026-09-01') SELECT student_id FROM aug INTERSECT SELECT student_id FROM sep ORDER BY student_id;",
+      "variants": [
+        {
+          "id": "l2m01l03-variant-1",
+          "question": "Operasi mana yang menghasilkan semua siswa yang membayar pada setidaknya satu dari dua bulan?",
+          "options": [
+            "UNION karena duplikasi student_id pada dua set dihapus.",
+            "INTERSECT karena hanya siswa yang muncul dua kali yang dipertahankan.",
+            "EXCEPT karena siswa September dikurangi dari siswa Agustus."
+          ],
+          "answer": 0,
+          "explanation": "UNION menggabungkan anggota Aug dan Sep dengan semantik distinct, sehingga hasilnya 1,2,3,4,6.",
+          "feedback": [
+            "Benar. UNION cocok untuk 'salah satu atau keduanya' ketika daftar siswa harus unik.",
+            "Belum tepat. INTERSECT hanya memberi anggota yang ada di kedua bulan.",
+            "Belum tepat. EXCEPT menjawab selisih berarah, bukan gabungan."
+          ]
+        },
+        {
+          "id": "l2m01l03-variant-2",
+          "question": "Berapa hasil student_id terurut jika Aug dan Sep digabung dengan UNION ALL setelah masing-masing CTE sudah DISTINCT?",
+          "options": [
+            "1, 2, 3, 4, 6 karena UNION ALL juga selalu distinct.",
+            "1, 6 karena hanya irisan yang dipertahankan.",
+            "1, 1, 2, 3, 4, 6, 6 karena 1 dan 6 muncul di kedua daftar."
+          ],
+          "answer": 2,
+          "explanation": "DISTINCT berlaku di dalam setiap daftar bulan, sedangkan UNION ALL tetap mempertahankan kemunculan antar dua input.",
+          "feedback": [
+            "Belum tepat. Penghapusan duplikasi adalah semantik UNION biasa, bukan UNION ALL.",
+            "Belum tepat. Itu hasil INTERSECT dan tidak mempertahankan anggota lain.",
+            "Benar. 1 dan 6 masing-masing muncul sekali di Aug dan sekali di Sep."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l2m01l03-edge-1",
+          "question": "Mengapa p.paid_at NULL tidak masuk daftar bulan pada predicate rentang waktu?",
+          "options": [
+            "Perbandingan rentang terhadap NULL menghasilkan UNKNOWN, sehingga baris tidak lolos WHERE.",
+            "NULL otomatis dianggap berada di Agustus.",
+            "NULL diubah menjadi tanggal 1970 oleh INTERSECT."
+          ],
+          "answer": 0,
+          "explanation": "Timestamp NULL tidak memenuhi kondisi >= dan <; jika bisnis memerlukan bucket khusus, definisinya harus ditulis eksplisit.",
+          "feedback": [
+            "Benar. WHERE hanya mempertahankan TRUE; NULL bukan timestamp bulan mana pun.",
+            "Belum tepat. PostgreSQL tidak menebak bulan untuk NULL.",
+            "Belum tepat. Operasi set tidak mengonversi NULL menjadi tanggal."
+          ]
+        },
+        {
+          "id": "l2m01l03-edge-2",
+          "question": "Jika satu siswa memiliki dua payment succeeded pada Agustus, bagaimana daftar siswa unik harus menghindari duplikasi?",
+          "options": [
+            "Pilih full_name saja karena nama selalu unik.",
+            "Gunakan SELECT DISTINCT student_id pada CTE bulan sebelum operasi set.",
+            "Gunakan UNION ALL agar duplikasi pasti hilang."
+          ],
+          "answer": 1,
+          "explanation": "Identitas unik ditentukan oleh student_id, dan DISTINCT pada daftar bulan mengubah banyak transaksi menjadi satu anggota siswa.",
+          "feedback": [
+            "Belum tepat. Nama dapat tidak unik dan bukan primary key.",
+            "Benar. DISTINCT per CTE menghapus dua payment Farhan menjadi satu student_id 6 untuk daftar Aug.",
+            "Belum tepat. UNION ALL justru mempertahankan duplikasi."
+          ]
+        }
+      ],
+      "hints": [
+        "Pisahkan CTE aug dan sep, filter p.status = 'succeeded', dan gunakan rentang p.paid_at dari awal bulan sampai sebelum awal bulan berikutnya.",
+        "Pilih DISTINCT i.student_id di masing-masing CTE, lalu gunakan INTERSECT untuk irisan, EXCEPT untuk Aug minus Sep, UNION untuk gabungan unik, dan UNION ALL untuk multiplicity.",
+        "Expected exact: Aug {1,2,4,6}, Sep {1,3,6}, INTERSECT {1,6}, Aug EXCEPT Sep {2,4}, UNION {1,2,3,4,6}, UNION ALL {1,1,2,3,4,6,6}."
+      ],
+      "solutionSql": "WITH aug AS (SELECT DISTINCT i.student_id FROM school.invoices i JOIN school.payments p ON p.invoice_id = i.invoice_id WHERE p.status = 'succeeded' AND p.paid_at >= TIMESTAMPTZ '2026-08-01 00:00:00+00' AND p.paid_at < TIMESTAMPTZ '2026-09-01 00:00:00+00'), sep AS (SELECT DISTINCT i.student_id FROM school.invoices i JOIN school.payments p ON p.invoice_id = i.invoice_id WHERE p.status = 'succeeded' AND p.paid_at >= TIMESTAMPTZ '2026-09-01 00:00:00+00' AND p.paid_at < TIMESTAMPTZ '2026-10-01 00:00:00+00') SELECT student_id FROM aug INTERSECT SELECT student_id FROM sep ORDER BY student_id;",
+      "solutionExplanation": "Solusi menggunakan actual paid_at payment dan bukan period_month invoice. Kedua CTE menghasilkan daftar siswa unik per bulan; query reference yang ditampilkan mengembalikan INTERSECT {1,6}. Dengan input yang sama, UNION menghasilkan {1,2,3,4,6}, Aug EXCEPT Sep menghasilkan {2,4}, dan UNION ALL mempertahankan {1,1,2,3,4,6,6}.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa paid_at adalah sumber waktu yang benar untuk laporan pembayaran, lalu bedakan hasil UNION, INTERSECT, Aug EXCEPT Sep, dan UNION ALL pada seed. Sebutkan mengapa student_id dan DISTINCT diperlukan ketika satu siswa dapat memiliki beberapa payment."
+  }
+]

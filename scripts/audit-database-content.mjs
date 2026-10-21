@@ -5,9 +5,12 @@ const read = (path) => JSON.parse(fs.readFileSync(new URL(path, root), "utf8"));
 const blueprint = read(
   "curriculum/taalmo-database-zero-to-master/curriculum-blueprint.json",
 );
-export const authored = ["l0", "l1-query", "l1-mutation"].flatMap((file) =>
-  read(`src/content/database/${file}.json`),
-);
+export const authored = [
+  "l0",
+  "l1-query",
+  "l1-mutation",
+  "l2-subqueries",
+].flatMap((file) => read(`src/content/database/${file}.json`));
 const modules = blueprint.levels.flatMap((level) => level.modules);
 const lessons = modules.flatMap((module) => module.lessons);
 const byId = new Map(lessons.map((lesson) => [lesson.id, lesson]));
@@ -68,7 +71,7 @@ for (const [index, module] of modules.entries()) {
 for (const content of authored) {
   assert(byId.has(content.id), `unregistered ${content.id}`);
   assert.match(content.version, /^\d+\.\d+\.\d+$/);
-  assert.equal(content.difficulty, "beginner");
+  assert(["beginner", "intermediate"].includes(content.difficulty));
   assert(
     content.tags.length &&
       content.hook.length > 60 &&

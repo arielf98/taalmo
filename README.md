@@ -22,13 +22,13 @@ Tidak memerlukan `.env`, database, akun, API key, Docker, atau layanan berbayar.
 
 ## Database Zero to Master
 
-Jalur baru tersedia melalui dashboard atau `/learn/database-zero-to-master`. Struktur canonical berisi **10 level, 40 modul, dan 120 lesson**. **21 lesson L0–L1 published; 99 lesson L2–L9 masih draft.** Materi jalur ini berbahasa Indonesia, termasuk worked example PostgreSQL, concept checks, prediksi hasil, edge cases, hint bertahap dan refleksi.
+Jalur baru tersedia melalui dashboard atau `/learn/database-zero-to-master`. Struktur canonical berisi **10 level, 40 modul, dan 120 lesson**. **24 lesson published: L0–L1 dan L2M01; 96 lesson lainnya masih draft.** Materi jalur ini berbahasa Indonesia, termasuk worked example PostgreSQL, concept checks, prediksi hasil, edge cases, hint bertahap dan refleksi.
 
 Kelulusan lesson memerlukan aktivitas dan pemeriksaan wajib, bukan scroll atau Next. Modul memerlukan checkpoint ≥80%; level ≥85% dan seluruh pemeriksaan kritis lulus. Teori published tetap dapat dijelajahi; prasyarat berlaku untuk progres resmi. Progres per versi dan resume memakai penyimpanan browser yang sama tanpa mengubah milestone lab lama. Retake mempertahankan kelulusan terdahulu.
 
 Aktivitas saat ini memakai prediksi deterministik, **belum menjalankan SQL pengguna**. Ini merupakan fallback aman karena platform belum memiliki runner SQL terisolasi. Penilaian formatif berlangsung di client; belum ada sertifikasi terproteksi, akun, atau sinkronisasi lintas perangkat. Tidak ada seed database aplikasi: konten diimpor statis berdasarkan stable ID.
 
-Lihat [rencana dan evidence](docs/database-path-implementation.md), [panduan authoring dan validasi](docs/database-path-authoring.md), serta [checklist 99 lesson draft](docs/database-path-remaining.md).
+Lihat [rencana dan evidence](docs/database-path-implementation.md), [panduan authoring dan validasi](docs/database-path-authoring.md), serta [checklist 96 lesson draft](docs/database-path-remaining.md).
 
 ## Fitur yang tersedia
 
@@ -79,7 +79,7 @@ src/app/                    Halaman App Router, metadata, dan CSS responsif
 src/components/             UI learning, sandbox, diagram, dan kuis
 src/components/ui/          Komponen UI dasar
 src/content/lessons.ts       Konten sumber lesson dan checkpoint berbahasa Inggris
-src/content/database/        Adapter blueprint dan konten lengkap L0–L1
+src/content/database/        Adapter blueprint dan konten lengkap L0–L1 dan L2M01
 src/lib/curriculum.ts        Aturan kelulusan dan assessment kurikulum
 src/content/messages/       Kamus terjemahan bahasa Indonesia
 src/content/messages.ts     Pemilihan terjemahan dan interpolasi teks

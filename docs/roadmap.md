@@ -13,11 +13,11 @@
 
 ## Database Zero to Master slice
 
-The new path registers all 10 levels, 40 modules and 120 canonical IDs. L0–L1 has 21 published Indonesian lessons with 129 graded questions, practice variants/edge cases, progressive hints, reflection, versioned resume and module/level assessment gates. L2–L9 remains 99 draft lessons, not available player content. SQL examples are verified on disposable PostgreSQL; the website uses prediction-based formative activities and has no arbitrary SQL runner or account-backed certification.
+The new path registers all 10 levels, 40 modules and 120 canonical IDs. L0–L1 and L2M01 have 24 published Indonesian lessons, practice variants/edge cases, progressive hints, reflection, versioned resume and module/level assessment gates. The remaining curriculum has 96 draft lessons, not available player content. SQL examples are verified on disposable PostgreSQL; the website uses prediction-based formative activities and has no arbitrary SQL runner or account-backed certification.
 
-## Recommended next milestone: L2M01 authoring
+## Recommended next milestone: L2M02 authoring
 
-Continue with Subquery/EXISTS/IN, CTE and UNION/INTERSECT/EXCEPT, following `database-path-remaining.md` and the authoring contract. Add real teaching content and grounded activities before publishing. Preserve IDs and existing progress. An isolated SQL runner is a separate future capability, not a reason to expose unrestricted database execution.
+Continue with OVER/PARTITION BY/ORDER BY, ROW_NUMBER/RANK/DENSE_RANK and LAG/LEAD/running totals, following `database-path-remaining.md` and the authoring contract. Add real teaching content and grounded activities before publishing. Preserve IDs and existing progress. An isolated SQL runner is a separate future capability, not a reason to expose unrestricted database execution.
 
 ## Later learning improvements
 

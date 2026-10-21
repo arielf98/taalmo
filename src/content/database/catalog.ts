@@ -2,10 +2,16 @@ import blueprint from "../../../curriculum/taalmo-database-zero-to-master/curric
 import foundation from "./l0.json";
 import queries from "./l1-query.json";
 import mutations from "./l1-mutation.json";
+import subqueries from "./l2-subqueries.json";
 import type { AuthoredLesson, ConceptCheck } from "./types";
 export const databasePathHref = "/learn/database-zero-to-master";
 export const databaseVersion = blueprint.version;
-const authored = [...foundation, ...queries, ...mutations] as AuthoredLesson[];
+const authored = [
+  ...foundation,
+  ...queries,
+  ...mutations,
+  ...subqueries,
+] as AuthoredLesson[];
 const byId = new Map(authored.map((lesson) => [lesson.id, lesson]));
 export const databaseLevels = blueprint.levels.map((level) => ({
   ...level,
@@ -28,6 +34,11 @@ export const databaseLessons = databaseModules.flatMap(
 export const publishedLessons = databaseLessons.filter(
   (lesson) => lesson.status === "published",
 );
+export const publishedModules = databaseModules.filter((item) =>
+  item.lessons.every((lesson) => lesson.status === "published"),
+);
+export const draftLessonCount =
+  databaseLessons.length - publishedLessons.length;
 export type DatabaseLesson = (typeof databaseLessons)[number];
 export const lessonRecordKey = (id: string, version: string) =>
   `${id}@${version}`;

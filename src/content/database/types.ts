@@ -18,7 +18,7 @@ export interface WorkedExample {
 export interface AuthoredLesson {
   id: string;
   version: string;
-  difficulty: "beginner";
+  difficulty: "beginner" | "intermediate";
   tags: string[];
   hook: string;
   objectives: string[];
