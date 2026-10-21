@@ -16,6 +16,8 @@ import { useLocale } from "@/lib/locale";
 import { lessons, labs, milestoneIds } from "@/content/lessons";
 import { Button } from "./ui/button";
 import { Quiz } from "./quiz";
+import { DatabaseFlowExplorer } from "./database-flow";
+import { databaseLessonFlowTopics } from "@/content/database/flows";
 import { useProgress } from "@/lib/progress";
 import {
   assessmentKey,
@@ -105,6 +107,7 @@ export function DatabaseEngineeringPath() {
           </div>
         </div>
         <DatabaseEngineeringCourseCard />
+        <DatabaseFlowExplorer />
         <div className="database-actions">
           <Link className="text-link" href="#database-curriculum">
             SQL &amp; Database
@@ -574,6 +577,9 @@ export function DatabaseLessonPlayer({ lesson }: { lesson: DatabaseLesson }) {
         </section>
         <section className="lesson-section">
           <span className="eyebrow">02 · LEARN</span>
+          {databaseLessonFlowTopics[lesson.id] && (
+            <DatabaseFlowExplorer topic={databaseLessonFlowTopics[lesson.id]} />
+          )}
           {content.sections.map((section) => (
             <section key={section.title}>
               <h2>{section.title}</h2>

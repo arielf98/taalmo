@@ -1,0 +1,145 @@
+.explorer {
+  min-width: 0;
+  margin: 24px 0;
+  padding: 24px;
+}
+
+.explorer h2 {
+  margin: 8px 0 16px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.diagram {
+  height: 370px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.diagram :global(.react-flow__node-default) {
+  padding: 0;
+}
+
+.nodeButton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 16px 10px;
+  border: 0;
+  border-radius: 12px;
+  color: inherit;
+  background: transparent;
+  font-family: inherit;
+}
+
+.nodeButton strong {
+  font-size: 15px;
+}
+
+.nodeButton > span:last-child {
+  color: #b7d5c9;
+  font-size: 12px;
+}
+
+.number {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: #172d35;
+  background: #a1dfc8;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  margin: 16px 0;
+  list-style: none;
+}
+
+.steps button {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--surface);
+  text-align: left;
+}
+
+.steps button[aria-current="step"] {
+  border-color: var(--green);
+  color: var(--green);
+  background: var(--mint-soft);
+}
+
+.nodeButton:focus-visible,
+.steps button:focus-visible {
+  outline: 3px solid var(--green);
+  outline-offset: 3px;
+}
+
+.nodeButton:focus-visible {
+  outline-color: #a1dfc8;
+}
+
+.detail {
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-alt);
+}
+
+.detail h3 {
+  margin: 8px 0;
+}
+
+.example {
+  max-width: 100%;
+  margin: 12px 0 0;
+  padding: 14px;
+  overflow-x: auto;
+  color: var(--ink);
+  background: var(--surface);
+  border-radius: 8px;
+  font: 13px/1.8 ui-monospace, monospace;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.sql {
+  margin: 16px 0;
+}
+
+.sql summary {
+  cursor: pointer;
+}
+
+.note {
+  margin-bottom: 0;
+}
+
+@media (max-width: 760px) {
+  .explorer {
+    padding: 16px;
+  }
+
+  .detail {
+    padding: 14px;
+  }
+
+  .actions :global(.button) {
+    white-space: normal;
+  }
+}
