@@ -2,7 +2,7 @@ import { DatabaseEngineeringPath } from "@/components/database-learning";
 export const metadata = {
   title: "Database Engineering",
   description:
-    "Satu jalur belajar Database Engineering: fondasi database, SQL, dan lab transaksi interaktif. Progres tersimpan pada perangkat ini.",
+    "One Database Engineering learning path for database foundations, SQL, and interactive transaction labs. Progress stays on this device.",
 };
 export default function DatabaseEngineeringPage() {
   return <DatabaseEngineeringPath />;

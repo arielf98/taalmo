@@ -3,6 +3,7 @@ import { lessons } from "@/content/lessons";
 import { databaseLessons, publishedLessons } from "@/content/database/catalog";
 import { DatabaseLessonPlayer } from "@/components/database-learning";
 import { Lesson } from "@/components/learning";
+import { translate } from "@/content/messages";
 export const dynamicParams = false;
 export function generateStaticParams() {
   return [...lessons, ...publishedLessons].map((l) => ({ slug: l.id }));
@@ -14,10 +15,12 @@ export async function generateMetadata({
 }) {
   const { slug } = await params;
   return {
-    title:
+    title: translate(
       lessons.find((l) => l.id === slug)?.title ??
-      publishedLessons.find((l) => l.id === slug)?.title ??
-      "Lesson not found",
+        publishedLessons.find((l) => l.id === slug)?.title ??
+        "Lesson not found",
+      "en",
+    ),
   };
 }
 export default async function LessonPage({

@@ -14,6 +14,7 @@ import {
   databaseFlows,
   type DatabaseFlowTopic,
 } from "@/content/database/flows";
+import { localizedFlowLabels, useLocale } from "@/lib/locale";
 import { Button } from "./ui/button";
 import styles from "./database-flow.module.css";
 
@@ -24,22 +25,24 @@ const topics: { id: DatabaseFlowTopic; label: string }[] = [
 ];
 
 export function DatabaseFlowExplorer({ topic }: { topic?: DatabaseFlowTopic }) {
-  const [selectedTopic, setSelectedTopic] = useState<DatabaseFlowTopic>("overview");
+  const { locale, t } = useLocale();
+  const [selectedTopic, setSelectedTopic] =
+    useState<DatabaseFlowTopic>("overview");
   const activeTopic = topic ?? selectedTopic;
   const titleId = useId();
   return (
     <section
       className={`card ${styles.explorer}`}
-      lang="id"
+      lang={locale}
       aria-labelledby={titleId}
     >
-      <span className="eyebrow">PAHAMI LEWAT ALUR VISUAL</span>
-      <h2 id={titleId}>{databaseFlows[activeTopic].title}</h2>
+      <span className="eyebrow">{t("PAHAMI LEWAT ALUR VISUAL")}</span>
+      <h2 id={titleId}>{t(databaseFlows[activeTopic].title)}</h2>
       {!topic && (
         <div
           className={styles.actions}
           role="group"
-          aria-label="Pilih topik diagram"
+          aria-label={t("Pilih topik diagram")}
         >
           {topics.map((item) => (
             <Button
@@ -48,7 +51,7 @@ export function DatabaseFlowExplorer({ topic }: { topic?: DatabaseFlowTopic }) {
               aria-pressed={activeTopic === item.id}
               onClick={() => setSelectedTopic(item.id)}
             >
-              {item.label}
+              {t(item.label)}
             </Button>
           ))}
         </div>
@@ -59,6 +62,7 @@ export function DatabaseFlowExplorer({ topic }: { topic?: DatabaseFlowTopic }) {
 }
 
 function DatabaseFlowWalkthrough({ topic }: { topic: DatabaseFlowTopic }) {
+  const { t } = useLocale();
   const [step, setStep] = useState(0);
   const detailId = useId();
   const flow = databaseFlows[topic];
@@ -70,7 +74,11 @@ function DatabaseFlowWalkthrough({ topic }: { topic: DatabaseFlowTopic }) {
       y: index < 3 ? 0 : 180,
     },
     sourcePosition:
-      index === 2 ? Position.Bottom : index > 2 ? Position.Left : Position.Right,
+      index === 2
+        ? Position.Bottom
+        : index > 2
+          ? Position.Left
+          : Position.Right,
     targetPosition:
       index === 3 ? Position.Top : index > 3 ? Position.Right : Position.Left,
     className: index === step ? "node-active" : "",
@@ -83,8 +91,8 @@ function DatabaseFlowWalkthrough({ topic }: { topic: DatabaseFlowTopic }) {
           aria-controls={detailId}
         >
           <span className={styles.number}>{index + 1}</span>
-          <strong>{item.title}</strong>
-          <span>{item.subtitle}</span>
+          <strong>{t(item.title)}</strong>
+          <span>{t(item.subtitle)}</span>
         </button>
       ),
     },
@@ -94,7 +102,7 @@ function DatabaseFlowWalkthrough({ topic }: { topic: DatabaseFlowTopic }) {
     source: String(index),
     target: String(index + 1),
     type: "smoothstep",
-    label: item.connection,
+    label: item.connection ? t(item.connection) : undefined,
     markerEnd: { type: MarkerType.ArrowClosed, color: "#a1dfc8" },
     style: { stroke: "#a1dfc8", strokeWidth: step === index + 1 ? 3 : 1.5 },
     labelStyle: { fill: "#e4eeea", fontSize: 12 },
@@ -102,16 +110,16 @@ function DatabaseFlowWalkthrough({ topic }: { topic: DatabaseFlowTopic }) {
   }));
   return (
     <>
-      <p>{flow.description}</p>
+      <p>{t(flow.description)}</p>
       <p className="small muted">
-        Klik kotak untuk membaca penjelasan, atau ikuti tombol langkah di bawah.
-        Diagram bisa digeser dan diperbesar; daftar langkah juga bisa dipakai
-        dengan keyboard.
+        {t(
+          "Klik kotak untuk membaca penjelasan, atau ikuti tombol langkah di bawah. Diagram bisa digeser dan diperbesar; daftar langkah juga bisa dipakai dengan keyboard.",
+        )}
       </p>
       <div
         className={`architecture ${styles.diagram}`}
         role="region"
-        aria-label={flow.title}
+        aria-label={t(flow.title)}
       >
         <ReactFlow
           nodes={nodes}
@@ -129,18 +137,13 @@ function DatabaseFlowWalkthrough({ topic }: { topic: DatabaseFlowTopic }) {
           deleteKeyCode={null}
           zoomOnScroll={false}
           preventScrolling={false}
-          ariaLabelConfig={{
-            "controls.ariaLabel": "Kontrol diagram",
-            "controls.zoomIn.ariaLabel": "Perbesar diagram",
-            "controls.zoomOut.ariaLabel": "Perkecil diagram",
-            "controls.fitView.ariaLabel": "Tampilkan seluruh diagram",
-          }}
+          ariaLabelConfig={localizedFlowLabels(t)}
         >
           <Background color="#385359" gap={19} />
           <Controls showInteractive={false} />
         </ReactFlow>
       </div>
-      <ol className={styles.steps} aria-label="Langkah diagram">
+      <ol className={styles.steps} aria-label={t("Langkah diagram")}>
         {flow.steps.map((item, index) => (
           <li key={item.title}>
             <button
@@ -149,52 +152,65 @@ function DatabaseFlowWalkthrough({ topic }: { topic: DatabaseFlowTopic }) {
               aria-controls={detailId}
               onClick={() => setStep(index)}
             >
-              {index + 1}. {item.title}
+              {index + 1}. {t(item.title)}
             </button>
           </li>
         ))}
       </ol>
-      <div id={detailId} className={styles.detail} role="status" aria-atomic="true">
+      <div
+        id={detailId}
+        className={styles.detail}
+        role="status"
+        aria-atomic="true"
+      >
         <span className="eyebrow">
-          LANGKAH {step + 1} DARI {flow.steps.length}
+          {t("LANGKAH {0} DARI {1}", [step + 1, flow.steps.length])}
         </span>
-        <h3>{activeStep.title}</h3>
-        <p>{activeStep.explanation}</p>
-        <pre className={styles.example} tabIndex={0} aria-label="Contoh data langkah ini">
-          <code>{activeStep.example}</code>
+        <h3>{t(activeStep.title)}</h3>
+        <p>{t(activeStep.explanation)}</p>
+        <pre
+          className={styles.example}
+          tabIndex={0}
+          aria-label={t("Contoh data langkah ini")}
+        >
+          <code>{t(activeStep.example)}</code>
         </pre>
       </div>
       <div
         className={styles.actions}
         role="group"
-        aria-label="Navigasi langkah diagram"
+        aria-label={t("Navigasi langkah diagram")}
       >
         <Button
           variant="outline"
           disabled={step === 0}
           onClick={() => setStep(step - 1)}
         >
-          Sebelumnya
+          {t("Sebelumnya")}
         </Button>
         <Button
           disabled={step === flow.steps.length - 1}
           onClick={() => setStep(step + 1)}
         >
-          Berikutnya
+          {t("Berikutnya")}
         </Button>
         <Button variant="ghost" onClick={() => setStep(0)}>
-          Ulangi
+          {t("Ulangi")}
         </Button>
       </div>
       {flow.sql && (
         <details className={styles.sql}>
-          <summary>Lihat SQL lengkap untuk diagram ini</summary>
-          <pre className={styles.example} tabIndex={0} aria-label="Query lengkap diagram">
+          <summary>{t("Lihat SQL lengkap untuk diagram ini")}</summary>
+          <pre
+            className={styles.example}
+            tabIndex={0}
+            aria-label={t("Query lengkap diagram")}
+          >
             <code>{flow.sql}</code>
           </pre>
         </details>
       )}
-      <p className={`small muted ${styles.note}`}>{flow.note}</p>
+      <p className={`small muted ${styles.note}`}>{t(flow.note)}</p>
     </>
   );
 }

@@ -58,17 +58,21 @@ export function DatabaseEngineeringCourseCard() {
     labs[0];
   const resumeHref = "href" in resume ? resume.href : `/lessons/${resume.id}`;
   return (
-    <section className="card database-course-card" lang="id">
-      <Badge>DATABASE ENGINEERING · POSTGRESQL</Badge>
-      <h2>Database Engineering</h2>
+    <section className="card database-course-card" lang={locale}>
+      <Badge>{t("DATABASE ENGINEERING · POSTGRESQL")}</Badge>
+      <h2>{t("Database Engineering")}</h2>
       <p>
-        Satu jalur untuk fondasi database, SQL, dan praktik transaksi. Pelajari
-        materi bertahap, lalu eksplorasi concurrency melalui lab interaktif.
+        {t(
+          "Satu jalur untuk fondasi database, SQL, dan praktik transaksi. Pelajari materi bertahap, lalu eksplorasi concurrency melalui lab interaktif.",
+        )}
       </p>
       <p>
-        {pathProgress.completedMilestones} / {pathProgress.totalMilestones}{" "}
-        aktivitas selesai · {pathProgress.totalLessons} lesson · {labs.length}{" "}
-        lab interaktif
+        {t("{0} / {1} aktivitas selesai · {2} lesson · {3} lab interaktif", [
+          pathProgress.completedMilestones,
+          pathProgress.totalMilestones,
+          pathProgress.totalLessons,
+          labs.length,
+        ])}
       </p>
       <div className="database-actions">
         <Button asChild>
@@ -77,7 +81,7 @@ export function DatabaseEngineeringCourseCard() {
           </Link>
         </Button>
         <Link className="text-link" href={resumeHref}>
-          Lanjutkan: {resume.title}
+          {t("Lanjutkan: {0}", [t(resume.title)])}
         </Link>
       </div>
     </section>
@@ -85,24 +89,25 @@ export function DatabaseEngineeringCourseCard() {
 }
 
 export function DatabaseEngineeringPath() {
+  const { t, locale } = useLocale();
   const { progress } = useProgress();
   const curriculum = progress.curriculum ?? emptyCurriculum();
   return (
     <Workspace>
-      <div className="database-path" lang="id">
+      <div className="database-path" lang={locale}>
         <div className="breadcrumb">
-          <Link href="/dashboard">Pembelajaran saya</Link>
+          <Link href="/dashboard">{t("Pembelajaran saya")}</Link>
           <ChevronRight size={13} />
-          Database Engineering
+          {t("Database Engineering")}
         </div>
         <div className="page-heading">
           <div>
-            <Badge>POSTGRESQL · VERSI {databaseVersion}</Badge>
-            <h1>Database Engineering</h1>
+            <Badge>{t("POSTGRESQL · VERSI {0}", [databaseVersion])}</Badge>
+            <h1>{t("Database Engineering")}</h1>
             <p>
-              Fondasi SQL, perancangan database, dan lab transaksi dalam satu
-              jalur Database Engineering. Belajar berdasarkan penguasaan, tanpa
-              menunggu kalender.
+              {t(
+                "Fondasi SQL, perancangan database, dan lab transaksi dalam satu jalur Database Engineering. Belajar berdasarkan penguasaan, tanpa menunggu kalender.",
+              )}
             </p>
           </div>
         </div>
@@ -110,19 +115,23 @@ export function DatabaseEngineeringPath() {
         <DatabaseFlowExplorer />
         <div className="database-actions">
           <Link className="text-link" href="#database-curriculum">
-            SQL &amp; Database
+            {t("SQL & Database")}
           </Link>
           <Link className="text-link" href="#transaction-labs">
-            Transaction Labs
+            {t("Transaction Labs")}
           </Link>
         </div>
         <p className="simulation-notice" id="database-curriculum">
-          Kurikulum database: {publishedModules.length} modul,{" "}
-          {publishedLessons.length} lesson tersedia; {draftLessonCount} lesson
-          masih draft. Ditambah {lessons.length} lesson transaksi dan{" "}
-          {labs.length} lab interaktif. Aktivitas kurikulum memakai prediksi
-          hasil dan analisis skenario; aplikasi belum mengeksekusi SQL pengguna.
-          Progres untuk learner browser ini, tanpa sinkronisasi akun.
+          {t(
+            "Kurikulum database: {0} modul, {1} lesson tersedia; {2} lesson masih draft. Ditambah {3} lesson transaksi dan {4} lab interaktif. Aktivitas kurikulum memakai prediksi hasil dan analisis skenario; aplikasi belum mengeksekusi SQL pengguna. Progres untuk learner browser ini, tanpa sinkronisasi akun.",
+            [
+              publishedModules.length,
+              publishedLessons.length,
+              draftLessonCount,
+              lessons.length,
+              labs.length,
+            ],
+          )}
         </p>
         <Diagnostic />
         {databaseLevels.map((level) => (
@@ -134,20 +143,23 @@ export function DatabaseEngineeringPath() {
             <div className="section-heading compact">
               <div>
                 <span className="eyebrow">
-                  {level.id.toUpperCase()} · REKOMENDASI MINGGU{" "}
-                  {level.suggested_weeks.from}–{level.suggested_weeks.through}
+                  {t("{0} · REKOMENDASI MINGGU {1}–{2}", [
+                    level.id.toUpperCase(),
+                    level.suggested_weeks.from,
+                    level.suggested_weeks.through,
+                  ])}
                 </span>
-                <h2 id={`title-${level.id}`}>{level.title}</h2>
-                <p>{level.goal}</p>
+                <h2 id={`title-${level.id}`}>{t(level.title)}</h2>
+                <p>{t(level.goal)}</p>
               </div>
               <Badge tone={levelPassed(level.id, curriculum) ? "mint" : "gray"}>
                 {levelPassed(level.id, curriculum)
-                  ? "LEVEL LULUS"
+                  ? t("LEVEL LULUS")
                   : level.modules.every((module) =>
                         module.lessons.every((lesson) => lesson.content),
                       )
-                    ? "TERSEDIA"
-                    : "DRAFT"}
+                    ? t("TERSEDIA")
+                    : t("DRAFT")}
               </Badge>
             </div>
             {level.modules.map((module) => {
@@ -164,10 +176,10 @@ export function DatabaseEngineeringPath() {
                   <div className="section-heading compact">
                     <div>
                       <span className="eyebrow">
-                        {module.id.toUpperCase()} · {module.scenario}
+                        {module.id.toUpperCase()} · {t(module.scenario)}
                       </span>
-                      <h3>{module.title}</h3>
-                      <p>{module.objective}</p>
+                      <h3>{t(module.title)}</h3>
+                      <p>{t(module.objective)}</p>
                     </div>
                     <Badge
                       tone={
@@ -175,25 +187,27 @@ export function DatabaseEngineeringPath() {
                       }
                     >
                       {modulePassed(module.id, curriculum)
-                        ? "LULUS"
+                        ? t("LULUS")
                         : available
-                          ? "MATERI TERSEDIA"
-                          : "DRAFT"}
+                          ? t("MATERI TERSEDIA")
+                          : t("DRAFT")}
                     </Badge>
                   </div>
                   <p className="small muted">
-                    Prasyarat sertifikasi:{" "}
+                    {t("Prasyarat sertifikasi:")}{" "}
                     {module.prerequisite_module_ids.length
                       ? module.prerequisite_module_ids.map((id) => (
                           <Link key={id} href={`#${id}`}>
                             {id.toUpperCase()}{" "}
                           </Link>
                         ))
-                      : "tidak ada"}
+                      : t("tidak ada")}
                     .{" "}
                     {unlocked
-                      ? "Progres resmi terbuka."
-                      : "Teori dapat dijelajahi; luluskan prasyarat untuk mencatat kelulusan."}
+                      ? t("Progres resmi terbuka.")
+                      : t(
+                          "Teori dapat dijelajahi; luluskan prasyarat untuk mencatat kelulusan.",
+                        )}
                   </p>
                   <ol className="database-lesson-list">
                     {module.lessons.map((lesson) => (
@@ -202,13 +216,16 @@ export function DatabaseEngineeringPath() {
                           <Link href={`/lessons/${lesson.id}`}>
                             <BookOpen size={17} />
                             <span>
-                              <strong>{lesson.title}</strong>
+                              <strong>{t(lesson.title)}</strong>
                               <small>
-                                {lesson.id} · {lesson.estimated_minutes} menit
+                                {t("{0} · {1} menit", [
+                                  lesson.id,
+                                  lesson.estimated_minutes,
+                                ])}
                               </small>
                             </span>
                             {lessonPassed(lesson, curriculum) ? (
-                              <Check size={17} aria-label="Selesai" />
+                              <Check size={17} aria-label={t("Selesai")} />
                             ) : (
                               <ChevronRight size={17} />
                             )}
@@ -216,12 +233,14 @@ export function DatabaseEngineeringPath() {
                         ) : (
                           <div className="draft-lesson">
                             <span>
-                              {lesson.title}
+                              {t(lesson.title)}
                               <small>
-                                {lesson.id} · materi belum diterbitkan
+                                {t("{0} · materi belum diterbitkan", [
+                                  lesson.id,
+                                ])}
                               </small>
                             </span>
-                            <Badge tone="gray">DRAFT</Badge>
+                            <Badge tone="gray">{t("DRAFT")}</Badge>
                           </div>
                         )}
                       </li>
@@ -230,7 +249,7 @@ export function DatabaseEngineeringPath() {
                   {available && (
                     <Assessment
                       id={module.id}
-                      title={`Checkpoint ${module.id.toUpperCase()}`}
+                      title={t("Checkpoint {0}", [module.id.toUpperCase()])}
                       threshold={80}
                       enabled={
                         unlocked &&
@@ -248,7 +267,7 @@ export function DatabaseEngineeringPath() {
             ) && (
               <Assessment
                 id={level.id}
-                title={`Assessment level ${level.id.toUpperCase()}`}
+                title={t("Assessment level {0}", [level.id.toUpperCase()])}
                 threshold={85}
                 enabled={level.modules.every((module) =>
                   modulePassed(module.id, curriculum),
@@ -383,13 +402,15 @@ function TransactionLessons() {
   );
 }
 function Diagnostic() {
+  const { t } = useLocale();
   const [result, setResult] = useState<number | null>(null);
   return (
     <details className="card database-module">
-      <summary>Diagnostic opsional untuk learner berpengalaman</summary>
+      <summary>{t("Diagnostic opsional untuk learner berpengalaman")}</summary>
       <p>
-        Gunakan hasil ini untuk memilih teori yang perlu diulang. Diagnostic
-        tidak memberikan kelulusan atau melewati pemeriksaan keselamatan.
+        {t(
+          "Gunakan hasil ini untuk memilih teori yang perlu diulang. Diagnostic tidak memberikan kelulusan atau melewati pemeriksaan keselamatan.",
+        )}
       </p>
       <Quiz
         id="database-diagnostic"
@@ -406,8 +427,12 @@ function Diagnostic() {
       {result !== null && (
         <p role="status">
           {result === 1
-            ? "Mulai eksplorasi JOIN dan kardinalitas di L1M03 jika teori dasar sudah dikuasai. Tetap selesaikan seluruh aktivitas dan safety check untuk sertifikasi."
-            : "Mulai dari L0M01, lalu pelajari proyeksi dan JOIN secara berurutan."}
+            ? t(
+                "Mulai eksplorasi JOIN dan kardinalitas di L1M03 jika teori dasar sudah dikuasai. Tetap selesaikan seluruh aktivitas dan safety check untuk sertifikasi.",
+              )
+            : t(
+                "Mulai dari L0M01, lalu pelajari proyeksi dan JOIN secara berurutan.",
+              )}
         </p>
       )}
     </details>
@@ -425,6 +450,7 @@ function Assessment({
   threshold: number;
   enabled: boolean;
 }) {
+  const { t } = useLocale();
   const learning = useProgress();
   const curriculum = learning.progress.curriculum ?? emptyCurriculum();
   const key = assessmentKey(id);
@@ -441,12 +467,17 @@ function Assessment({
   return (
     <details className="database-assessment">
       <summary>
-        {title} · minimum {threshold}% {passed ? "· LULUS" : ""}
+        {t("{0} · minimum {1}%", [title, threshold])}{" "}
+        {passed ? t("· LULUS") : ""}
       </summary>
       <p>
         {enabled
-          ? "Jawab seluruh soal. Retake tanpa batas dengan urutan opsi dan pilihan soal level yang berganti. Semua soal kritis wajib benar, terpisah dari ambang skor."
-          : "Selesaikan aktivitas dan prasyarat terlebih dahulu. Teori tetap dapat dibaca."}
+          ? t(
+              "Jawab seluruh soal. Retake tanpa batas dengan urutan opsi dan pilihan soal level yang berganti. Semua soal kritis wajib benar, terpisah dari ambang skor.",
+            )
+          : t(
+              "Selesaikan aktivitas dan prasyarat terlebih dahulu. Teori tetap dapat dibaca.",
+            )}
       </p>
       {enabled && (
         <>
@@ -462,9 +493,11 @@ function Assessment({
             />
           ))}
           <p role="status">
-            Skor upaya saat ini: {result.score.toFixed(1)}% · Pemeriksaan kritis{" "}
-            {result.criticalPassed ? "lolos" : "belum lolos"}
-            {passed ? " · Kelulusan terdahulu tersimpan" : ""}
+            {t("Skor upaya saat ini: {0}% · Pemeriksaan kritis {1}", [
+              result.score.toFixed(1),
+              t(result.criticalPassed ? "lolos" : "belum lolos"),
+            ])}
+            {passed ? t(" · Kelulusan terdahulu tersimpan") : ""}
           </p>
           <div className="database-actions">
             <Button
@@ -475,21 +508,22 @@ function Assessment({
               }
               onClick={() => setError(!learning.finishLearning(key))}
             >
-              Catat kelulusan {id.toUpperCase()}
+              {t("Catat kelulusan {0}", [id.toUpperCase()])}
             </Button>
             <Button
               variant="outline"
               onClick={() => setError(!learning.retryLearning(key))}
             >
-              Upaya baru
+              {t("Upaya baru")}
             </Button>
           </div>
         </>
       )}
       {error && (
         <p role="alert">
-          Browser tidak dapat menyimpan progres. Aktifkan local storage agar
-          kelulusan bertahan.
+          {t(
+            "Browser tidak dapat menyimpan progres. Aktifkan local storage agar kelulusan bertahan.",
+          )}
         </p>
       )}
     </details>
@@ -497,6 +531,7 @@ function Assessment({
 }
 
 export function DatabaseLessonPlayer({ lesson }: { lesson: DatabaseLesson }) {
+  const { t, locale } = useLocale();
   const learning = useProgress();
   const curriculum = learning.progress.curriculum ?? emptyCurriculum();
   const { resumeLearning } = learning;
@@ -538,68 +573,73 @@ export function DatabaseLessonPlayer({ lesson }: { lesson: DatabaseLesson }) {
   );
   return (
     <Workspace>
-      <article className="database-reader" lang="id">
+      <article className="database-reader" lang={locale}>
         <div className="breadcrumb">
-          <Link href={databasePathHref}>Database Engineering</Link>
+          <Link href={databasePathHref}>{t("Database Engineering")}</Link>
           <ChevronRight size={13} />
           {lesson.id.toUpperCase()}
         </div>
         <div className="lesson-heading">
           <Badge>
             {lesson.levelId.toUpperCase()} · {lesson.moduleId.toUpperCase()} ·{" "}
-            {content.difficulty === "intermediate" ? "MENENGAH" : "PEMULA"}
+            {content.difficulty === "intermediate"
+              ? t("MENENGAH")
+              : t("PEMULA")}
           </Badge>
-          <h1>{lesson.title}</h1>
+          <h1>{t(lesson.title)}</h1>
           <p>
-            {lesson.estimated_minutes} menit · versi {content.version} ·{" "}
-            {content.tags.join(" · ")}
+            {t("{0} menit · versi {1}", [
+              lesson.estimated_minutes,
+              content.version,
+            ])}{" "}
+            · {content.tags.map((tag) => t(tag)).join(" · ")}
           </p>
           <p className="small muted">
-            Materi jalur ini tersedia dalam bahasa Indonesia. Pemilih bahasa
-            mengatur antarmuka platform.
+            {t("Materi dan antarmuka mengikuti bahasa yang Anda pilih.")}
           </p>
         </div>
         {!unlocked && (
           <p className="simulation-notice">
-            Eksplorasi teori terbuka. Selesaikan modul prasyarat untuk mencatat
-            kelulusan resmi lesson ini.
+            {t(
+              "Eksplorasi teori terbuka. Selesaikan modul prasyarat untuk mencatat kelulusan resmi lesson ini.",
+            )}
           </p>
         )}
         <section className="lesson-section">
-          <span className="eyebrow">01 · PROBLEM</span>
-          <h2>Masalah yang akan dipecahkan</h2>
-          <p>{content.hook}</p>
+          <span className="eyebrow">{t("01 · PROBLEM")}</span>
+          <h2>{t("Masalah yang akan dipecahkan")}</h2>
+          <p>{t(content.hook)}</p>
           <ul>
             {content.objectives.map((objective) => (
-              <li key={objective}>{objective}</li>
+              <li key={objective}>{t(objective)}</li>
             ))}
           </ul>
         </section>
         <section className="lesson-section">
-          <span className="eyebrow">02 · LEARN</span>
+          <span className="eyebrow">{t("02 · LEARN")}</span>
           {databaseLessonFlowTopics[lesson.id] && (
             <DatabaseFlowExplorer topic={databaseLessonFlowTopics[lesson.id]} />
           )}
           {content.sections.map((section) => (
             <section key={section.title}>
-              <h2>{section.title}</h2>
+              <h2>{t(section.title)}</h2>
               {section.paragraphs.map((paragraph, index) => (
-                <p key={index}>{paragraph}</p>
+                <p key={index}>{t(paragraph)}</p>
               ))}
             </section>
           ))}
         </section>
         <section className="lesson-section">
-          <span className="eyebrow">03 · WORKED EXAMPLE</span>
-          <h2>Baca input, telusuri hasil</h2>
+          <span className="eyebrow">{t("03 · WORKED EXAMPLE")}</span>
+          <h2>{t("Baca input, telusuri hasil")}</h2>
           <p>
-            Dataset School Finance v1: 6 siswa, 10 invoice, 11 pembayaran. Nilai
-            uang dalam rupiah. Hanya pembayaran succeeded dihitung sebagai
-            penerimaan. Tanggal acuan di contoh selalu tetap.
+            {t(
+              "Dataset School Finance v1: 6 siswa, 10 invoice, 11 pembayaran. Nilai uang dalam rupiah. Hanya pembayaran succeeded dihitung sebagai penerimaan. Tanggal acuan di contoh selalu tetap.",
+            )}
           </p>
           {content.worked.setupSql && (
             <>
-              <h3>Setup contoh terisolasi</h3>
+              <h3>{t("Setup contoh terisolasi")}</h3>
               <pre className="code-block">
                 <code>{content.worked.setupSql}</code>
               </pre>
@@ -610,7 +650,7 @@ export function DatabaseLessonPlayer({ lesson }: { lesson: DatabaseLesson }) {
           </pre>
           <div className="table-scroll">
             <table>
-              <caption>Hasil contoh PostgreSQL</caption>
+              <caption>{t("Hasil contoh PostgreSQL")}</caption>
               <thead>
                 <tr>
                   {content.worked.columns.map((column) => (
@@ -629,17 +669,17 @@ export function DatabaseLessonPlayer({ lesson }: { lesson: DatabaseLesson }) {
               </tbody>
             </table>
           </div>
-          <p>{content.worked.explanation}</p>
+          <p>{t(content.worked.explanation)}</p>
           <p className="small muted">
-            Contoh SQL untuk database latihan disposable. Halaman ini
-            menggunakan prediksi hasil; SQL tidak dieksekusi di browser atau
-            database bersama.
+            {t(
+              "Contoh SQL untuk database latihan disposable. Halaman ini menggunakan prediksi hasil; SQL tidak dieksekusi di browser atau database bersama.",
+            )}
           </p>
         </section>
         <section className="lesson-section">
-          <span className="eyebrow">04 · TRY</span>
-          <h2>{content.activity.prompt}</h2>
-          <p>{content.activity.setup}</p>
+          <span className="eyebrow">{t("04 · TRY")}</span>
+          <h2>{t(content.activity.prompt)}</h2>
+          <p>{t(content.activity.setup)}</p>
           <pre className="code-block">
             <code>{content.activity.starterSql}</code>
           </pre>
@@ -650,46 +690,56 @@ export function DatabaseLessonPlayer({ lesson }: { lesson: DatabaseLesson }) {
               disabled={(hint >= 2 && !tried) || hint >= 3}
               onClick={() => setHint((value) => value + 1)}
             >
-              Buka hint {Math.min(hint + 1, 3)}
+              {t("Buka hint {0}", [Math.min(hint + 1, 3)])}
             </Button>
             {hint >= 2 && !tried && (
-              <p>Coba kirim satu jawaban aktivitas sebelum membuka solusi.</p>
+              <p>
+                {t("Coba kirim satu jawaban aktivitas sebelum membuka solusi.")}
+              </p>
             )}
             {content.activity.hints
               .slice(0, Math.min(hint, tried ? 3 : 2))
               .map((text, index) => (
                 <p key={index}>
-                  <strong>Hint {index + 1}:</strong> {text}
+                  <strong>
+                    {t("Hint ")}
+                    {index + 1}:
+                  </strong>{" "}
+                  {t(text)}
                 </p>
               ))}
             {tried && (
               <details>
-                <summary>Solusi dan pembahasan sesudah upaya</summary>
+                <summary>{t("Solusi dan pembahasan sesudah upaya")}</summary>
                 <pre className="code-block">
                   <code>{content.activity.solutionSql}</code>
                 </pre>
-                <p>{content.activity.solutionExplanation}</p>
+                <p>{t(content.activity.solutionExplanation)}</p>
               </details>
             )}
           </div>
         </section>
         <section className="lesson-section">
-          <span className="eyebrow">05 · BREAK / EDGE CASE</span>
-          <h2>Uji batas pemahaman</h2>
+          <span className="eyebrow">{t("05 · BREAK / EDGE CASE")}</span>
+          <h2>{t("Uji batas pemahaman")}</h2>
           <p>
             {content.activity.critical
-              ? "Pemeriksaan ini kritis untuk integritas data. Semua kasus wajib benar."
-              : "Kedua kasus wajib benar agar kelulusan mencerminkan batas konsep, bukan hanya happy path."}
+              ? t(
+                  "Pemeriksaan ini kritis untuk integritas data. Semua kasus wajib benar.",
+                )
+              : t(
+                  "Kedua kasus wajib benar agar kelulusan mencerminkan batas konsep, bukan hanya happy path.",
+                )}
           </p>
           {content.activity.edgeCases.map(check)}
         </section>
         <section className="lesson-section">
-          <span className="eyebrow">06 · EXPLAIN WHY</span>
-          <h2>Checkpoint konsep</h2>
+          <span className="eyebrow">{t("06 · EXPLAIN WHY")}</span>
+          <h2>{t("Checkpoint konsep")}</h2>
           {content.checks.map(check)}
           <div className="database-reflection">
             <label htmlFor={`${lesson.id}-reflection`}>
-              {content.reflection}
+              {t(content.reflection)}
             </label>
             <textarea
               id={`${lesson.id}-reflection`}
@@ -707,16 +757,19 @@ export function DatabaseLessonPlayer({ lesson }: { lesson: DatabaseLesson }) {
             />
           </div>
           <p className="small muted">
-            Refleksi dicatat untuk Anda tinjau ulang; kualitas argumen tidak
-            dinilai otomatis.
+            {t(
+              "Refleksi dicatat untuk Anda tinjau ulang; kualitas argumen tidak dinilai otomatis.",
+            )}
           </p>
         </section>
         <section className="card database-completion">
-          <h2>Complete</h2>
+          <h2>{t("Complete")}</h2>
           <p role="status">
             {done
-              ? "Lesson lulus. Kelulusan tersimpan untuk versi konten ini."
-              : "Selesaikan aktivitas, kedua edge case, dua concept check, dan tulis refleksi. Membaca atau menekan Next tidak memberikan kelulusan."}
+              ? t("Lesson lulus. Kelulusan tersimpan untuk versi konten ini.")
+              : t(
+                  "Selesaikan aktivitas, semua edge case, seluruh concept check, dan tulis refleksi. Membaca atau menekan Next tidak memberikan kelulusan.",
+                )}
           </p>
           <div className="database-actions">
             <Button
@@ -726,7 +779,7 @@ export function DatabaseLessonPlayer({ lesson }: { lesson: DatabaseLesson }) {
                 learning.resumeLearning(next?.id ?? lesson.id);
               }}
             >
-              Catat lesson selesai
+              {t("Catat lesson selesai")}
             </Button>
             <Button
               variant="outline"
@@ -735,25 +788,28 @@ export function DatabaseLessonPlayer({ lesson }: { lesson: DatabaseLesson }) {
                 setError(!learning.retryLearning(key));
               }}
             >
-              Ulangi dengan varian lain
+              {t("Ulangi dengan varian lain")}
             </Button>
           </div>
           {error && (
             <p role="alert">
-              Browser tidak dapat menyimpan progres. Aktifkan local storage;
-              kelulusan belum tersimpan.
+              {t(
+                "Browser tidak dapat menyimpan progres. Aktifkan local storage; kelulusan belum tersimpan.",
+              )}
             </p>
           )}
         </section>
-        <nav className="lesson-pagination" aria-label="Navigasi lesson">
+        <nav className="lesson-pagination" aria-label={t("Navigasi lesson")}>
           <Link href={`${databasePathHref}#${lesson.moduleId}`}>
-            ← Modul dan checkpoint
+            {t("← Modul dan checkpoint")}
           </Link>
           {next ? (
-            <Link href={`/lessons/${next.id}`}>Next: {next.title} →</Link>
+            <Link href={`/lessons/${next.id}`}>
+              {t("Next:")} {t(next.title)} →
+            </Link>
           ) : (
             <Link href={`${databasePathHref}#${lesson.moduleId}`}>
-              Assessment dan kelanjutan draft →
+              {t("Assessment dan kelanjutan draft →")}
             </Link>
           )}
         </nav>

@@ -3,9 +3,11 @@ import foundation from "../../src/content/database/l0.json" with { type: "json" 
 import queries from "../../src/content/database/l1-query.json" with { type: "json" };
 import mutations from "../../src/content/database/l1-mutation.json" with { type: "json" };
 import subqueries from "../../src/content/database/l2-subqueries.json" with { type: "json" };
+import { translate } from "../../src/content/messages";
 import type { ConceptCheck } from "../../src/content/database/types";
 const content = [...foundation, ...queries, ...mutations, ...subqueries];
 const path = "/learn/database-engineering";
+const english = (message: string) => translate(message, "en");
 async function answer(
   scope: Page | Locator,
   question: ConceptCheck,
@@ -13,9 +15,12 @@ async function answer(
 ) {
   const quiz = scope
     .getByRole("region", { name: "Knowledge checkpoint" })
-    .filter({ hasText: question.question });
+    .filter({ hasText: english(question.question) });
   await quiz
-    .getByRole("button", { name: question.options[index], exact: true })
+    .getByRole("button", {
+      name: english(question.options[index]),
+      exact: true,
+    })
     .click();
   await quiz.getByRole("button", { name: "Check answer" }).click();
 }
@@ -33,7 +38,7 @@ test("complete published lessons, module and level gates, resume, and preserve m
       .first(),
   ).toBeVisible();
   await expect(
-    page.getByText("Kurikulum database: 8 modul, 24 lesson tersedia;", {
+    page.getByText("Database curriculum: 8 modules, 24 lessons available;", {
       exact: false,
     }),
   ).toBeVisible();
@@ -44,25 +49,30 @@ test("complete published lessons, module and level gates, resume, and preserve m
     for (const lesson of lessons) {
       await page.goto(`/lessons/${lesson.id}`);
       const complete = page.getByRole("button", {
-        name: "Catat lesson selesai",
+        name: "Record lesson completion",
         exact: true,
       });
       await expect(complete).toBeDisabled();
       await expect(
-        page.getByText("Solusi dan pembahasan sesudah upaya", { exact: true }),
+        page.getByText("Solution and explanation after an attempt", {
+          exact: true,
+        }),
       ).toHaveCount(0);
       if (lesson.id === "l0m01l01") {
-        await page.getByRole("button", { name: "Buka hint 1" }).click();
-        await page.getByRole("button", { name: "Buka hint 2" }).click();
+        await page.getByRole("button", { name: "Open hint 1" }).click();
+        await page.getByRole("button", { name: "Open hint 2" }).click();
         await expect(
-          page.getByRole("button", { name: "Buka hint 3" }),
+          page.getByRole("button", { name: "Open hint 3" }),
         ).toBeDisabled();
         const q = lesson.activity.variants[0];
         await answer(page, q, (q.answer + 1) % q.options.length);
         await expect(
-          page.getByText(q.feedback[(q.answer + 1) % q.options.length], {
-            exact: true,
-          }),
+          page.getByText(
+            english(q.feedback[(q.answer + 1) % q.options.length]),
+            {
+              exact: true,
+            },
+          ),
         ).toBeVisible();
         await expect(complete).toBeDisabled();
       }
@@ -74,7 +84,7 @@ test("complete published lessons, module and level gates, resume, and preserve m
         await answer(page, q);
       await expect(complete).toBeDisabled();
       await page
-        .getByLabel(lesson.reflection, { exact: true })
+        .getByLabel(english(lesson.reflection), { exact: true })
         .fill(
           "Saya memakai grain yang tepat, memeriksa batas data dan tidak menyamakan hasil satu kasus dengan semua kemungkinan.",
         );
@@ -82,18 +92,18 @@ test("complete published lessons, module and level gates, resume, and preserve m
       await complete.click();
       await expect(
         page.getByText(
-          "Lesson lulus. Kelulusan tersimpan untuk versi konten ini.",
+          "Lesson passed. Completion is saved for this content version.",
           { exact: true },
         ),
       ).toBeVisible();
       if (lesson.id === "l0m01l01") {
         await page.reload();
         await expect(
-          page.getByLabel(lesson.reflection, { exact: true }),
+          page.getByLabel(english(lesson.reflection), { exact: true }),
         ).not.toHaveValue("");
         await expect(
           page.getByText(
-            "Lesson lulus. Kelulusan tersimpan untuk versi konten ini.",
+            "Lesson passed. Completion is saved for this content version.",
             { exact: true },
           ),
         ).toBeVisible();
@@ -105,7 +115,7 @@ test("complete published lessons, module and level gates, resume, and preserve m
     await exam.locator("summary").click();
     const qs = lessons.flatMap((lesson) => lesson.checks);
     const certify = exam.getByRole("button", {
-      name: `Catat kelulusan ${moduleId.toUpperCase()}`,
+      name: `Record completion for ${moduleId.toUpperCase()}`,
       exact: true,
     });
     if (moduleId === "l0m01") {
@@ -133,11 +143,11 @@ test("complete published lessons, module and level gates, resume, and preserve m
     }
     await exam
       .getByRole("button", {
-        name: `Catat kelulusan ${moduleId.toUpperCase()}`,
+        name: `Record completion for ${moduleId.toUpperCase()}`,
         exact: true,
       })
       .click();
-    await expect(exam.locator("summary")).toContainText("LULUS");
+    await expect(exam.locator("summary")).toContainText("PASSED");
     if (moduleId === "l0m02" || moduleId === "l1m05") {
       const levelId = moduleId.slice(0, 2);
       const level = page
@@ -150,7 +160,7 @@ test("complete published lessons, module and level gates, resume, and preserve m
         .map((lesson) => lesson.checks[0]);
       for (const q of levelQuestions) await answer(stage, q);
       const stageComplete = stage.getByRole("button", {
-        name: `Catat kelulusan ${levelId.toUpperCase()}`,
+        name: `Record completion for ${levelId.toUpperCase()}`,
         exact: true,
       });
       const probe =
@@ -162,32 +172,36 @@ test("complete published lessons, module and level gates, resume, and preserve m
       await answer(stage, probe);
       await stage
         .getByRole("button", {
-          name: `Catat kelulusan ${levelId.toUpperCase()}`,
+          name: `Record completion for ${levelId.toUpperCase()}`,
           exact: true,
         })
         .click();
-      await expect(stage.locator("summary")).toContainText("LULUS");
+      await expect(stage.locator("summary")).toContainText("PASSED");
     }
   }
   await page.goto("/lessons/l0m01l01");
-  await page.getByRole("button", { name: "Ulangi dengan varian lain" }).click();
+  await page
+    .getByRole("button", { name: "Retry with another variant" })
+    .click();
   await expect(
     page.getByRole("heading", {
-      name: foundation[0].activity.variants[1].question,
+      name: english(foundation[0].activity.variants[1].question),
       exact: true,
     }),
   ).toBeVisible();
   await expect(
     page.getByText(
-      "Lesson lulus. Kelulusan tersimpan untuk versi konten ini.",
+      "Lesson passed. Completion is saved for this content version.",
       { exact: true },
     ),
   ).toBeVisible();
   await expect(
-    page.getByText("Solusi dan pembahasan sesudah upaya", { exact: true }),
+    page.getByText("Solution and explanation after an attempt", {
+      exact: true,
+    }),
   ).toHaveCount(0);
   await page.goto("/dashboard");
-  await expect(page.getByRole("link", { name: /Lanjutkan:/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Continue:/ })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -205,17 +219,17 @@ test("draft routes, prerequisites, local progress compatibility and mobile acces
   await expect(level.locator(":scope > .database-assessment")).toHaveCount(0);
   await page.goto("/lessons/l2m01l01");
   await expect(
-    page.getByText("L2 · L2M01 · MENENGAH", { exact: true }),
+    page.getByText("L2 · L2M01 · INTERMEDIATE", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Catat lesson selesai" }),
+    page.getByRole("button", { name: "Record lesson completion" }),
   ).toBeDisabled();
   await page.goto("/lessons/l1m05l03");
   await expect(
-    page.getByText("Eksplorasi teori terbuka.", { exact: false }),
+    page.getByText("Theory exploration is open.", { exact: false }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Catat lesson selesai" }),
+    page.getByRole("button", { name: "Record lesson completion" }),
   ).toBeDisabled();
   await page.evaluate(() =>
     localStorage.setItem(
@@ -311,7 +325,7 @@ test("blocked or malformed storage cannot manufacture learning completion", asyn
   );
   await page.goto("/lessons/l0m01l01");
   await expect(
-    page.getByRole("button", { name: "Catat lesson selesai" }),
+    page.getByRole("button", { name: "Record lesson completion" }),
   ).toBeDisabled();
   await page.evaluate(() => {
     Storage.prototype.setItem = () => {
@@ -322,9 +336,9 @@ test("blocked or malformed storage cannot manufacture learning completion", asyn
   await expect(
     page
       .getByRole("alert")
-      .filter({ hasText: "Browser tidak dapat menyimpan progres" }),
+      .filter({ hasText: "The browser could not save progress" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Catat lesson selesai" }),
+    page.getByRole("button", { name: "Record lesson completion" }),
   ).toBeDisabled();
 });

@@ -1,11 +1,27 @@
-import interfaceMessages from "./messages/id-interface.json";
-import learningMessages from "./messages/id-learning.json";
-import commonMessages from "./messages/id-common.json";
+import interfaceMessages from "./messages/id-interface.json" with { type: "json" };
+import learningMessages from "./messages/id-learning.json" with { type: "json" };
+import commonMessages from "./messages/id-common.json" with { type: "json" };
+import databaseInterface from "./messages/id-database-interface.json" with { type: "json" };
+import englishCatalog from "./messages/en-database-catalog.json" with { type: "json" };
+import englishFoundation from "./messages/en-database-foundation.json" with { type: "json" };
+import englishQueries from "./messages/en-database-queries.json" with { type: "json" };
+import englishMutations from "./messages/en-database-mutations-sets.json" with { type: "json" };
+import englishInterface from "./messages/en-database-interface.json" with { type: "json" };
+import englishFlow from "./messages/en-database-flow.json" with { type: "json" };
 export type Locale = "en" | "id";
 const indonesian: Record<string, string> = {
   ...interfaceMessages,
   ...learningMessages,
   ...commonMessages,
+  ...databaseInterface,
+};
+const english: Record<string, string> = {
+  ...englishCatalog,
+  ...englishFoundation,
+  ...englishQueries,
+  ...englishMutations,
+  ...englishInterface,
+  ...englishFlow,
 };
 const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -38,11 +54,11 @@ export function translate(
       const value = String(args[Number(index)] ?? "");
       return locale === "id" ? translate(value, locale) : value;
     });
-  if (locale === "en") return format(message, values);
   const key = normalize(message);
-  let copy = Object.hasOwn(indonesian, key) ? indonesian[key] : undefined;
+  const dictionary = locale === "en" ? english : indonesian;
+  let copy = Object.hasOwn(dictionary, key) ? dictionary[key] : undefined;
   let args = values;
-  if (copy === undefined && !values.length) {
+  if (locale === "id" && copy === undefined && !values.length) {
     for (const template of templates) {
       const match = template.pattern.exec(key);
       if (!match) continue;

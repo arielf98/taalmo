@@ -24,7 +24,7 @@ Tidak memerlukan `.env`, database, akun, API key, Docker, atau layanan berbayar.
 
 Satu jalur tersedia melalui dashboard atau `/learn/database-engineering`, menggabungkan kurikulum database dan praktik transaksi yang sebelumnya terpisah. Tautan lama `/learn/database-transactions` dan `/learn/database-zero-to-master` diarahkan ke jalur ini.
 
-Bagian SQL/database memakai paket sumber Database Zero to Master. Struktur canonical berisi **10 level, 40 modul, dan 120 lesson**. **24 lesson published: L0–L1 dan L2M01; 96 lesson lainnya masih draft.** Materi jalur ini berbahasa Indonesia, termasuk worked example PostgreSQL, concept checks, prediksi hasil, edge cases, hint bertahap dan refleksi.
+Bagian SQL/database memakai paket sumber Database Zero to Master. Struktur canonical berisi **10 level, 40 modul, dan 120 lesson**. **24 lesson published: L0–L1 dan L2M01; 96 lesson lainnya masih draft.** Materi mengikuti pilihan **English/Indonesia**, termasuk judul modul, penjelasan lesson, worked example PostgreSQL, concept checks beserta feedback, prediksi hasil, edge cases, hint bertahap dan refleksi. Diagram alur, kontrol dan label aksesibilitasnya juga mengikuti bahasa yang dipilih.
 
 Kelulusan lesson memerlukan aktivitas dan pemeriksaan wajib, bukan scroll atau Next. Modul memerlukan checkpoint ≥80%; level ≥85% dan seluruh pemeriksaan kritis lulus. Teori published tetap dapat dijelajahi; prasyarat berlaku untuk progres resmi. Progres per versi dan resume memakai penyimpanan browser yang sama tanpa mengubah milestone lab lama. Retake mempertahankan kelulusan terdahulu.
 
@@ -41,7 +41,7 @@ Lihat [rencana dan evidence](docs/database-path-implementation.md), [panduan aut
 - Lab Lost Update: mode unsafe dan atomic increment, pilihan urutan penulisan serta saldo awal, run/step/reset/replay, histori, inspector, dan kuis akhir.
 - Lab Duplicate Payment Callback: mode unsafe dan idempotent, run/step/reset/replay, histori, inspector, ledger, transactional outbox, dan opsi rollback sebelum commit.
 - Kuis akhir lab yang terbuka setelah kedua mode selesai dieksplorasi.
-- Pilihan bahasa Inggris–Indonesia untuk antarmuka, lesson, kuis, timeline, dan penjelasan simulasi.
+- Pilihan bahasa Inggris–Indonesia untuk seluruh 24 lesson kurikulum published, katalog termasuk judul draft, diagram alur, antarmuka, lesson transaksi, kuis, timeline, dan penjelasan simulasi. ID lesson, urutan jawaban, SQL, expected result dan progres tidak berubah saat bahasa diganti.
 - Progres lokal, tema terang/gelap, serta layout desktop, tablet, dan mobile.
 
 Bagian praktik transaksi memiliki tiga lesson dan tiga lab: Lost Update, Duplicate Payment Callback, dan Deadlock. Ringkasan Database Engineering menggabungkan **27 lesson tersedia dan 3 lab**, atau 30 milestone aktivitas; 96 lesson database masih draft. Kelulusan modul/level tetap mengikuti assessment masing-masing, terpisah dari persentase aktivitas. ID lesson, milestone transaksi, versi konten, dan data progres browser dipertahankan tanpa migrasi.
@@ -72,7 +72,7 @@ Aktifkan **Retry the aborted transaction once** untuk memulai ulang seluruh tran
 
 Gunakan pemilih **English / Indonesia** di header. Pilihan disimpan pada `taalmo.locale.v1` di browser dan origin yang sama; perubahan bahasa di tab lain ikut diterapkan. Jika storage diblokir, pilihan tetap aktif pada tab saat ini tetapi mungkin tidak bertahan setelah refresh.
 
-Bahasa tidak mengubah ID lesson/lab, progres `taalmo.progress.v1`, jawaban kuis yang sedang dipilih, atau state simulasi. Tanggal aktivitas mengikuti bahasa pilihan. Contoh saldo tetap memakai USD; SQL, raw state, nama produk, dan identifier teknis dipertahankan. Konten awal dari server dan metadata halaman berbahasa Inggris, lalu preferensi browser diterapkan sesudah hydration; belum ada URL khusus bahasa.
+Bahasa tidak mengubah ID lesson/lab, progres `taalmo.progress.v1`, jawaban kuis yang sedang dipilih, atau state simulasi. Tanggal aktivitas mengikuti bahasa pilihan. Saldo pada lab transaksi tetap memakai USD; contoh School Finance memakai rupiah. SQL, raw state, nama produk, dan identifier teknis dipertahankan. Konten awal dari server dan metadata halaman berbahasa Inggris, lalu preferensi browser diterapkan sesudah hydration; belum ada URL khusus bahasa.
 
 ## Struktur proyek
 
@@ -83,7 +83,7 @@ src/components/ui/          Komponen UI dasar
 src/content/lessons.ts       Konten sumber lesson dan checkpoint berbahasa Inggris
 src/content/database/        Adapter blueprint dan konten lengkap L0–L1 dan L2M01
 src/lib/curriculum.ts        Aturan kelulusan dan assessment kurikulum
-src/content/messages/       Kamus terjemahan bahasa Indonesia
+src/content/messages/       Kamus terjemahan Inggris dan Indonesia
 src/content/messages.ts     Pemilihan terjemahan dan interpolasi teks
 src/lib/locale.tsx          Preferensi bahasa lokal dan lang dokumen
 src/lib/simulation/         Engine event deterministik, payment, Lost Update, Deadlock
