@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import { useSyncExternalStore } from "react";
 import {
   ArrowUpRight,
-  BookOpen,
   FlaskConical,
   LayoutGrid,
   Moon,
@@ -17,7 +16,8 @@ import {
   Check,
 } from "lucide-react";
 import { Button } from "./ui/button";
-import { milestoneIds } from "@/content/lessons";
+import { pathHref } from "@/content/lessons";
+import { databaseEngineeringProgress } from "@/lib/curriculum";
 import { useProgress } from "@/lib/progress";
 const themeSubscribe = (fn: () => void) => {
   window.addEventListener("taalmo-theme", fn);
@@ -137,18 +137,10 @@ export function Workspace({
 
   const path = usePathname();
   const { progress } = useProgress();
+  const pathProgress = databaseEngineeringProgress(progress);
   const links = [
     { href: "/dashboard", label: "My learning", icon: LayoutGrid },
-    {
-      href: "/learn/database-transactions",
-      label: "Learning paths",
-      icon: BookOpen,
-    },
-    {
-      href: "/learn/database-zero-to-master",
-      label: "Database Zero to Master",
-      icon: Database,
-    },
+    { href: pathHref, label: "Database Engineering", icon: Database },
     { href: "/challenges", label: "Challenges", icon: FlaskConical },
   ];
   return (
@@ -171,7 +163,7 @@ export function Workspace({
           </nav>
           <div className="sidebar-section">
             <div className="eyebrow muted">{t("CURRENT PATH")}</div>
-            <Link className="sidebar-path" href="/learn/database-transactions">
+            <Link className="sidebar-path" href={pathHref}>
               <Database size={19} />
               <span>{t("Database Engineering")}</span>
               <ChevronRight size={14} />
@@ -179,14 +171,14 @@ export function Workspace({
             <div className="progress-track">
               <span
                 style={{
-                  width: `${(progress.completed.length / milestoneIds.length) * 100}%`,
+                  width: `${pathProgress.percent}%`,
                 }}
               />
             </div>
             <small>
               {t("{0} of {1} milestones complete", [
-                progress.completed.length,
-                milestoneIds.length,
+                pathProgress.completedMilestones,
+                pathProgress.totalMilestones,
               ])}
             </small>
           </div>

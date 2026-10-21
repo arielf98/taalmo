@@ -20,22 +20,23 @@ import {
 } from "lucide-react";
 import { lessons, labs, milestoneIds, pathHref } from "@/content/lessons";
 import { useProgress } from "@/lib/progress";
-import { Badge, Completion, Workspace } from "./shell";
+import { Badge, Workspace } from "./shell";
 import { Button } from "./ui/button";
 import { Quiz } from "./quiz";
-import { DatabaseCourseCard } from "./database-learning";
+import { DatabaseEngineeringCourseCard } from "./database-learning";
+import { databaseEngineeringProgress } from "@/lib/curriculum";
 
 export function Dashboard() {
   const { t, locale } = useLocale();
 
   const { progress } = useProgress();
-  const count = progress.completed.length;
+  const pathProgress = databaseEngineeringProgress(progress);
   const completedLabs = labs.filter((lab) =>
     progress.completed.includes(lab.id),
   );
   const labDone = completedLabs.length > 0;
   const next = lessons.find((l) => !progress.completed.includes(l.id));
-  const pathComplete = milestoneIds.every((id) =>
+  const transactionComplete = milestoneIds.every((id) =>
     progress.completed.includes(id),
   );
   const readyLab = labs.find(
@@ -68,15 +69,17 @@ export function Dashboard() {
           <Sparkles size={30} />
         </span>
       </div>
-      <DatabaseCourseCard />
+      <DatabaseEngineeringCourseCard />
       <section className="continue-card">
         <div>
           <Badge>
-            {pathComplete ? t("PATH COMPLETE") : t("CONTINUE LEARNING")}
+            {transactionComplete
+              ? t("TRANSACTION LABS COMPLETE")
+              : t("TRANSACTION PRACTICE")}
           </Badge>
           <h2>
-            {pathComplete
-              ? t("You’ve completed your first path.")
+            {transactionComplete
+              ? t("Transaction labs complete.")
               : continueLab
                 ? t("Ready to put it to the test?")
                 : labDone
@@ -84,7 +87,7 @@ export function Dashboard() {
                   : t("One payment. Two callbacks.")}
           </h2>
           <p>
-            {pathComplete
+            {transactionComplete
               ? t(
                   "Keep experimenting: revisit the sandbox and explore what changes when a transaction fails.",
                 )
@@ -103,14 +106,14 @@ export function Dashboard() {
           <Button asChild>
             <Link
               href={
-                pathComplete || continueLab
+                transactionComplete || continueLab
                   ? (readyLab?.href ?? labs[0].href)
                   : labDone
                     ? `/lessons/${next?.id ?? "duplicate-payment"}`
                     : "/lessons/duplicate-payment"
               }
             >
-              {pathComplete
+              {transactionComplete
                 ? t("Revisit the sandbox")
                 : continueLab
                   ? t("Continue to the lab")
@@ -121,7 +124,7 @@ export function Dashboard() {
             </Link>
           </Button>
           <div className="continue-meta">
-            {pathComplete ? (
+            {transactionComplete ? (
               <>
                 <Check size={13} />
                 {t(" All {0} milestones complete", [milestoneIds.length])}
@@ -177,11 +180,8 @@ export function Dashboard() {
         <div>
           <BookOpen size={20} />
           <strong>
-            {
-              lessons.filter((lesson) => progress.completed.includes(lesson.id))
-                .length
-            }
-            <span>/ {lessons.length}</span>
+            {pathProgress.completedLessons}
+            <span>/ {pathProgress.totalLessons}</span>
           </strong>
           <span>{t("Lessons completed")}</span>
         </div>
@@ -196,49 +196,12 @@ export function Dashboard() {
         <div>
           <GitBranch size={20} />
           <strong>
-            {Math.round((count / milestoneIds.length) * 100)}
+            {pathProgress.percent}
             <span>%</span>
           </strong>
           <span>{t("Path progress")}</span>
         </div>
       </div>
-      <section>
-        <div className="section-heading compact">
-          <h2>{t("Your learning path")}</h2>
-          <span className="muted small">{t("One good place to start")}</span>
-        </div>
-        <div className="dashboard-path card">
-          <span className="feature-icon mint">
-            <Database size={26} />
-          </span>
-          <div>
-            <Badge tone="gray">{t("DATABASE TRANSACTIONS")}</Badge>
-            <h3>{t("Database Engineering")}</h3>
-            <p>
-              {t(
-                "Concurrency, consistency, and the things that happen between queries.",
-              )}
-            </p>
-            <div className="progress-track">
-              <span
-                style={{ width: `${(count / milestoneIds.length) * 100}%` }}
-              />
-            </div>
-            <small>
-              {t("{0} of {1} milestones complete", [
-                count,
-                milestoneIds.length,
-              ])}
-            </small>
-          </div>
-          <Button variant="outline" asChild>
-            <Link href={pathHref}>
-              {t("Explore path ")}
-              <ArrowUpRight size={16} />
-            </Link>
-          </Button>
-        </div>
-      </section>
       <section className="activity-section">
         <div className="section-heading compact">
           <h2>{t("Recent activity")}</h2>
@@ -300,7 +263,7 @@ export function Dashboard() {
             ? t("Continue with {0} and compare both execution strategies.", [
                 readyLab.title,
               ])
-            : pathComplete
+            : transactionComplete
               ? t(
                   "Revisit Lost Update with a different write order, then compare the payment lab’s idempotency guarantee.",
                 )
@@ -308,128 +271,6 @@ export function Dashboard() {
                   "Complete a lesson checkpoint, then explore its interactive lab.",
                 )}
         </p>
-      </div>
-    </Workspace>
-  );
-}
-export function LearningPath() {
-  const { t } = useLocale();
-
-  const { progress } = useProgress();
-  return (
-    <Workspace>
-      <div className="breadcrumb">
-        <Link href="/dashboard">{t("My learning")}</Link>
-        <ChevronRight size={13} />
-        {t("Database Engineering")}
-      </div>
-      <div className="path-header">
-        <span className="feature-icon mint">
-          <Database size={28} />
-        </span>
-        <Badge>{t("LEARNING PATH · BEGINNER FRIENDLY")}</Badge>
-        <h1>{t("Database Engineering")}</h1>
-        <p>
-          {t(
-            "Great systems start with trustworthy data. Explore what happens when concurrent requests meet a database—and learn to make the outcome predictable.",
-          )}
-        </p>
-        <div className="inline-meta">
-          <span>
-            <BookOpen size={15} /> {lessons.length}
-            {t(" lessons")}
-          </span>
-          <span>
-            <FlaskConical size={15} /> {labs.length}
-            {t(" available labs")}
-          </span>
-          <span>
-            <Clock size={15} />
-            {t(" About 45 minutes")}
-          </span>
-        </div>
-      </div>
-      <div className="path-overview card">
-        <div>
-          <strong>{t("Database Transactions")}</strong>
-          <p>
-            {t("Your first chapter: concurrency, one experiment at a time.")}
-          </p>
-        </div>
-        <div className="path-progress">
-          <strong>
-            {Math.round(
-              (progress.completed.length / milestoneIds.length) * 100,
-            )}
-            %
-          </strong>
-          <div className="progress-track">
-            <span
-              style={{
-                width: `${(progress.completed.length / milestoneIds.length) * 100}%`,
-              }}
-            />
-          </div>
-        </div>
-      </div>
-      <div className="lesson-list">
-        {lessons.map((l) => (
-          <Link
-            className={`lesson-row card ${l.labHref ? "available-lesson" : ""}`}
-            key={l.id}
-            href={`/lessons/${l.id}`}
-          >
-            <span
-              className={`lesson-number ${progress.completed.includes(l.id) ? "done" : ""}`}
-            >
-              {progress.completed.includes(l.id) ? (
-                <Check size={22} />
-              ) : (
-                l.number
-              )}
-            </span>
-            <div className="lesson-row-copy">
-              <div className="lesson-tags">
-                <span className="eyebrow">{t(l.tag)}</span>
-                {l.labHref && <Badge>{t("INTERACTIVE LAB")}</Badge>}
-              </div>
-              <h2>{t(l.title)}</h2>
-              <p>{t(l.subtitle)}</p>
-              <div className="lesson-meta">
-                <span>
-                  <Clock size={13} />
-                  {t(l.duration)}
-                </span>
-                <span>
-                  {l.labHref
-                    ? t("Lesson + sandbox")
-                    : t("Introduction · lab coming soon")}
-                </span>
-              </div>
-            </div>
-            <div className="lesson-row-status">
-              <Completion done={progress.completed.includes(l.id)} />
-              <ArrowUpRight size={21} />
-            </div>
-          </Link>
-        ))}
-      </div>
-      <div className="path-outcomes">
-        <h3>{t("What you’ll walk away with")}</h3>
-        <div>
-          <p>
-            <Check size={17} />
-            {t(" Spot race conditions hiding in everyday code")}
-          </p>
-          <p>
-            <Check size={17} />
-            {t(" Explain what a transaction actually protects")}
-          </p>
-          <p>
-            <Check size={17} />
-            {t(" Design an idempotent payment handler")}
-          </p>
-        </div>
       </div>
     </Workspace>
   );
@@ -511,7 +352,7 @@ export function Lesson({ slug }: { slug: string }) {
   return (
     <Workspace>
       <div className="breadcrumb">
-        <Link href={pathHref}>{t("Database Transactions")}</Link>
+        <Link href={pathHref}>{t("Database Engineering")}</Link>
         <ChevronRight size={13} />
         <span>
           {t("Lesson ")}

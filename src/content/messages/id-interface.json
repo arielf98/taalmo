@@ -470,5 +470,9 @@
   "{0} waits for {1} on row {2}": "{0} menunggu {1} pada baris {2}",
   "· B:": "· B:",
   "· Keep building your understanding": "· Terus bangun pemahaman Anda",
-  "· attempt": "· percobaan"
+  "· attempt": "· percobaan",
+  "TRANSACTION LABS COMPLETE": "LAB TRANSAKSI SELESAI",
+  "TRANSACTION PRACTICE": "PRAKTIK TRANSAKSI",
+  "Transaction labs complete.": "Lab transaksi selesai.",
+  "Practice concurrency, one experiment at a time.": "Praktik concurrency melalui eksperimen bertahap."
 }

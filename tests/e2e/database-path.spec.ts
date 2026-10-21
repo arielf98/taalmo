@@ -5,7 +5,7 @@ import mutations from "../../src/content/database/l1-mutation.json" with { type:
 import subqueries from "../../src/content/database/l2-subqueries.json" with { type: "json" };
 import type { ConceptCheck } from "../../src/content/database/types";
 const content = [...foundation, ...queries, ...mutations, ...subqueries];
-const path = "/learn/database-zero-to-master";
+const path = "/learn/database-engineering";
 async function answer(
   scope: Page | Locator,
   question: ConceptCheck,
@@ -29,11 +29,13 @@ test("complete published lessons, module and level gates, resume, and preserve m
   await page.goto(path);
   await expect(
     page
-      .getByRole("heading", { name: "Database Zero to Master", exact: true })
+      .getByRole("heading", { name: "Database Engineering", exact: true })
       .first(),
   ).toBeVisible();
   await expect(
-    page.getByText("Tersedia: 8 modul, 24 lesson.", { exact: false }),
+    page.getByText("Kurikulum database: 8 modul, 24 lesson tersedia;", {
+      exact: false,
+    }),
   ).toBeVisible();
   for (const moduleId of [
     ...new Set(content.map((lesson) => lesson.id.slice(0, 5))),

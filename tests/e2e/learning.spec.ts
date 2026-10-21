@@ -145,7 +145,7 @@ test("preview, challenges, and responsive pages render without runtime errors", 
   expect(errors).toEqual([]);
 });
 
-test("dashboard continues into the lab and recognizes a completed path", async ({
+test("dashboard continues into the lab and recognizes completed transaction practice", async ({
   page,
 }) => {
   await page.goto("/dashboard");
@@ -181,9 +181,7 @@ test("dashboard continues into the lab and recognizes a completed path", async (
     ),
   );
   await page.reload();
-  await expect(
-    page.getByText("You’ve completed your first path."),
-  ).toBeVisible();
+  await expect(page.getByText("Transaction labs complete.")).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Revisit the sandbox" }),
   ).toHaveAttribute("href", "/sandbox/duplicate-payment");

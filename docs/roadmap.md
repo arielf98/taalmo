@@ -11,9 +11,9 @@
 - English/Indonesian interface, learning content, quizzes, simulation explanations, diagram labels, and activity dates; a device-local language preference preserves learning state. Server metadata stays English.
 - Device-local progress for six milestones, light/dark themes, responsive layout. Existing tests come from the initial MVP; follow the no-test policy in `AGENTS.md` for subsequent work.
 
-## Database Zero to Master slice
+## Database Engineering — database curriculum
 
-The new path registers all 10 levels, 40 modules and 120 canonical IDs. L0–L1 and L2M01 have 24 published Indonesian lessons, practice variants/edge cases, progressive hints, reflection, versioned resume and module/level assessment gates. The remaining curriculum has 96 draft lessons, not available player content. SQL examples are verified on disposable PostgreSQL; the website uses prediction-based formative activities and has no arbitrary SQL runner or account-backed certification.
+The unified Database Engineering path includes transaction practice and the Database Zero to Master source curriculum on `/learn/database-engineering`. Old path URLs redirect there; the dashboard/sidebar use one path and combined lesson/lab activity progress. The database curriculum registers all 10 levels, 40 modules and 120 canonical IDs. L0–L1 and L2M01 have 24 published Indonesian lessons, practice variants/edge cases, progressive hints, reflection, versioned resume and module/level assessment gates. The remaining curriculum has 96 draft lessons, not available player content. SQL examples are verified on disposable PostgreSQL; the website uses prediction-based formative activities and has no arbitrary SQL runner or account-backed certification.
 
 ## Recommended next milestone: L2M02 authoring
 

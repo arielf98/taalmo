@@ -2,6 +2,8 @@
 
 ## Source of truth and publication
 
+The public Database Engineering path is `/learn/database-engineering`; its SQL/database curriculum retains the source name Database Zero to Master. Transaction practice shares that page without changing its existing lesson or lab IDs.
+
 The canonical package is `curriculum/taalmo-database-zero-to-master/`. The adapter `src/content/database/catalog.ts` preserves all blueprint IDs, titles, order and module prerequisites. Adding an authored record in the four JSON files makes that canonical lesson published. The content audit is a required release check: incomplete authored records must not be added. Unauthored lessons remain draft, visible as roadmap entries without links; the lesson route uses the published static parameter list only.
 
 Published content covers L0–L1 and L2M01: 8 modules, 24 lessons. The remaining 96 lessons are explicitly draft. Their per-lesson work is listed in `database-path-remaining.md`. Nothing imports content into learner storage, so rebuilding/importing the catalog is idempotent and cannot reset progress.

@@ -57,7 +57,7 @@ export function LostUpdateSandbox() {
   return (
     <Workspace wide>
       <div className="breadcrumb">
-        <Link href={pathHref}>{t("Database Transactions")}</Link>
+        <Link href={pathHref}>{t("Database Engineering")}</Link>
         <ChevronRight size={13} />
         <Link href="/lessons/lost-update">{t("Lost Update")}</Link>
         <ChevronRight size={13} />

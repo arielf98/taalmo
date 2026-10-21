@@ -30,7 +30,7 @@ import {
   type PaymentConfig,
 } from "@/lib/simulation/payment";
 import { useProgress } from "@/lib/progress";
-import { labQuiz } from "@/content/lessons";
+import { labQuiz, pathHref } from "@/content/lessons";
 import { Architecture, nodeDescriptions } from "./architecture";
 import { Workspace, Badge } from "./shell";
 import { Button } from "./ui/button";
@@ -49,9 +49,7 @@ export function Sandbox() {
   return (
     <Workspace wide>
       <div className="breadcrumb">
-        <Link href="/learn/database-transactions">
-          {t("Database Transactions")}
-        </Link>
+        <Link href={pathHref}>{t("Database Engineering")}</Link>
         <ChevronRight size={13} />
         <Link href="/lessons/duplicate-payment">
           {t("Duplicate Payment Callback")}

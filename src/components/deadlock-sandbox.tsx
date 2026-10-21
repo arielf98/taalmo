@@ -69,7 +69,7 @@ export function DeadlockSandbox() {
   return (
     <Workspace wide>
       <div className="breadcrumb">
-        <Link href={pathHref}>{t("Database Transactions")}</Link>
+        <Link href={pathHref}>{t("Database Engineering")}</Link>
         <ChevronRight size={13} />
         <Link href="/lessons/deadlock">{t("Deadlock")}</Link>
         <ChevronRight size={13} />

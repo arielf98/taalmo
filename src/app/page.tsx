@@ -16,7 +16,8 @@ import {
 } from "lucide-react";
 import { Header, Footer, Badge } from "@/components/shell";
 import { Button } from "@/components/ui/button";
-import { lessons, labs } from "@/content/lessons";
+import { lessons, labs, pathHref } from "@/content/lessons";
+import { publishedLessons } from "@/content/database/catalog";
 import { ProductPreview } from "@/components/preview";
 export default function Home() {
   const { t } = useLocale();
@@ -150,16 +151,13 @@ export default function Home() {
               <span className="eyebrow">{t("FOLLOW YOUR CURIOSITY")}</span>
               <h2>{t("Big ideas. Small steps.")}</h2>
             </div>
-            <Link className="text-link" href="/learn/database-transactions">
+            <Link className="text-link" href={pathHref}>
               {t("Explore learning paths ")}
               <ArrowUpRight size={16} />
             </Link>
           </div>
           <div className="path-preview-grid">
-            <Link
-              href="/learn/database-transactions"
-              className="path-preview featured"
-            >
+            <Link href={pathHref} className="path-preview featured">
               <div className="path-card-top">
                 <span className="feature-icon mint">
                   <Database size={23} />
@@ -174,7 +172,7 @@ export default function Home() {
               </p>
               <div className="path-card-bottom">
                 <span>
-                  {lessons.length}
+                  {lessons.length + publishedLessons.length}
                   {t(" lessons · ")}
                   {labs.length}
                   {t(" interactive labs")}

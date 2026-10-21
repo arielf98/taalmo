@@ -3,9 +3,12 @@ import {
   assessmentKey,
   databaseLevels,
   databaseModules,
+  publishedLessons,
   lessonRecordKey,
   type DatabaseLesson,
 } from "../content/database/catalog";
+import { lessons, labs } from "../content/lessons";
+import type { Progress } from "./progress";
 export interface LearningRecord {
   attempt: number;
   answers: Record<string, number>;
@@ -21,6 +24,26 @@ export const emptyCurriculum = (): CurriculumProgress => ({
   records: {},
   resume: null,
 });
+export function databaseEngineeringProgress(progress: Progress) {
+  const curriculum = progress.curriculum ?? emptyCurriculum();
+  const completedLessons =
+    lessons.filter((lesson) => progress.completed.includes(lesson.id)).length +
+    publishedLessons.filter((lesson) => lessonPassed(lesson, curriculum))
+      .length;
+  const completedLabs = labs.filter((lab) =>
+    progress.completed.includes(lab.id),
+  ).length;
+  const totalLessons = lessons.length + publishedLessons.length;
+  const totalMilestones = totalLessons + labs.length;
+  const completedMilestones = completedLessons + completedLabs;
+  return {
+    completedLessons,
+    totalLessons,
+    completedMilestones,
+    totalMilestones,
+    percent: Math.round((completedMilestones / totalMilestones) * 100),
+  };
+}
 export function lessonPassed(
   lesson: DatabaseLesson,
   progress: CurriculumProgress,

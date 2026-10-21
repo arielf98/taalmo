@@ -4,7 +4,8 @@ import queries from "./l1-query.json";
 import mutations from "./l1-mutation.json";
 import subqueries from "./l2-subqueries.json";
 import type { AuthoredLesson, ConceptCheck } from "./types";
-export const databasePathHref = "/learn/database-zero-to-master";
+import { pathHref } from "../lessons";
+export const databasePathHref = pathHref;
 export const databaseVersion = blueprint.version;
 const authored = [
   ...foundation,

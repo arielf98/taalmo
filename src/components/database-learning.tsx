@@ -1,8 +1,19 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, BookOpen, Check, ChevronRight } from "lucide-react";
-import { Badge, Workspace } from "./shell";
+import {
+  ArrowRight,
+  ArrowUpRight,
+  BookOpen,
+  Check,
+  ChevronRight,
+  Clock,
+  Database,
+  FlaskConical,
+} from "lucide-react";
+import { Badge, Completion, Workspace } from "./shell";
+import { useLocale } from "@/lib/locale";
+import { lessons, labs, milestoneIds } from "@/content/lessons";
 import { Button } from "./ui/button";
 import { Quiz } from "./quiz";
 import { useProgress } from "@/lib/progress";
@@ -20,6 +31,7 @@ import {
 } from "@/content/database/catalog";
 import {
   assessmentResult,
+  databaseEngineeringProgress,
   emptyCurriculum,
   lessonPassed,
   levelPassed,
@@ -28,36 +40,41 @@ import {
 } from "@/lib/curriculum";
 import type { ConceptCheck } from "@/content/database/types";
 
-export function DatabaseCourseCard() {
+export function DatabaseEngineeringCourseCard() {
+  const { t, locale } = useLocale();
   const { progress } = useProgress();
   const curriculum = progress.curriculum ?? emptyCurriculum();
+  const pathProgress = databaseEngineeringProgress(progress);
   const resume =
-    publishedLessons.find((lesson) => lesson.id === curriculum.resume) ??
+    publishedLessons.find(
+      (lesson) =>
+        lesson.id === curriculum.resume && !lessonPassed(lesson, curriculum),
+    ) ??
     publishedLessons.find((lesson) => !lessonPassed(lesson, curriculum)) ??
-    publishedLessons[0];
+    lessons.find((lesson) => !progress.completed.includes(lesson.id)) ??
+    labs.find((lab) => !progress.completed.includes(lab.id)) ??
+    labs[0];
+  const resumeHref = "href" in resume ? resume.href : `/lessons/${resume.id}`;
   return (
     <section className="card database-course-card" lang="id">
-      <Badge>JALUR BARU · POSTGRESQL</Badge>
-      <h2>Database Zero to Master</h2>
+      <Badge>DATABASE ENGINEERING · POSTGRESQL</Badge>
+      <h2>Database Engineering</h2>
       <p>
-        Mulai dari model relasional, lalu bangun intuisi SQL yang menjaga
-        kebenaran data. Materi jalur ini berbahasa Indonesia.
+        Satu jalur untuk fondasi database, SQL, dan praktik transaksi. Pelajari
+        materi bertahap, lalu eksplorasi concurrency melalui lab interaktif.
       </p>
       <p>
-        {
-          publishedLessons.filter((lesson) => lessonPassed(lesson, curriculum))
-            .length
-        }{" "}
-        / {publishedLessons.length} lesson tersedia selesai · {draftLessonCount}{" "}
-        lesson lanjutan masih draft
+        {pathProgress.completedMilestones} / {pathProgress.totalMilestones}{" "}
+        aktivitas selesai · {pathProgress.totalLessons} lesson · {labs.length}{" "}
+        lab interaktif
       </p>
       <div className="database-actions">
         <Button asChild>
-          <Link href={databasePathHref}>
-            Jelajahi kurikulum <ArrowRight size={15} />
+          <Link href={databasePathHref} lang={locale}>
+            {t("Explore path ")} <ArrowRight size={15} />
           </Link>
         </Button>
-        <Link className="text-link" href={`/lessons/${resume.id}`}>
+        <Link className="text-link" href={resumeHref}>
           Lanjutkan: {resume.title}
         </Link>
       </div>
@@ -65,7 +82,7 @@ export function DatabaseCourseCard() {
   );
 }
 
-export function DatabasePath() {
+export function DatabaseEngineeringPath() {
   const { progress } = useProgress();
   const curriculum = progress.curriculum ?? emptyCurriculum();
   return (
@@ -74,25 +91,35 @@ export function DatabasePath() {
         <div className="breadcrumb">
           <Link href="/dashboard">Pembelajaran saya</Link>
           <ChevronRight size={13} />
-          Database Zero to Master
+          Database Engineering
         </div>
         <div className="page-heading">
           <div>
             <Badge>POSTGRESQL · VERSI {databaseVersion}</Badge>
-            <h1>Database Zero to Master</h1>
+            <h1>Database Engineering</h1>
             <p>
-              Dari query pertama sampai keputusan arsitektur database. Belajar
-              berdasarkan penguasaan, tanpa menunggu kalender.
+              Fondasi SQL, perancangan database, dan lab transaksi dalam satu
+              jalur Database Engineering. Belajar berdasarkan penguasaan, tanpa
+              menunggu kalender.
             </p>
           </div>
         </div>
-        <DatabaseCourseCard />
-        <p className="simulation-notice">
-          Tersedia: {publishedModules.length} modul, {publishedLessons.length}{" "}
-          lesson. {draftLessonCount} lesson lainnya masih draft. Aktivitas
-          memakai prediksi hasil dan analisis skenario; aplikasi belum
-          mengeksekusi SQL pengguna. Progres untuk learner browser ini, tanpa
-          sinkronisasi akun.
+        <DatabaseEngineeringCourseCard />
+        <div className="database-actions">
+          <Link className="text-link" href="#database-curriculum">
+            SQL &amp; Database
+          </Link>
+          <Link className="text-link" href="#transaction-labs">
+            Transaction Labs
+          </Link>
+        </div>
+        <p className="simulation-notice" id="database-curriculum">
+          Kurikulum database: {publishedModules.length} modul,{" "}
+          {publishedLessons.length} lesson tersedia; {draftLessonCount} lesson
+          masih draft. Ditambah {lessons.length} lesson transaksi dan{" "}
+          {labs.length} lab interaktif. Aktivitas kurikulum memakai prediksi
+          hasil dan analisis skenario; aplikasi belum mengeksekusi SQL pengguna.
+          Progres untuk learner browser ini, tanpa sinkronisasi akun.
         </p>
         <Diagnostic />
         {databaseLevels.map((level) => (
@@ -227,11 +254,131 @@ export function DatabasePath() {
             )}
           </section>
         ))}
+        <TransactionLessons />
       </div>
     </Workspace>
   );
 }
 
+function TransactionLessons() {
+  const { t, locale } = useLocale();
+
+  const { progress } = useProgress();
+  return (
+    <section
+      id="transaction-labs"
+      aria-labelledby="transaction-title"
+      lang={locale}
+    >
+      <div className="path-header">
+        <span className="feature-icon mint">
+          <Database size={28} />
+        </span>
+        <Badge>{t("TRANSACTION PRACTICE")}</Badge>
+        <h2 id="transaction-title">{t("Database Transactions")}</h2>
+        <p>
+          {t(
+            "Great systems start with trustworthy data. Explore what happens when concurrent requests meet a database—and learn to make the outcome predictable.",
+          )}
+        </p>
+        <div className="inline-meta">
+          <span>
+            <BookOpen size={15} /> {lessons.length}
+            {t(" lessons")}
+          </span>
+          <span>
+            <FlaskConical size={15} /> {labs.length}
+            {t(" available labs")}
+          </span>
+          <span>
+            <Clock size={15} />
+            {t(" About 45 minutes")}
+          </span>
+        </div>
+      </div>
+      <div className="path-overview card">
+        <div>
+          <strong>{t("Database Transactions")}</strong>
+          <p>{t("Practice concurrency, one experiment at a time.")}</p>
+        </div>
+        <div className="path-progress">
+          <strong>
+            {Math.round(
+              (progress.completed.length / milestoneIds.length) * 100,
+            )}
+            %
+          </strong>
+          <div className="progress-track">
+            <span
+              style={{
+                width: `${(progress.completed.length / milestoneIds.length) * 100}%`,
+              }}
+            />
+          </div>
+        </div>
+      </div>
+      <div className="lesson-list">
+        {lessons.map((l) => (
+          <Link
+            className={`lesson-row card ${l.labHref ? "available-lesson" : ""}`}
+            key={l.id}
+            href={`/lessons/${l.id}`}
+          >
+            <span
+              className={`lesson-number ${progress.completed.includes(l.id) ? "done" : ""}`}
+            >
+              {progress.completed.includes(l.id) ? (
+                <Check size={22} />
+              ) : (
+                l.number
+              )}
+            </span>
+            <div className="lesson-row-copy">
+              <div className="lesson-tags">
+                <span className="eyebrow">{t(l.tag)}</span>
+                {l.labHref && <Badge>{t("INTERACTIVE LAB")}</Badge>}
+              </div>
+              <h3>{t(l.title)}</h3>
+              <p>{t(l.subtitle)}</p>
+              <div className="lesson-meta">
+                <span>
+                  <Clock size={13} />
+                  {t(l.duration)}
+                </span>
+                <span>
+                  {l.labHref
+                    ? t("Lesson + sandbox")
+                    : t("Introduction · lab coming soon")}
+                </span>
+              </div>
+            </div>
+            <div className="lesson-row-status">
+              <Completion done={progress.completed.includes(l.id)} />
+              <ArrowUpRight size={21} />
+            </div>
+          </Link>
+        ))}
+      </div>
+      <div className="path-outcomes">
+        <h3>{t("What you’ll walk away with")}</h3>
+        <div>
+          <p>
+            <Check size={17} />
+            {t(" Spot race conditions hiding in everyday code")}
+          </p>
+          <p>
+            <Check size={17} />
+            {t(" Explain what a transaction actually protects")}
+          </p>
+          <p>
+            <Check size={17} />
+            {t(" Design an idempotent payment handler")}
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
 function Diagnostic() {
   const [result, setResult] = useState<number | null>(null);
   return (
@@ -390,7 +537,7 @@ export function DatabaseLessonPlayer({ lesson }: { lesson: DatabaseLesson }) {
     <Workspace>
       <article className="database-reader" lang="id">
         <div className="breadcrumb">
-          <Link href={databasePathHref}>Database Zero to Master</Link>
+          <Link href={databasePathHref}>Database Engineering</Link>
           <ChevronRight size={13} />
           {lesson.id.toUpperCase()}
         </div>

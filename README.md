@@ -20,9 +20,11 @@ Jika tidak menggunakan nvm, pastikan Node.js 24 sudah aktif sebelum menjalankan 
 
 Tidak memerlukan `.env`, database, akun, API key, Docker, atau layanan berbayar. Koneksi internet diperlukan saat mengunduh dependency; aplikasi tidak memanggil API eksternal.
 
-## Database Zero to Master
+## Database Engineering
 
-Jalur baru tersedia melalui dashboard atau `/learn/database-zero-to-master`. Struktur canonical berisi **10 level, 40 modul, dan 120 lesson**. **24 lesson published: L0–L1 dan L2M01; 96 lesson lainnya masih draft.** Materi jalur ini berbahasa Indonesia, termasuk worked example PostgreSQL, concept checks, prediksi hasil, edge cases, hint bertahap dan refleksi.
+Satu jalur tersedia melalui dashboard atau `/learn/database-engineering`, menggabungkan kurikulum database dan praktik transaksi yang sebelumnya terpisah. Tautan lama `/learn/database-transactions` dan `/learn/database-zero-to-master` diarahkan ke jalur ini.
+
+Bagian SQL/database memakai paket sumber Database Zero to Master. Struktur canonical berisi **10 level, 40 modul, dan 120 lesson**. **24 lesson published: L0–L1 dan L2M01; 96 lesson lainnya masih draft.** Materi jalur ini berbahasa Indonesia, termasuk worked example PostgreSQL, concept checks, prediksi hasil, edge cases, hint bertahap dan refleksi.
 
 Kelulusan lesson memerlukan aktivitas dan pemeriksaan wajib, bukan scroll atau Next. Modul memerlukan checkpoint ≥80%; level ≥85% dan seluruh pemeriksaan kritis lulus. Teori published tetap dapat dijelajahi; prasyarat berlaku untuk progres resmi. Progres per versi dan resume memakai penyimpanan browser yang sama tanpa mengubah milestone lab lama. Retake mempertahankan kelulusan terdahulu.
 
@@ -33,7 +35,7 @@ Lihat [rencana dan evidence](docs/database-path-implementation.md), [panduan aut
 ## Fitur yang tersedia
 
 - Landing page dengan preview simulator yang bisa dijalankan.
-- Dashboard, learning path Database Engineering, progres, aktivitas, dan rekomendasi belajar.
+- Dashboard, satu learning path Database Engineering, progres, aktivitas, dan rekomendasi belajar.
 - Lesson Lost Update, Duplicate Payment Callback, dan Deadlock, masing-masing dengan contoh interleaving dan checkpoint.
 - Lab Deadlock: wait-for graph, mode urutan lock berlawanan/konsisten, pilihan transaksi korban, rollback perubahan pending, dan satu retry penuh.
 - Lab Lost Update: mode unsafe dan atomic increment, pilihan urutan penulisan serta saldo awal, run/step/reset/replay, histori, inspector, dan kuis akhir.
@@ -42,11 +44,11 @@ Lihat [rencana dan evidence](docs/database-path-implementation.md), [panduan aut
 - Pilihan bahasa Inggris–Indonesia untuk antarmuka, lesson, kuis, timeline, dan penjelasan simulasi.
 - Progres lokal, tema terang/gelap, serta layout desktop, tablet, dan mobile.
 
-Ketiga lesson memiliki lab: Lost Update, Duplicate Payment Callback, dan Deadlock. Path memiliki enam milestone: tiga checkpoint lesson dan tiga checkpoint lab. Progres dari dua lab sebelumnya tetap dipertahankan.
+Bagian praktik transaksi memiliki tiga lesson dan tiga lab: Lost Update, Duplicate Payment Callback, dan Deadlock. Ringkasan Database Engineering menggabungkan **27 lesson tersedia dan 3 lab**, atau 30 milestone aktivitas; 96 lesson database masih draft. Kelulusan modul/level tetap mengikuti assessment masing-masing, terpisah dari persentase aktivitas. ID lesson, milestone transaksi, versi konten, dan data progres browser dipertahankan tanpa migrasi.
 
 ## Alur belajar pertama
 
-1. Buka **Learn → Explore path → Duplicate Payment Callback**.
+1. Buka **Learn → Explore path → Transaction Labs → Duplicate Payment Callback**.
 2. Ikuti contoh langkah demi langkah dan jawab checkpoint.
 3. Pilih **Launch sandbox**, jalankan **Unsafe**, lalu inspeksi dua ledger entry untuk satu pembayaran.
 4. Ganti ke **Idempotent** dan jalankan ulang untuk melihat atomic commit.
