@@ -8,6 +8,7 @@ import englishQueries from "./messages/en-database-queries.json" with { type: "j
 import englishMutations from "./messages/en-database-mutations-sets.json" with { type: "json" };
 import englishInterface from "./messages/en-database-interface.json" with { type: "json" };
 import englishFlow from "./messages/en-database-flow.json" with { type: "json" };
+import englishWindows from "./messages/en-database-windows.json" with { type: "json" };
 export type Locale = "en" | "id";
 const indonesian: Record<string, string> = {
   ...interfaceMessages,
@@ -22,6 +23,7 @@ const english: Record<string, string> = {
   ...englishMutations,
   ...englishInterface,
   ...englishFlow,
+  ...englishWindows,
 };
 const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

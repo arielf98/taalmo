@@ -3,6 +3,7 @@ import foundation from "./l0.json";
 import queries from "./l1-query.json";
 import mutations from "./l1-mutation.json";
 import subqueries from "./l2-subqueries.json";
+import windows from "./l2-windows.json";
 import type { AuthoredLesson, ConceptCheck } from "./types";
 import { pathHref } from "../lessons";
 export const databasePathHref = pathHref;
@@ -12,6 +13,7 @@ const authored = [
   ...queries,
   ...mutations,
   ...subqueries,
+  ...windows,
 ] as AuthoredLesson[];
 const byId = new Map(authored.map((lesson) => [lesson.id, lesson]));
 export const databaseLevels = blueprint.levels.map((level) => ({

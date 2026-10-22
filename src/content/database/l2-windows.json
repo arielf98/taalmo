@@ -1,0 +1,640 @@
+[
+  {
+    "id": "l2m02l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "sql",
+      "window-functions",
+      "school-finance"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/tutorial-window.html"
+    ],
+    "hook": "Bendahara membutuhkan setiap baris pembayaran berhasil beserta total penerimaan siswa pemiliknya. GROUP BY menghilangkan detail payment_id; bagaimana menambah konteks total tanpa menggabungkan baris?",
+    "objectives": [
+      "Membedakan jumlah baris hasil GROUP BY dengan agregat yang memakai OVER.",
+      "Menambahkan total pembayaran berhasil per siswa memakai PARTITION BY student_id.",
+      "Membedakan ORDER BY di dalam window dengan urutan tampilan hasil."
+    ],
+    "sections": [
+      {
+        "title": "Detail tetap ada, konteks ditambahkan",
+        "paragraphs": [
+          "Mulailah dari grain, yaitu arti satu baris hasil. Di laporan ini satu baris berarti satu payment succeeded, bukan satu siswa atau satu invoice. Payment 203 dan 204 adalah dua cicilan untuk invoice 103, sehingga keduanya harus tetap terlihat. GROUP BY student_id dengan SUM(amount) hanya memberikan satu baris per siswa. Window function menambahkan kolom perhitungan pada setiap baris yang sudah tersedia tanpa melebur detailnya. SUM(p.amount) OVER (...) memakai agregat yang dikenal sebelumnya, tetapi OVER mengubahnya menjadi perhitungan window.",
+          "PARTITION BY i.student_id membagi baris input menjadi kelompok per siswa untuk perhitungan ini. Pembayaran Alya 500000 dan 200000 memperoleh student_paid 700000 pada kedua baris. Pembayaran Bima 250000 dan 200000 memperoleh 450000 pada kedua baris. Nilai total yang berulang adalah konteks, bukan penerimaan baru. Menjumlah kolom student_paid dari hasil tersebut menghitung ulang total siswa untuk setiap payment dan menghasilkan laporan yang keliru. Untuk total sekolah, jumlahkan amount payment asli sekali saja."
+        ]
+      },
+      {
+        "title": "Filter menentukan dunia yang dilihat window",
+        "paragraphs": [
+          "Window bekerja pada baris yang tersisa setelah FROM, JOIN, WHERE, dan pengelompokan bila ada. Filter status succeeded harus dipasang sebelum window agar payment pending 205 dan failed 206 tidak dihitung sebagai penerimaan. Contoh membatasi siswa 1 dan 2 untuk membuat tabel pendek; semua pembayaran berhasil milik kedua siswa itu tetap masuk. Jika WHERE juga dibatasi ke September, total Alya menjadi 200000, bukan total semua periode 700000. Window tidak dapat melihat kembali baris Agustus yang sudah dibuang oleh filter tersebut.",
+          "Jika laporan hanya ingin menampilkan September tetapi membutuhkan total seluruh periode, hitung window di CTE atau subquery terlebih dahulu, kemudian saring tanggal pada query luar. Perbedaan tempat filter merupakan bagian dari kontrak laporan. OVER () tanpa PARTITION BY memakai seluruh baris input sebagai satu partition. Siswa tanpa payment succeeded tidak muncul pada query yang berawal dari payments ini, sehingga hasil kosong untuk Elina tidak membuktikan bahwa Elina tidak mempunyai invoice. Gunakan grain siswa dan LEFT JOIN bila laporan harus mencakup semua siswa."
+        ]
+      },
+      {
+        "title": "Dua ORDER BY dengan tanggung jawab berbeda",
+        "paragraphs": [
+          "ORDER BY paling luar mengatur tampilan tabel. ORDER BY di dalam OVER mengatur urutan untuk fungsi window dan dapat mengubah frame agregat. SUM(amount) OVER (PARTITION BY student_id) tanpa urutan menjumlah seluruh partition. Menambahkan ORDER BY payment_id di dalam OVER biasanya mengubahnya menjadi kumulatif menurut frame default, bukan total seluruh siswa yang diulang. Karena lesson ini meminta total per siswa pada setiap payment, kita sengaja tidak menaruh ORDER BY di dalam OVER dan hanya mengurutkan tampilan di akhir query."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "SELECT p.payment_id, i.student_id, p.amount,\n       SUM(p.amount) OVER (PARTITION BY i.student_id) AS student_paid\nFROM school.payments p\nJOIN school.invoices i ON i.invoice_id = p.invoice_id\nWHERE p.status = 'succeeded' AND i.student_id IN (1, 2)\nORDER BY i.student_id, p.payment_id;",
+      "columns": [
+        "payment_id",
+        "student_id",
+        "amount",
+        "student_paid"
+      ],
+      "rows": [
+        [
+          "201",
+          "1",
+          "500000.00",
+          "700000.00"
+        ],
+        [
+          "202",
+          "1",
+          "200000.00",
+          "700000.00"
+        ],
+        [
+          "203",
+          "2",
+          "250000.00",
+          "450000.00"
+        ],
+        [
+          "204",
+          "2",
+          "200000.00",
+          "450000.00"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Empat baris payment tetap ada. Total Alya 700000 muncul dua kali dan total Bima 450000 muncul dua kali; jangan menjumlah kolom konteks tersebut. PARTITION BY memisahkan siswa, sedangkan ORDER BY terluar hanya menetapkan urutan tabel."
+    },
+    "checks": [
+      {
+        "id": "l2m02l01-check-1",
+        "question": "Berapa baris dihasilkan worked example dibanding GROUP BY student_id pada input yang sama?",
+        "options": [
+          "Dua baris untuk keduanya.",
+          "Empat baris window, dua baris GROUP BY.",
+          "Empat baris window, satu baris GROUP BY."
+        ],
+        "answer": 1,
+        "explanation": "Window mempertahankan empat payment; GROUP BY membentuk dua grup siswa.",
+        "feedback": [
+          "Window menambahkan konteks tanpa menggabungkan dua cicilan Bima.",
+          "Benar: empat payment tetap terpisah dan ada dua identitas siswa.",
+          "GROUP BY student_id menghasilkan dua grup karena ada siswa 1 dan 2."
+        ]
+      },
+      {
+        "id": "l2m02l01-check-2",
+        "question": "Apa akibat menambahkan WHERE paid_at >= awal September sebelum window pada data Alya?",
+        "options": [
+          "Total tetap 700000 karena window melihat seluruh tabel asal.",
+          "Query otomatis mengembalikan payment Agustus.",
+          "Total menjadi 200000 karena baris Agustus sudah tersaring."
+        ],
+        "answer": 2,
+        "explanation": "WHERE berjalan secara logis sebelum window; total memakai baris yang lolos filter.",
+        "feedback": [
+          "Window tidak mengabaikan WHERE dan tidak membaca ulang baris yang sudah dibuang.",
+          "Tidak ada operasi yang memasukkan kembali baris Agustus pada query itu.",
+          "Benar: jika perlu total semua periode, hitung di query dalam sebelum filter tampilan."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi total per siswa pada baris payment, lalu periksa pengaruh partition dan filter tanpa mengeksekusi SQL.",
+      "setup": "Gunakan seed School Finance. Payment 201 dan 202 milik siswa 1; 203 dan 204 milik siswa 2. Solusi referensi mencakup semua payment succeeded, bukan hanya cuplikan dua siswa.",
+      "starterSql": "SELECT p.payment_id, i.student_id, p.amount,\n       SUM(p.amount) OVER (/* PARTITION BY ... */) AS student_paid\nFROM school.payments p JOIN school.invoices i USING (invoice_id)\nWHERE p.status = 'succeeded'\nORDER BY i.student_id, p.payment_id;",
+      "variants": [
+        {
+          "id": "l2m02l01-variant-1",
+          "question": "Berapa student_paid pada payment 203 dan 204 jika partition memakai student_id?",
+          "options": [
+            "450000 pada keduanya.",
+            "250000 lalu 450000.",
+            "900000 pada keduanya."
+          ],
+          "answer": 0,
+          "explanation": "Tanpa ORDER BY dalam OVER, seluruh partition Bima dijumlah: 250000 + 200000.",
+          "feedback": [
+            "Benar: kedua payment mempertahankan detail dengan konteks total 450000.",
+            "Itu pola kumulatif; contoh meminta total seluruh partition tanpa urutan window.",
+            "900000 berasal dari menjumlah total berulang, bukan amount payment sekali saja."
+          ]
+        },
+        {
+          "id": "l2m02l01-variant-2",
+          "question": "Jika cuplikan empat payment memakai SUM(p.amount) OVER (), berapa nilai di setiap baris?",
+          "options": [
+            "700000 untuk semua baris.",
+            "1150000 untuk semua baris.",
+            "3400000 untuk semua baris."
+          ],
+          "answer": 1,
+          "explanation": "OVER () memakai seluruh input setelah filter: 500000 + 200000 + 250000 + 200000 = 1150000.",
+          "feedback": [
+            "700000 hanya total siswa 1; partition kosong menggabungkan dua siswa di cuplikan.",
+            "Benar: semua empat baris input berada di satu partition.",
+            "3400000 adalah penerimaan seluruh seed; cuplikan menyaring siswa lain sebelum window."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l2m02l01-edge-1",
+          "question": "Apakah payment pending 205 boleh dimasukkan agar total siswa 2 dianggap sudah 900000?",
+          "options": [
+            "Boleh, karena payment_id sudah unik.",
+            "Boleh, karena window otomatis mengubah pending menjadi succeeded.",
+            "Tidak; filter succeeded harus tetap membatasi penerimaan."
+          ],
+          "answer": 2,
+          "explanation": "Keberadaan payment row tidak sama dengan penerimaan uang berhasil; window tidak mengubah status.",
+          "feedback": [
+            "Primary key menjamin identitas payment, bukan keberhasilan penerimaannya.",
+            "Window hanya membaca nilai dan tidak mengganti status payment.",
+            "Benar: payment pending dan failed tidak memenuhi kontrak penerimaan."
+          ]
+        },
+        {
+          "id": "l2m02l01-edge-2",
+          "question": "Jika filter tidak menyisakan payment sama sekali, apa hasil query detail window ini?",
+          "options": [
+            "Nol baris, bukan satu baris total nol.",
+            "Satu baris dengan payment_id NULL dan total nol.",
+            "Semua payment asal karena partition kosong diabaikan."
+          ],
+          "answer": 0,
+          "explanation": "Window menambah kolom pada baris input; ia tidak menciptakan baris ketika input kosong.",
+          "feedback": [
+            "Benar: laporan semua siswa memerlukan sumber students dan join yang sesuai.",
+            "Perilaku agregat biasa tanpa GROUP BY berbeda dari query detail window ini.",
+            "Filter tetap berlaku; window tidak mengembalikan baris yang sudah dikeluarkan."
+          ]
+        }
+      ],
+      "hints": [
+        "Tentukan dahulu arti satu baris: payment succeeded, bukan satu siswa.",
+        "Ambil student_id dari invoices karena payments hanya menyimpan invoice_id.",
+        "Gunakan SUM(p.amount) OVER (PARTITION BY i.student_id); letakkan urutan tampilan di luar OVER."
+      ],
+      "solutionSql": "SELECT p.payment_id, i.student_id, p.amount,\n       SUM(p.amount) OVER (PARTITION BY i.student_id) AS student_paid\nFROM school.payments p\nJOIN school.invoices i ON i.invoice_id = p.invoice_id\nWHERE p.status = 'succeeded'\nORDER BY i.student_id, p.payment_id;",
+      "solutionExplanation": "JOIN setiap payment ke satu invoice pemiliknya, saring succeeded, lalu ulangi total seluruh partition siswa pada setiap payment. Solusi lengkap menghasilkan sembilan payment berhasil; total sekolah tetap 3400000 jika amount asli dijumlah sekali, bukan kolom student_paid yang berulang.",
+      "critical": false
+    },
+    "reflection": "Jelaskan mengapa detail payment tetap ada dan mengapa student_paid tidak boleh dijumlah ulang. Di mana Anda menaruh filter September jika total harus tetap mencakup Agustus?"
+  },
+  {
+    "id": "l2m02l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "sql",
+      "ranking",
+      "school-finance"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/functions-window.html"
+    ],
+    "hook": "Sekolah meminta tiga siswa dengan penerimaan tertinggi per jenjang. Bima dan Danu sama-sama membayar 450000. Apakah keduanya mendapat peringkat yang sama, dan bagaimana memilih paling banyak tiga baris secara konsisten?",
+    "objectives": [
+      "Mengagregasi pembayaran menjadi satu baris per siswa sebelum membuat ranking.",
+      "Membedakan ROW_NUMBER, RANK, dan DENSE_RANK ketika nilai seri.",
+      "Memilih kebijakan top tiga dan tie-breaker deterministik yang sesuai."
+    ],
+    "sections": [
+      {
+        "title": "Buat grain siswa sebelum membuat peringkat",
+        "paragraphs": [
+          "Ranking harus dimulai dari entitas yang ingin dibandingkan. Jika ROW_NUMBER langsung diterapkan pada payment, siswa dengan banyak cicilan mendapat beberapa nomor dan dapat memenuhi daftar top tiga sendirian. CTE receipts menjumlah hanya payment succeeded per student_id. CTE totals kemudian memakai students sebagai sumber dan LEFT JOIN hasil penerimaan agar siswa tanpa penerimaan tetap ada dengan paid nol. Setiap siswa sekarang memiliki satu baris. Field grade pada seed berisi jenjang SD, SMP, dan TK, bukan nama rombongan belajar; dalam contoh ini per kelas berarti per jenjang tersebut.",
+          "Kontrak contoh memasukkan siswa aktif dan tidak aktif serta seluruh periode pada seed. Karena itu Danu tetap masuk SD meskipun is_active bernilai false, dan Elina tetap masuk TK dengan paid nol. Jika laporan bisnis hanya untuk siswa aktif, filter tersebut harus dinyatakan dan diterapkan sebelum ranking. PARTITION BY grade memulai ulang nomor atau peringkat pada setiap jenjang. Total siswa yang sudah dihitung tidak boleh dijumlah ulang setelah join ke detail invoice karena grain akan pecah kembali."
+        ]
+      },
+      {
+        "title": "Nilai seri tidak selalu berarti nomor yang sama",
+        "paragraphs": [
+          "ROW_NUMBER memberikan nomor berbeda untuk setiap baris: 1, 2, 3, dan seterusnya. Agar pilihan pada nilai seri stabil, gunakan ORDER BY paid DESC, student_id. Pada SD, Alya berada di nomor 1 dengan 700000, lalu Bima nomor 2 dan Danu nomor 3 dengan 450000. student_id menjadi pemecah seri yang eksplisit; ia bukan bukti bahwa Bima membayar lebih banyak. Urutan window ini terpisah dari ORDER BY terluar yang memastikan tampilan hasil query juga stabil.",
+          "RANK dan DENSE_RANK menganggap baris dengan seluruh nilai ORDER BY window yang sama sebagai peer. Gunakan hanya paid DESC jika kesamaan pembayaran harus menghasilkan peringkat yang sama. Urutan nilai 700000, 450000, 450000, 100000 memberi RANK 1, 2, 2, 4 dan DENSE_RANK 1, 2, 2, 3. Baris 100000 adalah ilustrasi nilai tambahan untuk menjelaskan gap, bukan siswa baru pada seed. Jika student_id ditambahkan ke ORDER BY RANK, nilai seri terpecah karena identitas unik membuat peer berbeda."
+        ]
+      },
+      {
+        "title": "Tentukan arti top tiga sebelum menyaring",
+        "paragraphs": [
+          "Untuk paling banyak tiga siswa per jenjang, saring position <= 3 dari ROW_NUMBER. Untuk semua siswa yang masuk tiga peringkat kompetisi pertama, gunakan payment_rank <= 3; hasil dapat lebih dari tiga siswa bila ada seri. Untuk tiga nilai pembayaran berbeda tertinggi beserta seluruh pemiliknya, gunakan dense_payment_rank <= 3. Ketiga kontrak sah tetapi berbeda. Window tidak boleh dipakai langsung dalam WHERE pada tingkat SELECT yang sama di PostgreSQL 17. Hitung ranking di CTE ranked, lalu saring pada query luar. Jenjang dengan dua siswa hanya menghasilkan dua baris, bukan siswa tambahan untuk memenuhi kuota."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "WITH receipts AS (\n  SELECT i.student_id, SUM(p.amount) AS paid\n  FROM school.invoices i\n  JOIN school.payments p ON p.invoice_id = i.invoice_id\n  WHERE p.status = 'succeeded'\n  GROUP BY i.student_id\n), totals AS (\n  SELECT s.student_id, s.grade, COALESCE(r.paid, 0) AS paid\n  FROM school.students s\n  LEFT JOIN receipts r ON r.student_id = s.student_id\n), ranked AS (\n  SELECT student_id, grade, paid,\n         ROW_NUMBER() OVER (PARTITION BY grade ORDER BY paid DESC, student_id) AS position,\n         RANK() OVER (PARTITION BY grade ORDER BY paid DESC) AS payment_rank,\n         DENSE_RANK() OVER (PARTITION BY grade ORDER BY paid DESC) AS dense_payment_rank\n  FROM totals\n)\nSELECT * FROM ranked ORDER BY grade, position;",
+      "columns": [
+        "student_id",
+        "grade",
+        "paid",
+        "position",
+        "payment_rank",
+        "dense_payment_rank"
+      ],
+      "rows": [
+        [
+          "1",
+          "SD",
+          "700000.00",
+          "1",
+          "1",
+          "1"
+        ],
+        [
+          "2",
+          "SD",
+          "450000.00",
+          "2",
+          "2",
+          "2"
+        ],
+        [
+          "4",
+          "SD",
+          "450000.00",
+          "3",
+          "2",
+          "2"
+        ],
+        [
+          "6",
+          "SMP",
+          "1300000.00",
+          "1",
+          "1",
+          "1"
+        ],
+        [
+          "3",
+          "SMP",
+          "500000.00",
+          "2",
+          "2",
+          "2"
+        ],
+        [
+          "5",
+          "TK",
+          "0",
+          "1",
+          "1",
+          "1"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Bima dan Danu berbagi payment_rank 2 dan dense_payment_rank 2, tetapi position berbeda karena student_id memecah seri untuk ROW_NUMBER saja. Elina tetap ada dengan paid nol. Tanpa pembayaran, COALESCE memakai literal numeric nol yang ditampilkan sebagai 0."
+    },
+    "checks": [
+      {
+        "id": "l2m02l02-check-1",
+        "question": "Untuk nilai 700000, 450000, 450000, 100000, urutan RANK dan DENSE_RANK mana yang benar?",
+        "options": [
+          "RANK 1,2,3,4; DENSE_RANK 1,2,3,4.",
+          "RANK 1,2,2,4; DENSE_RANK 1,2,2,3.",
+          "RANK 1,2,2,3; DENSE_RANK 1,2,2,4."
+        ],
+        "answer": 1,
+        "explanation": "RANK menyisakan gap setelah peer; DENSE_RANK menghitung kelompok nilai berbeda tanpa gap.",
+        "feedback": [
+          "Urutan itu cocok untuk ROW_NUMBER dengan tie-breaker, bukan ranking nilai seri.",
+          "Benar: posisi keempat memiliki RANK 4 tetapi menjadi nilai berbeda ketiga.",
+          "Kedua urutan tertukar: gap adalah ciri RANK, bukan DENSE_RANK."
+        ]
+      },
+      {
+        "id": "l2m02l02-check-2",
+        "question": "Mengapa student_id tidak ditambahkan pada ORDER BY payment_rank dalam worked example?",
+        "options": [
+          "Agar pembayaran sama tetap menjadi peer dengan peringkat sama.",
+          "Karena PostgreSQL melarang dua kolom ORDER BY pada RANK.",
+          "Agar ROW_NUMBER juga memberi nomor yang sama untuk Bima dan Danu."
+        ],
+        "answer": 0,
+        "explanation": "Seluruh kolom ORDER BY menentukan peer; student_id unik akan menghapus seri pembayaran.",
+        "feedback": [
+          "Benar: tie-breaker identitas hanya dipakai pada position untuk kebijakan tiga baris.",
+          "Dua kolom diperbolehkan, tetapi mengubah arti peer dan peringkat.",
+          "ROW_NUMBER tetap unik per partition; ia tidak pernah memberi nomor seri."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Pilih kebijakan paling banyak tiga siswa per jenjang dengan urutan stabil, lalu bedakan dari kebijakan yang mengikutkan semua seri.",
+      "setup": "Agregasikan payment succeeded per siswa. Sertakan semua siswa, termasuk Danu yang tidak aktif dan Elina dengan nol penerimaan. Untuk contoh gap tambahan, nilai 100000 hanya ilustrasi tambahan, bukan perubahan seed.",
+      "starterSql": "WITH receipts AS (\n  SELECT i.student_id, SUM(p.amount) AS paid\n  FROM school.invoices i\n  JOIN school.payments p ON p.invoice_id = i.invoice_id\n  WHERE p.status = 'succeeded'\n  GROUP BY i.student_id\n), totals AS (\n  SELECT s.student_id, s.grade, COALESCE(r.paid, 0) AS paid\n  FROM school.students s\n  LEFT JOIN receipts r ON r.student_id = s.student_id\n), ranked AS (\n  SELECT student_id, grade, paid,\n         ROW_NUMBER() OVER (PARTITION BY grade ORDER BY paid DESC, student_id) AS position,\n         RANK() OVER (PARTITION BY grade ORDER BY paid DESC) AS payment_rank,\n         DENSE_RANK() OVER (PARTITION BY grade ORDER BY paid DESC) AS dense_payment_rank\n  FROM totals\n)\nSELECT * FROM ranked WHERE /* position | payment_rank | dense_payment_rank */ ORDER BY grade, position;",
+      "variants": [
+        {
+          "id": "l2m02l02-variant-1",
+          "question": "Nomor position Bima dan Danu pada SD adalah berapa dengan ORDER BY paid DESC, student_id?",
+          "options": [
+            "Keduanya 2.",
+            "Bima 3, Danu 2.",
+            "Bima 2, Danu 3."
+          ],
+          "answer": 2,
+          "explanation": "Alya nomor 1; nilai Bima dan Danu seri, lalu student_id 2 mendahului 4.",
+          "feedback": [
+            "Nomor yang sama berlaku untuk RANK, bukan ROW_NUMBER.",
+            "student_id diurutkan naik; 2 datang sebelum 4.",
+            "Benar: ROW_NUMBER memilih urutan deterministik dengan identitas sebagai pemecah seri."
+          ]
+        },
+        {
+          "id": "l2m02l02-variant-2",
+          "question": "Pada ilustrasi 700000, 450000, 450000, 100000, berapa baris lolos DENSE_RANK <= 3?",
+          "options": [
+            "Tiga baris karena batasnya selalu jumlah siswa.",
+            "Empat baris karena ada tiga nilai berbeda.",
+            "Dua baris karena nilai seri dibuang."
+          ],
+          "answer": 1,
+          "explanation": "DENSE_RANK membatasi jumlah nilai berbeda, sehingga seri dapat membuat jumlah baris lebih besar.",
+          "feedback": [
+            "Untuk batas jumlah baris pakai ROW_NUMBER, bukan DENSE_RANK.",
+            "Benar: dense rank 1,2,2,3 semuanya memenuhi batas.",
+            "Ranking tidak menghapus peer; kedua nilai 450000 tetap ada."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l2m02l02-edge-1",
+          "question": "Apa yang terjadi jika ranking langsung dibuat pada payment 203 dan 204 tanpa agregasi siswa?",
+          "options": [
+            "Bima dapat mengambil dua posisi karena grain masih payment.",
+            "ROW_NUMBER otomatis menggabungkannya menjadi satu siswa.",
+            "PARTITION BY grade otomatis menjumlah dua cicilan."
+          ],
+          "answer": 0,
+          "explanation": "Fungsi ranking memberi nomor pada baris input; agregasi siswa harus dilakukan terlebih dahulu.",
+          "feedback": [
+            "Benar: satu baris per siswa harus dibentuk sebelum ranking siswa.",
+            "ROW_NUMBER mempertahankan setiap baris input dan tidak menggabungkannya.",
+            "PARTITION BY membatasi konteks window, bukan menggantikan GROUP BY untuk total siswa."
+          ]
+        },
+        {
+          "id": "l2m02l02-edge-2",
+          "question": "Jika hanya ada dua siswa di SMP, berapa baris lolos position <= 3?",
+          "options": [
+            "Tiga baris karena SQL menambahkan baris kosong.",
+            "Nol baris karena kuota tiga tidak terpenuhi.",
+            "Dua baris; batas tidak menciptakan siswa baru."
+          ],
+          "answer": 2,
+          "explanation": "Predikat <= 3 mempertahankan posisi yang ada tanpa mensyaratkan tepat tiga baris tersedia.",
+          "feedback": [
+            "Window dan filter tidak membuat baris tambahan untuk mengisi kuota.",
+            "Batas atas tidak mewajibkan minimal tiga siswa dalam partition.",
+            "Benar: Farhan dan Citra adalah dua siswa SMP pada fixture."
+          ]
+        }
+      ],
+      "hints": [
+        "Periksa grain: hasil sebelum ranking harus satu baris per student_id.",
+        "Pisahkan tie-breaker ROW_NUMBER dari peer pembayaran untuk RANK dan DENSE_RANK.",
+        "Untuk maksimal tiga baris, gunakan position <= 3 di query luar setelah CTE ranked."
+      ],
+      "solutionSql": "WITH receipts AS (\n  SELECT i.student_id, SUM(p.amount) AS paid\n  FROM school.invoices i\n  JOIN school.payments p ON p.invoice_id = i.invoice_id\n  WHERE p.status = 'succeeded'\n  GROUP BY i.student_id\n), totals AS (\n  SELECT s.student_id, s.grade, COALESCE(r.paid, 0) AS paid\n  FROM school.students s\n  LEFT JOIN receipts r ON r.student_id = s.student_id\n), ranked AS (\n  SELECT student_id, grade, paid,\n         ROW_NUMBER() OVER (PARTITION BY grade ORDER BY paid DESC, student_id) AS position,\n         RANK() OVER (PARTITION BY grade ORDER BY paid DESC) AS payment_rank,\n         DENSE_RANK() OVER (PARTITION BY grade ORDER BY paid DESC) AS dense_payment_rank\n  FROM totals\n)\nSELECT * FROM ranked WHERE position <= 3 ORDER BY grade, position;",
+      "solutionExplanation": "Receipts membatasi payment succeeded dan totals membentuk satu baris per siswa. ROW_NUMBER diulang per grade dengan paid menurun dan student_id naik sebagai pemecah seri. Filter position <= 3 memberi maksimal tiga siswa; seluruh enam siswa seed lolos karena tiap jenjang memiliki paling banyak tiga siswa. Kolom RANK dan DENSE_RANK tetap menjelaskan seri tanpa dipakai sebagai batas jumlah baris.",
+      "critical": false
+    },
+    "reflection": "Jelaskan kapan Anda memilih ROW_NUMBER, RANK, atau DENSE_RANK untuk top tiga. Mengapa pemecah seri student_id benar untuk position tetapi mengubah arti peringkat pembayaran?"
+  },
+  {
+    "id": "l2m02l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "sql",
+      "window-frame",
+      "school-finance"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/functions-window.html",
+      "https://www.postgresql.org/docs/17/sql-expressions.html#SYNTAX-WINDOW-FUNCTIONS"
+    ],
+    "hook": "Alya membayar penuh untuk tagihan Agustus tetapi baru 200000 untuk September. Bagaimana membandingkan penerimaan kedua periode, melihat periode berikutnya, dan menghitung saldo tagihan berjalan tanpa menggandakan invoice karena cicilan?",
+    "objectives": [
+      "Membentuk satu baris per siswa dan bulan tagihan sebelum LAG atau LEAD.",
+      "Membedakan NULL batas urutan dari nol penerimaan pada periode yang ada.",
+      "Menetapkan frame ROWS eksplisit untuk penerimaan kumulatif dan saldo tagihan berjalan."
+    ],
+    "sections": [
+      {
+        "title": "Selesaikan grain bulanan sebelum menelusuri waktu",
+        "paragraphs": [
+          "Bulan pada laporan ini adalah invoices.period_month: penerimaan dikelompokkan menurut bulan tagihan yang dibayar, bukan paid_at. Semua payment succeeded yang ada pada seed dihitung, sehingga laporan ini bukan snapshot historis tentang uang yang sudah diterima tepat pada akhir bulan. Pada sistem nyata pembayaran terlambat dapat mengubah penerimaan untuk tagihan bulan lama. Kontrak waktu harus dijelaskan sebelum memilih query. Laporan arus kas berdasarkan bulan paid_at memerlukan pengelompokan tanggal pembayaran dan kebijakan timezone yang dibahas pada modul berikutnya.",
+          "CTE invoice_receipts menjumlah payment succeeded per invoice terlebih dahulu. Ini menjaga invoice 103 tetap satu baris meskipun dibayar lewat dua cicilan. LEFT JOIN ke invoices mempertahankan invoice tanpa penerimaan, termasuk invoice 104 dengan payment pending dan 108 tanpa payment row. COALESCE mengubah total payment yang tidak ada menjadi nol. CTE monthly kemudian menghasilkan satu baris per student_id dan period_month dengan billed dan paid. Pada grain ini urutan bulan unik di dalam setiap siswa, sehingga hasil perbandingan dan kumulatif deterministik."
+        ]
+      },
+      {
+        "title": "Baris tetangga bukan otomatis bulan kalender tetangga",
+        "paragraphs": [
+          "LAG(paid) membaca nilai dari baris sebelumnya dan LEAD(paid) dari baris sesudahnya menurut ORDER BY period_month pada partition siswa. Keduanya tidak membuat bulan kosong. Pada baris pertama Alya, previous_paid NULL berarti belum ada baris sebelumnya; pada baris terakhir, next_paid NULL berarti belum ada baris sesudahnya. Bima September memiliki paid nol karena invoice ada tetapi belum ada penerimaan berhasil. Nol tersebut tetap nilai yang sah bagi LEAD pada baris Agustus. Jangan mengganti semua NULL dengan nol tanpa menjelaskan perubahan maknanya.",
+          "Selisih paid - LAG(paid) pada Alya September adalah 200000 - 500000 = -300000. Selisih periode pertama dibiarkan NULL karena tidak ada pembanding. Jika dataset memiliki Januari lalu Maret tanpa Februari, LAG pada Maret membaca Januari, bukan menciptakan nilai Februari nol. Karena itu beri nama perbandingan terhadap periode tercatat sebelumnya sampai deret kalender lengkap tersedia. LAG(paid, 1, 0) dapat memberi default ketika baris sebelumnya tidak ada, tetapi default tersebut tidak mengganti NULL yang benar-benar tersimpan pada baris sebelumnya. Pada contoh ini paid sudah dibuat non-NULL melalui COALESCE."
+        ]
+      },
+      {
+        "title": "Frame eksplisit dan arti saldo",
+        "paragraphs": [
+          "SUM(paid) dengan ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW menjumlah dari awal partition sampai baris saat ini. received_total Alya adalah 500000 lalu 700000. running_outstanding memakai SUM(billed - paid) dengan frame yang sama, sehingga bernilai nol lalu 300000. Ini saldo tagihan tersisa sejak awal data yang tersedia, bukan saldo kas atau saldo rekening sekolah. Tidak ada saldo awal sebelum seed, refund, atau koreksi pada model ini. Jangan menyebut received_total sebagai outstanding karena uang diterima dan uang masih ditagih adalah ukuran yang berbeda.",
+          "Frame default saat agregat window memiliki ORDER BY mencakup peer dengan nilai urutan sama. Pada ilustrasi dua payment bertanggal sama bernilai 100 dan 200, SUM dengan urutan tanggal saja dapat menampilkan 300 pada kedua peer. ROWS dengan ORDER BY tanggal, payment_id yang unik memberi kumulatif per baris 100 lalu 300. ROWS tanpa pemecah seri tetap belum menentukan siapa duluan. Query monthly menghindari seri bulan melalui agregasi, tetapi tetap menulis frame agar maksudnya jelas. LAG dan LEAD mengikuti offset baris partition dan tidak dibatasi frame agregat ini."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "WITH invoice_receipts AS (\n  SELECT invoice_id, SUM(amount) AS paid\n  FROM school.payments\n  WHERE status = 'succeeded'\n  GROUP BY invoice_id\n), monthly AS (\n  SELECT i.student_id, i.period_month,\n         SUM(i.amount) AS billed,\n         SUM(COALESCE(r.paid, 0)) AS paid\n  FROM school.invoices i\n  LEFT JOIN invoice_receipts r ON r.invoice_id = i.invoice_id\n  GROUP BY i.student_id, i.period_month\n)\nSELECT student_id, period_month, billed, paid,\n       LAG(paid) OVER (PARTITION BY student_id ORDER BY period_month) AS previous_paid,\n       LEAD(paid) OVER (PARTITION BY student_id ORDER BY period_month) AS next_paid,\n       paid - LAG(paid) OVER (PARTITION BY student_id ORDER BY period_month) AS paid_delta,\n       SUM(paid) OVER (PARTITION BY student_id ORDER BY period_month\n         ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS received_total,\n       SUM(billed - paid) OVER (PARTITION BY student_id ORDER BY period_month\n         ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running_outstanding\nFROM monthly\nWHERE student_id IN (1, 2)\nORDER BY student_id, period_month;",
+      "columns": [
+        "student_id",
+        "period_month",
+        "billed",
+        "paid",
+        "previous_paid",
+        "next_paid",
+        "paid_delta",
+        "received_total",
+        "running_outstanding"
+      ],
+      "rows": [
+        [
+          "1",
+          "2026-08-01",
+          "500000.00",
+          "500000.00",
+          null,
+          "200000.00",
+          null,
+          "500000.00",
+          "0.00"
+        ],
+        [
+          "1",
+          "2026-09-01",
+          "500000.00",
+          "200000.00",
+          "500000.00",
+          null,
+          "-300000.00",
+          "700000.00",
+          "300000.00"
+        ],
+        [
+          "2",
+          "2026-08-01",
+          "450000.00",
+          "450000.00",
+          null,
+          "0",
+          null,
+          "450000.00",
+          "0.00"
+        ],
+        [
+          "2",
+          "2026-09-01",
+          "450000.00",
+          "0",
+          "450000.00",
+          null,
+          "-450000.00",
+          "450000.00",
+          "450000.00"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Alya September turun 300000 dibanding periode tercatat sebelumnya, menerima total 700000, dan menyisakan tagihan 300000. Bima September memiliki penerimaan nol tetapi invoice 450000 tetap ada. NULL di awal atau akhir urutan menandakan tetangga tidak tersedia. Angka nol pada paid berasal dari COALESCE untuk invoice tanpa penerimaan."
+    },
+    "checks": [
+      {
+        "id": "l2m02l03-check-1",
+        "question": "Apa previous_paid dan paid_delta Alya pada periode pertama yang tersedia?",
+        "options": [
+          "Keduanya nol karena setiap siswa pasti punya bulan sebelumnya.",
+          "500000 dan nol karena LAG membaca baris saat ini.",
+          "Keduanya NULL karena baris pembanding belum ada."
+        ],
+        "answer": 2,
+        "explanation": "LAG tanpa default menghasilkan NULL ketika baris sebelumnya tidak ada; pengurangan dengan NULL tetap NULL.",
+        "feedback": [
+          "Tidak ada bulan sebelumnya yang dibuat otomatis oleh window.",
+          "LAG default membaca satu baris sebelumnya, bukan baris saat ini.",
+          "Benar: NULL menjaga perbedaan antara tidak ada pembanding dan penerimaan nol."
+        ]
+      },
+      {
+        "id": "l2m02l03-check-2",
+        "question": "Mana rumus saldo tagihan berjalan, berbeda dari penerimaan kumulatif?",
+        "options": [
+          "SUM(billed - paid) dengan frame dari awal sampai baris saat ini.",
+          "SUM(paid) tanpa memperhitungkan billed.",
+          "LEAD(paid) karena selalu sama dengan saldo rekening."
+        ],
+        "answer": 0,
+        "explanation": "Saldo tagihan menjumlah perubahan kewajiban billed dikurangi penerimaan paid pada setiap periode.",
+        "feedback": [
+          "Benar: saldo tagihan Alya September adalah 1000000 - 700000 = 300000.",
+          "SUM(paid) mengukur penerimaan, bukan uang yang masih ditagih.",
+          "LEAD hanya membaca nilai baris berikutnya dan tidak menghitung saldo rekening."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Telusuri baris bulanan Alya dan Bima: bandingkan periode, penerimaan kumulatif, serta outstanding. Bedakan nol penerimaan dari tetangga yang tidak ada.",
+      "setup": "Periode memakai bulan invoice, bukan tanggal paid_at. Agregasikan cicilan succeeded per invoice sebelum menjumlah billed. Cakupan dimulai dari seed tanpa saldo awal; bulan tanpa invoice tidak dibuat otomatis.",
+      "starterSql": "WITH invoice_receipts AS (\n  SELECT invoice_id, SUM(amount) AS paid\n  FROM school.payments\n  WHERE status = 'succeeded'\n  GROUP BY invoice_id\n), monthly AS (\n  SELECT i.student_id, i.period_month,\n         SUM(i.amount) AS billed,\n         SUM(COALESCE(r.paid, 0)) AS paid\n  FROM school.invoices i\n  LEFT JOIN invoice_receipts r ON r.invoice_id = i.invoice_id\n  GROUP BY i.student_id, i.period_month\n)\nSELECT student_id, period_month, billed, paid,\n       LAG(paid) OVER (PARTITION BY student_id ORDER BY period_month) AS previous_paid\nFROM monthly\nORDER BY student_id, period_month;",
+      "variants": [
+        {
+          "id": "l2m02l03-variant-1",
+          "question": "Pada Alya September, berapa paid_delta, received_total, dan running_outstanding?",
+          "options": [
+            "-300000, 700000, 300000.",
+            "300000, 700000, 0.",
+            "-300000, 200000, 700000."
+          ],
+          "answer": 0,
+          "explanation": "Paid September 200000 dikurangi Agustus 500000; kumulatif 700000; tagihan 1000000 dikurangi penerimaan 700000.",
+          "feedback": [
+            "Benar: selisih, penerimaan, dan outstanding mengukur tiga hal berbeda.",
+            "Selisih adalah sekarang dikurangi sebelumnya; outstanding tidak nol ketika invoice baru sebagian dibayar.",
+            "Kumulatif memasukkan Agustus; outstanding bukan jumlah yang sudah diterima."
+          ]
+        },
+        {
+          "id": "l2m02l03-variant-2",
+          "question": "Pada Bima Agustus, berapa next_paid dan mengapa nilainya bukan NULL?",
+          "options": [
+            "450000 karena LEAD mengulang paid saat ini.",
+            "Nol karena invoice September ada tanpa penerimaan berhasil.",
+            "NULL karena payment September masih pending."
+          ],
+          "answer": 1,
+          "explanation": "Monthly tetap memiliki baris September dengan paid nol berkat invoices dan LEFT JOIN; LEAD membaca baris itu.",
+          "feedback": [
+            "LEAD membaca baris berikutnya, bukan mengulang nilai saat ini.",
+            "Benar: baris invoice ada; tidak ada penerimaan berbeda dari tidak ada baris.",
+            "Pending dikeluarkan dari receipts, tetapi invoice September tetap membentuk baris monthly."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l2m02l03-edge-1",
+          "question": "Jika siswa hanya memiliki invoice Januari dan Maret, apa yang dibaca LAG pada Maret?",
+          "options": [
+            "Nol Februari yang otomatis dibuat PostgreSQL.",
+            "NULL meskipun baris Januari ada.",
+            "Paid Januari sebagai periode tercatat sebelumnya."
+          ],
+          "answer": 2,
+          "explanation": "LAG mengikuti posisi baris terurut, bukan jarak kalender; deret bulan lengkap memerlukan langkah terpisah.",
+          "feedback": [
+            "Window tidak membuat bulan yang tidak ada dalam input.",
+            "Baris sebelumnya ada dan paid pada model ini tidak NULL.",
+            "Benar: sebut perbandingan periode tercatat sampai gap kalender diisi secara eksplisit."
+          ]
+        },
+        {
+          "id": "l2m02l03-edge-2",
+          "question": "Dua payment di tanggal sama bernilai 100 dan 200: bagaimana menjamin kumulatif per baris 100 lalu 300?",
+          "options": [
+            "ORDER BY tanggal, payment_id unik dan frame ROWS eksplisit, dengan ID payment 100 lebih kecil.",
+            "ORDER BY tanggal saja dengan frame default karena tanggal pasti unik.",
+            "ROWS tanpa tie-breaker karena urutan input selalu tetap."
+          ],
+          "answer": 0,
+          "explanation": "Frame ROWS memberi batas per baris, dan tie-breaker unik menetapkan urutan di antara tanggal seri.",
+          "feedback": [
+            "Benar: urutan total deterministik dan frame eksplisit sama-sama diperlukan.",
+            "Tanggal dapat seri; frame default bisa mencakup seluruh peer sekaligus.",
+            "ROWS tidak menentukan urutan peer; tie-breaker tetap diperlukan."
+          ]
+        }
+      ],
+      "hints": [
+        "Agregasikan pembayaran per invoice lebih dulu agar billed tidak berlipat karena cicilan.",
+        "Hitung LAG dan LEAD pada grain siswa-bulan, lalu bedakan NULL batas urutan dari paid nol.",
+        "Gunakan frame ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW untuk SUM(paid) dan SUM(billed - paid)."
+      ],
+      "solutionSql": "WITH invoice_receipts AS (\n  SELECT invoice_id, SUM(amount) AS paid\n  FROM school.payments\n  WHERE status = 'succeeded'\n  GROUP BY invoice_id\n), monthly AS (\n  SELECT i.student_id, i.period_month,\n         SUM(i.amount) AS billed,\n         SUM(COALESCE(r.paid, 0)) AS paid\n  FROM school.invoices i\n  LEFT JOIN invoice_receipts r ON r.invoice_id = i.invoice_id\n  GROUP BY i.student_id, i.period_month\n)\nSELECT student_id, period_month, billed, paid,\n       LAG(paid) OVER (PARTITION BY student_id ORDER BY period_month) AS previous_paid,\n       LEAD(paid) OVER (PARTITION BY student_id ORDER BY period_month) AS next_paid,\n       paid - LAG(paid) OVER (PARTITION BY student_id ORDER BY period_month) AS paid_delta,\n       SUM(paid) OVER (PARTITION BY student_id ORDER BY period_month\n         ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS received_total,\n       SUM(billed - paid) OVER (PARTITION BY student_id ORDER BY period_month\n         ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running_outstanding\nFROM monthly\nORDER BY student_id, period_month;",
+      "solutionExplanation": "Solusi menjaga grain invoice sebelum monthly agar dua cicilan invoice 103 tidak menggandakan billed. LAG/LEAD membandingkan periode tercatat dalam partition siswa. SUM(paid) menghitung penerimaan dan SUM(billed - paid) menghitung outstanding, keduanya memakai frame ROWS eksplisit. Data tidak diubah, bulan kosong tidak dibuat, dan hasil bukan snapshot arus kas pada akhir bulan.",
+      "critical": false
+    },
+    "reflection": "Jelaskan perbedaan NULL, paid nol, dan bulan tanpa baris. Mengapa saldo tagihan memakai billed - paid, dan kapan laporan menurut bulan invoice tidak cocok untuk pertanyaan arus kas?"
+  }
+]

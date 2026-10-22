@@ -1,16 +1,8 @@
 # Remaining curriculum authoring
 
-The following 96 canonical lessons remain draft. Each checkbox means: substantive teaching body, worked example, two concept checks with feedback, two practice variants, two graded edge cases, progressive hints, reflection, required fixture/simulator and validation. Publish only after the whole contract is complete.
+The following 93 canonical lessons remain draft. Each checkbox means: substantive teaching body, worked example, two concept checks with feedback, two practice variants, two graded edge cases, progressive hints, reflection, required fixture/simulator and validation. Follow the current AGENTS.md restrictions on validation; the L2M02 continuation was reviewed through code and diff only.
 
 ## L2 — SQL Problem Solving
-
-### L2M02 — Window Functions
-
-Prerequisite: l2m01. Scenario: School Finance.
-
-- [ ] `l2m02l01` — OVER, PARTITION BY, ORDER BY
-- [ ] `l2m02l02` — ROW_NUMBER, RANK, dan DENSE_RANK
-- [ ] `l2m02l03` — LAG, LEAD, dan running total
 
 ### L2M03 — Analitik Waktu dan Laporan
 

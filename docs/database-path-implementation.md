@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L1 plus L2M01: 24 published / 96 draft. The original implementation evidence below is retained as release history; see the L2M01 continuation for current validation.
+**Current publication:** L0–L1 plus L2M01–L2M02: 27 published / 93 draft. The original implementation evidence below is retained as release history. L2M02 has source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -74,3 +74,19 @@ Validation results:
 - No new unit tests, dependencies, arbitrary learner SQL execution, progress migration, account backend, push or deployment. Prediction-based assessment and browser-local progress remain the documented limits; Chromium and the specified widths were checked, not full cross-browser or accessibility conformance.
 
 Next authoring milestone: **L2M02 — Window Functions**, following the remaining checklist and the same publication/validation contract.
+
+## L2M02 continuation — 22 October 2026
+
+Scope: author the three canonical Window Functions lessons in Indonesian with complete English display translations. Reuse the current player, expected-result tables, quizzes, assessment and progress keys. Keep the School Finance fixture unchanged.
+
+- [x] Author payment-detail totals; per-grade ranking with explicit tie policy; monthly LAG/LEAD, receipt totals and outstanding balance with explicit frames.
+- [x] Register content and translations, update existing validation file registries and stale published/draft expectations without adding tests.
+- [x] Update counts and next milestone, and review source and diff. Commit only this work.
+
+Current AGENTS.md takes precedence over the historical validation workflow above: no tests, SQL execution, manual/browser checks, audit scripts, lint, typecheck or build will run for this continuation. SQL results are authored from the deterministic fixture and reviewed by reading; runtime validation remains outstanding. No new tests or dependencies.
+
+Authored `l2m02l01`–`l2m02l03` in `l2-windows.json`, with complete display copy in `en-database-windows.json` and localized tags. Each lesson includes three objectives, explanatory sections, ordered expected-result tables, two concept checks, two practice variants, two graded edge cases, three hints, reference SQL and reflection. The existing player renders these result tables; no new diagram or simulation component is needed.
+
+The catalog now includes nine fully authored modules and 27 published / 93 draft lessons. The blueprint, School Finance fixture, previous lesson versions and browser progress format are unchanged. L2M02 inherits the canonical L2M01 prerequisite; L2 remains incomplete and its level assessment remains unavailable. The next authoring milestone is **L2M03 — Analitik Waktu dan Laporan**.
+
+Review covered fixture amounts, one-row-per-student/month grain, successful-payment filtering, tie policies, frame boundaries, NULL versus zero, translated answer/feedback pairing and registration through the existing catalog. Audit/SQL tools include the new file for a future explicitly authorized run. Existing E2E expectations were only adjusted for the new count and next draft route; the suite was not expanded and its lesson loop still covers the earlier 24 records. No commands from the historical validation evidence were rerun, and no passing-test, build or runtime claim is made for L2M02.

@@ -25,7 +25,7 @@ async function answer(
   await quiz.getByRole("button", { name: "Check answer" }).click();
 }
 
-test("complete published lessons, module and level gates, resume, and preserve mastery on retake", async ({
+test("complete registered lessons, module and level gates, resume, and preserve mastery on retake", async ({
   page,
 }) => {
   test.setTimeout(240000);
@@ -38,7 +38,7 @@ test("complete published lessons, module and level gates, resume, and preserve m
       .first(),
   ).toBeVisible();
   await expect(
-    page.getByText("Database curriculum: 8 modules, 24 lessons available;", {
+    page.getByText("Database curriculum: 9 modules, 27 lessons available;", {
       exact: false,
     }),
   ).toBeVisible();
@@ -208,10 +208,10 @@ test("complete published lessons, module and level gates, resume, and preserve m
 test("draft routes, prerequisites, local progress compatibility and mobile access", async ({
   page,
 }) => {
-  const response = await page.goto("/lessons/l2m02l01");
+  const response = await page.goto("/lessons/l2m03l01");
   expect(response?.status()).toBe(404);
   await page.goto(path);
-  await expect(page.locator('a[href="/lessons/l2m02l01"]')).toHaveCount(0);
+  await expect(page.locator('a[href="/lessons/l2m03l01"]')).toHaveCount(0);
   await expect(page.locator('a[href="/lessons/l2m01l01"]')).toBeVisible();
   const level = page
     .locator(".database-level")

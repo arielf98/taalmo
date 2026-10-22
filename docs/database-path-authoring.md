@@ -4,13 +4,13 @@
 
 The public Database Engineering path is `/learn/database-engineering`; its SQL/database curriculum retains the source name Database Zero to Master. Transaction practice shares that page without changing its existing lesson or lab IDs.
 
-The canonical package is `curriculum/taalmo-database-zero-to-master/`. The adapter `src/content/database/catalog.ts` preserves all blueprint IDs, titles, order and module prerequisites. Adding an authored record in the four JSON files makes that canonical lesson published. For the explicitly authorized curriculum validation workflow, the content audit is a required release check: incomplete authored records must not be added. Unauthored lessons remain draft, visible as roadmap entries without links; the lesson route uses the published static parameter list only.
+The canonical package is `curriculum/taalmo-database-zero-to-master/`. The adapter `src/content/database/catalog.ts` preserves all blueprint IDs, titles, order and module prerequisites. Adding an authored record in a registered content JSON file makes that canonical lesson published. Incomplete authored records must not be added. The historical validation workflow below applies only with explicit user authorization; current AGENTS.md prohibits running tests, audits, SQL validation, manual/browser checks, lint, typecheck and build. Unauthored lessons remain draft, visible as roadmap entries without links; the lesson route uses the published static parameter list only.
 
-Published content covers L0–L1 and L2M01: 8 modules, 24 lessons. The remaining 96 lessons are explicitly draft. Their per-lesson work is listed in `database-path-remaining.md`. Nothing imports content into learner storage, so rebuilding/importing the catalog is idempotent and cannot reset progress.
+Published content covers L0–L1, L2M01 and L2M02: 9 modules, 27 lessons. The remaining 93 lessons are explicitly draft. Their per-lesson work is listed in `database-path-remaining.md`. Nothing imports content into learner storage, so rebuilding/importing the catalog is idempotent and cannot reset progress. L2M02 was reviewed by reading source and diff only; its SQL results and browser behavior have not been executed.
 
 ## Content contract
 
-Use `src/content/database/types.ts`. Each authored lesson includes stable ID and semantic content version, difficulty (`beginner` for L0–L1, `intermediate` for L2M01)/tags, a unique real problem, measurable objectives, substantial Indonesian explanation with misconceptions and limits plus a complete authored English display translation, worked PostgreSQL SQL with expected columns/rows, two or more concept checks, two practice variants, two independently graded edge cases, three progressive hints, a reference solution and reflection.
+Use `src/content/database/types.ts`. Each authored lesson includes stable ID and semantic content version, difficulty (`beginner` for L0–L1, `intermediate` for L2M01–L2M02)/tags, a unique real problem, measurable objectives, substantial Indonesian explanation with misconceptions and limits plus a complete authored English display translation, worked PostgreSQL SQL with expected columns/rows, two or more concept checks, two practice variants, two independently graded edge cases, three progressive hints, a reference solution and reflection.
 
 Questions use stable IDs, distinct option texts, an answer index and feedback for every option. Correct positions should vary. Retakes rotate visible options while retaining the canonical answer index. Practice variants change the scenario or result being reasoned about; change numeric inputs and their correct feedback together. Keep remedial feedback specific to the error, including the concept to revisit. Mark safety/integrity questions critical and mark the corresponding activity critical. All activity/edge-case answers must be correct to finish a lesson.
 
@@ -20,7 +20,7 @@ The new player reuses the platform Quiz, Button, Workspace and local progress re
 
 ## PostgreSQL fixture and examples
 
-Target: PostgreSQL 17, verified locally with `postgres:17-alpine`. School Finance seed has six students, ten invoices and eleven payment rows. Only succeeded payments count as receipts. It deliberately has no `invoices.status` column and no identity/default for `students.student_id`.
+Target: PostgreSQL 17; earlier L0–L2M01 examples were verified locally with `postgres:17-alpine`. School Finance seed has six students, ten invoices and eleven payment rows. Only succeeded payments count as receipts. It deliberately has no `invoices.status` column and no identity/default for `students.student_id`.
 
 For generated IDs or mutations, specify an isolated TEMP-table setup. Explain the adaptation in learner copy. `worked.sql` returns a table described by `columns` and `rows`; expected CSV values are strings or null. Use `ordered: true` only when ordering is part of the exercise contract. Otherwise verification compares multisets, including duplicates. Amount formatting and deterministic dates must match the example. Avoid current date/time and environment-dependent formatting.
 
@@ -35,6 +35,8 @@ No application seed command is necessary: catalog imports are static. SQL verifi
 
 Primary references: [PostgreSQL NULL comparisons](https://www.postgresql.org/docs/17/functions-comparison.html), [table expressions and joins](https://www.postgresql.org/docs/17/queries-table-expressions.html), [identity columns](https://www.postgresql.org/docs/17/ddl-identity-columns.html), [ROLLBACK](https://www.postgresql.org/docs/17/sql-rollback.html), [subquery expressions](https://www.postgresql.org/docs/17/functions-subquery.html), [CTEs](https://www.postgresql.org/docs/17/queries-with.html), [set operations](https://www.postgresql.org/docs/17/queries-union.html).
 
+L2M02 references: [window tutorial](https://www.postgresql.org/docs/17/tutorial-window.html), [ranking and offset functions](https://www.postgresql.org/docs/17/functions-window.html), [window ordering and frames](https://www.postgresql.org/docs/17/sql-expressions.html#SYNTAX-WINDOW-FUNCTIONS). Examples preserve payment detail, aggregate to student grain before ranking, and aggregate invoice receipts before monthly windows. Monthly totals allocate all known successful receipts to invoice periods; they are not historical month-end cash-flow snapshots. Missing calendar months and opening balances are not invented.
+
 ## Progress, gates and versions
 
 `taalmo.progress.v1` retains the original transaction milestones. Its optional `curriculum` field stores versioned lesson/exam records and a resume ID for the current browser learner. Saved answers use canonical option indexes; translated or reordered display copy does not change grading. Completed snapshots remain when starting a fresh attempt. New content versions requalify against their own records without deleting older versions.
@@ -43,7 +45,7 @@ A lesson requires the selected practice variant, every edge case, all concept ch
 
 This is formative device-local mastery, not protected credential issuance. Answers exist in client content; expected solutions are concealed in the UI until a practice submission. There is no server grading, authentication, cross-device progress, tenant database or trusted badge service. Introducing those requires a separate backend design; do not claim browser storage prevents learner tampering.
 
-## Validation and editing workflow
+## Historical validation and editing workflow — explicit authorization required
 
 1. Read the blueprint/module prerequisites and target fixture; author real material in the content JSON, preserving IDs.
 2. Register each new content file in the catalog, content audit, SQL verifier and browser integration imports. Run the content audit; fix missing body, invalid question IDs/answers, incomplete feedback, missing variants/edge cases/hints or broken prerequisites.
@@ -57,6 +59,6 @@ npm run lint
 npm run build
 ```
 
-The current master prompt explicitly authorizes these checks for the curriculum task. The general `AGENTS.md` no-test policy still applies to unrelated later work. No new unit tests are part of this change. Browser integration covers completion gating, saved responses, resume, draft exclusion, prerequisites, blocked storage and mobile layout. Screenshots are written to ignored `output/playwright/`.
+The original master prompt authorized these checks for the initial curriculum implementation. Do not treat that historical permission as authorization for later work: follow the current AGENTS.md and user instructions. No new unit tests are permitted. The existing browser integration covers completion gating, saved responses, resume, draft exclusion, prerequisites, blocked storage and mobile layout for its registered lessons. Screenshots are written to ignored `output/playwright/`.
 
 5. Update published/draft counts and remaining checklist from actual authored content; commit the completed work without push/deploy.

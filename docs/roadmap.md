@@ -13,11 +13,11 @@
 
 ## Database Engineering — database curriculum
 
-The unified Database Engineering path includes transaction practice and the Database Zero to Master source curriculum on `/learn/database-engineering`. Old path URLs redirect there; the dashboard/sidebar use one path and combined lesson/lab activity progress. The database curriculum registers all 10 levels, 40 modules and 120 canonical IDs. L0–L1 and L2M01 have 24 published English/Indonesian lessons, practice variants/edge cases, progressive hints, reflection, versioned resume and module/level assessment gates. The remaining curriculum has 96 draft lessons, not available player content. SQL examples are verified on disposable PostgreSQL; the website uses prediction-based formative activities and has no arbitrary SQL runner or account-backed certification.
+The unified Database Engineering path includes transaction practice and the Database Zero to Master source curriculum on `/learn/database-engineering`. Old path URLs redirect there; the dashboard/sidebar use one path and combined lesson/lab activity progress. The database curriculum registers all 10 levels, 40 modules and 120 canonical IDs. L0–L1 and L2M01–L2M02 have 27 published English/Indonesian lessons, practice variants/edge cases, progressive hints, reflection, versioned resume and module/level assessment gates. The remaining curriculum has 93 draft lessons, not available player content. Earlier SQL examples through L2M01 were verified on disposable PostgreSQL; L2M02 has source/diff review only under the current no-test policy. The website uses prediction-based formative activities and has no arbitrary SQL runner or account-backed certification.
 
-## Recommended next milestone: L2M02 authoring
+## Recommended next milestone: L2M03 authoring
 
-Continue with OVER/PARTITION BY/ORDER BY, ROW_NUMBER/RANK/DENSE_RANK and LAG/LEAD/running totals, following `database-path-remaining.md` and the authoring contract. Add real teaching content and grounded activities before publishing. Preserve IDs and existing progress. An isolated SQL runner is a separate future capability, not a reason to expose unrestricted database execution.
+Continue with date ranges and time zones, time series with empty months, and outstanding/aging buckets, following `database-path-remaining.md` and the authoring contract. Build on L2M02’s explicit distinction between invoice-month allocation, payment-date cash flow and preceding recorded rows. Add real teaching content and grounded activities before publishing. Preserve IDs and existing progress. An isolated SQL runner is a separate future capability, not a reason to expose unrestricted database execution.
 
 ## Later learning improvements
 
