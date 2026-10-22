@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L1 plus L2M01–L2M02: 27 published / 93 draft. The original implementation evidence below is retained as release history. L2M02 has source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L1 plus L2M01–L2M03: 30 published / 90 draft. The original implementation evidence below is retained as release history. L2M02–L2M03 have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -90,3 +90,21 @@ Authored `l2m02l01`–`l2m02l03` in `l2-windows.json`, with complete display cop
 The catalog now includes nine fully authored modules and 27 published / 93 draft lessons. The blueprint, School Finance fixture, previous lesson versions and browser progress format are unchanged. L2M02 inherits the canonical L2M01 prerequisite; L2 remains incomplete and its level assessment remains unavailable. The next authoring milestone is **L2M03 — Analitik Waktu dan Laporan**.
 
 Review covered fixture amounts, one-row-per-student/month grain, successful-payment filtering, tie policies, frame boundaries, NULL versus zero, translated answer/feedback pairing and registration through the existing catalog. Audit/SQL tools include the new file for a future explicitly authorized run. Existing E2E expectations were only adjusted for the new count and next draft route; the suite was not expanded and its lesson loop still covers the earlier 24 records. No commands from the historical validation evidence were rerun, and no passing-test, build or runtime claim is made for L2M02.
+
+## L2M03 continuation — 22 October 2026
+
+Scope: three bilingual time-reporting lessons using the current player and unmodified School Finance fixture. Use explicit Asia/Jakarta boundaries, a twelve-month calendar, and fixed-date aging with a separate not-due category. Preserve prior lesson IDs, versions and progress.
+
+- [x] Author half-open receipt ranges, a zero-filled 2026 monthly report, and invoice aging with receipt cutoffs and explicit bucket boundaries.
+- [x] Register content/translation files and existing validation registries; adjust stale existing E2E expectations without expanding the suite.
+- [x] Update counts and the next milestone, and review code and diff. Commit this work only.
+
+Follow current AGENTS.md: no tests, audits, SQL execution, manual/browser checks, lint, typecheck or build. Only source/diff review is authorized. No new tests, dependencies or database changes.
+
+Authored `l2m03l01`–`l2m03l03` in `l2-time-reports.json` with complete English display copy in `en-database-time-reports.json` and localized tags. Each has explanatory sections, three objectives, a worked result table, two concept checks, two practice variants, two graded edge cases, three hints, reference SQL and reflection. The existing player, quiz and progress repository are reused.
+
+Source review covered half-open instant boundaries, local-month grouping, explicit timestamp overloads for the twelve-month calendar, LEFT JOIN filter placement, COUNT of actual matches, LAG after filling calendar gaps, preaggregation per invoice, fixed-date age subtraction, 30/31/60/61 boundaries, and exclusion of future receipts from aging. Expected outputs were authored from the fixture: September receipts 1350000; annual receipts 3400000; positive outstanding 1950000, split into 1300000 at 0–30 days and 650000 above 60 days. These are source-reviewed expectations, not executed SQL results.
+
+The catalog now has ten fully authored modules and 30 published / 90 draft lessons. L2M03 retains its canonical L2M02 prerequisite. L2M04 remains draft, so no complete L2 assessment is exposed. IDs, prior versions, fixture and storage format are unchanged. Validation registries include the new JSON for a future authorized run; existing E2E expectations only update the count and next draft route. No test cases or registered lesson coverage were added; the browser loop remains the earlier 24 records. Next: **L2M04 — Kebenaran Hasil Query**, under the same no-test policy unless the user explicitly changes it.
+
+Limits are taught explicitly: the calendar is a static fixture report, not proof of complete live or future data; succeeded payments with unknown timestamps need investigation. Aging assumes fixture invoices already exist, uses current recorded statuses and has no complete issuance/status/refund ledger. Credits are separate from this positive-outstanding report. SQL, browser behavior and runtime remain unverified for L2M02–L2M03.

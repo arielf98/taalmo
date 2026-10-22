@@ -1,0 +1,632 @@
+[
+  {
+    "id": "l2m03l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "sql",
+      "time-zones",
+      "reporting",
+      "school-finance"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/datatype-datetime.html",
+      "https://www.postgresql.org/docs/17/functions-datetime.html"
+    ],
+    "hook": "Laporan September kehilangan payment pada malam terakhir bulan itu, atau menghitung tengah malam Oktober dua kali. Bagaimana menetapkan awal, akhir, dan zona waktu agar setiap payment masuk tepat satu bulan?",
+    "objectives": [
+      "Menyaring payment dengan interval >= awal dan < awal bulan berikutnya.",
+      "Mengubah batas kalender Asia/Jakarta menjadi instant pembanding paid_at.",
+      "Membedakan bulan pembayaran, bulan invoice, dan timestamp yang tidak diketahui."
+    ],
+    "sections": [
+      {
+        "title": "Tetapkan dulu bulan menurut bisnis",
+        "paragraphs": [
+          "Laporan ini mengukur penerimaan berhasil menurut waktu pembayaran, yaitu payments.paid_at, bukan invoices.period_month. Bulan September ditetapkan menurut Asia/Jakarta. Satu payment yang melunasi invoice Agustus tetapi diterima September masuk penerimaan September pada kontrak ini. Berbeda dengan laporan L2M02 yang mengalokasikan uang ke bulan tagihan, di sini pertanyaannya adalah kapan uang diterima. Pilih definisi periode sebelum membuat filter; dua laporan dapat memiliki angka berbeda tanpa salah jika masing-masing menjawab pertanyaan bisnis yang berbeda.",
+          "Kolom paid_at bertipe timestamptz, yang merepresentasikan suatu instant. Tampilan jamnya dapat berubah mengikuti timezone sesi, tetapi instant yang dibandingkan tetap sama. TIMESTAMP tanpa zona adalah jam kalender yang belum diberi konteks zona. Pada contoh, TIMESTAMP awal September AT TIME ZONE Asia/Jakarta menghasilkan instant yang setara dengan 31 Agustus pukul 17:00 UTC. Awal Oktober Jakarta setara dengan 30 September pukul 17:00 UTC. Jangan mengandalkan timezone sesi untuk menafsirkan literal batas tanpa zona."
+        ]
+      },
+      {
+        "title": "Awal inklusif, akhir eksklusif",
+        "paragraphs": [
+          "Gunakan paid_at >= starts_at AND paid_at < ends_at. Payment tepat pada 1 September pukul 00:00 Jakarta ikut September. Payment tepat pada 1 Oktober pukul 00:00 Jakarta tidak ikut September, tetapi masuk Oktober. Dua periode yang berdampingan berbagi satu batas tanpa overlap atau celah. Bentuk ini sering disebut half-open interval. BETWEEN mencakup kedua ujung, sehingga BETWEEN awal September dan awal Oktober juga memasukkan instant pertama Oktober. Menggabungkan dua laporan bulanan seperti itu dapat menghitung payment batas dua kali.",
+          "Hindari menebak akhir bulan sebagai 30 September pukul 23:59:59. PostgreSQL dapat menyimpan pecahan detik; payment pada 23:59:59.500000 masih September dan akan hilang bila batas maksimum hanya detik bulat tersebut. Batas awal bulan berikutnya menangani seluruh pecahan detik tanpa menebak presisi terakhir. Untuk zona yang mengalami daylight saving, tentukan masing-masing batas kalender dalam zona bisnis; jangan menganggap setiap hari lokal selalu tepat 24 jam. Contoh Jakarta ini tidak memerlukan perpindahan daylight saving."
+        ]
+      },
+      {
+        "title": "Penerimaan nol berbeda dari waktu yang tidak diketahui",
+        "paragraphs": [
+          "Tetap saring status succeeded: payment pending atau failed bukan penerimaan, meskipun memiliki baris di tabel. paid_at NULL tidak memenuhi perbandingan rentang, sehingga baris tersebut tidak masuk bulan mana pun pada query ini. Jika payment succeeded memiliki paid_at NULL, perlakukan sebagai masalah kualitas data yang perlu ditelusuri, bukan bukti uang tidak diterima. COUNT menghitung payment yang lolos filter dan COALESCE(SUM(amount), 0.00) memberikan nol ketika tidak ada baris cocok. Agregat biasa tanpa GROUP BY tetap menghasilkan satu baris, berbeda dari query detail window yang dibahas sebelumnya."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "WITH bounds AS (\n  SELECT TIMESTAMP '2026-09-01 00:00:00' AT TIME ZONE 'Asia/Jakarta' AS starts_at,\n         TIMESTAMP '2026-10-01 00:00:00' AT TIME ZONE 'Asia/Jakarta' AS ends_at\n)\nSELECT COUNT(*) AS payment_count, COALESCE(SUM(p.amount), 0.00) AS received\nFROM school.payments p CROSS JOIN bounds b\nWHERE p.status = 'succeeded'\n  AND p.paid_at >= b.starts_at\n  AND p.paid_at < b.ends_at;",
+      "columns": [
+        "payment_count",
+        "received"
+      ],
+      "rows": [
+        [
+          "3",
+          "1350000.00"
+        ]
+      ],
+      "explanation": "Payment 202 sebesar 200000, 207 sebesar 500000, dan 211 sebesar 650000 masuk September Jakarta: tiga payment, total 1350000. Semua instant pada seed jauh dari batas bulan. Contoh batas pada kuis adalah ilustrasi tambahan, bukan payment baru yang disisipkan ke seed."
+    },
+    "checks": [
+      {
+        "id": "l2m03l01-check-1",
+        "question": "Predikat mana memasukkan seluruh September Jakarta tanpa memasukkan awal Oktober?",
+        "options": [
+          "paid_at >= awal September AND paid_at < awal Oktober.",
+          "paid_at BETWEEN awal September AND awal Oktober.",
+          "paid_at <= 30 September 23:59:59 saja."
+        ],
+        "answer": 0,
+        "explanation": "Batas akhir eksklusif mencegah overlap dan tetap mencakup pecahan detik pada hari terakhir.",
+        "feedback": [
+          "Benar: awal Oktober hanya masuk laporan Oktober, bukan September.",
+          "BETWEEN juga memasukkan batas atas, sehingga instant awal Oktober ikut.",
+          "Batas itu kehilangan pecahan detik terakhir dan tidak membatasi awal periode."
+        ]
+      },
+      {
+        "id": "l2m03l01-check-2",
+        "question": "Payment pada 31 Agustus 2026 pukul 17:00 UTC masuk bulan apa menurut Asia/Jakarta?",
+        "options": [
+          "Agustus karena tanggal UTC selalu menjadi tanggal laporan.",
+          "September karena instant itu tepat 1 September pukul 00:00 Jakarta.",
+          "Kedua bulan karena timezone membuat dua instant."
+        ],
+        "answer": 1,
+        "explanation": "Jakarta pada contoh ini tujuh jam di depan UTC; instant batas awal termasuk periode baru.",
+        "feedback": [
+          "Bulan laporan mengikuti zona bisnis, bukan otomatis tanggal UTC.",
+          "Benar: instant sama ditampilkan pada tanggal kalender lokal yang berbeda.",
+          "Konversi zona mengubah representasi jam, bukan menciptakan instant tambahan."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Hitung penerimaan September pada seed, lalu tentukan keanggotaan payment tepat di batas bulan.",
+      "setup": "Gunakan status succeeded dan zona Asia/Jakarta. Rentang adalah 1 September 2026 pukul 00:00 sampai sebelum 1 Oktober pukul 00:00. Kasus pecahan detik pada kuis bersifat hipotetis dan tidak mengubah fixture.",
+      "starterSql": "SELECT COUNT(*) AS payment_count, COALESCE(SUM(amount), 0.00) AS received\nFROM school.payments\nWHERE status = 'succeeded'\n  AND paid_at >= /* starts_at */\n  AND paid_at < /* ends_at */;",
+      "variants": [
+        {
+          "id": "l2m03l01-variant-1",
+          "question": "Berapa jumlah payment succeeded dan total penerimaan September Jakarta pada seed?",
+          "options": [
+            "Empat payment, total 1800000.",
+            "Tiga payment, total 3400000.",
+            "Tiga payment, total 1350000."
+          ],
+          "answer": 2,
+          "explanation": "Payment 202, 207, dan 211 berjumlah 200000 + 500000 + 650000 = 1350000.",
+          "feedback": [
+            "Payment 205 masih pending dan tidak boleh menambah penerimaan.",
+            "3400000 adalah penerimaan seluruh seed, termasuk Agustus.",
+            "Benar: hanya tiga payment berhasil dengan paid_at dalam rentang yang dihitung."
+          ]
+        },
+        {
+          "id": "l2m03l01-variant-2",
+          "question": "Jika parameter bulan diganti ke Agustus Jakarta, berapa total penerimaan seed?",
+          "options": [
+            "2050000 dari enam payment berhasil.",
+            "2700000 karena payment failed ikut dihitung.",
+            "1350000 karena total setiap bulan harus sama."
+          ],
+          "answer": 0,
+          "explanation": "Agustus memiliki payment 201, 203, 204, 208, 209, dan 210; jumlahnya 2050000.",
+          "feedback": [
+            "Benar: dua cicilan invoice yang sama tetap dua penerimaan yang sah.",
+            "Payment failed 206 tidak masuk kontrak penerimaan meskipun nominalnya 650000.",
+            "Distribusi bulanan mengikuti data; nilai September tidak boleh disalin ke Agustus."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l2m03l01-edge-1",
+          "question": "Payment hipotetis pada 30 September pukul 23:59:59.500000 Jakarta harus masuk laporan mana?",
+          "options": [
+            "Oktober karena ada pecahan detik.",
+            "September karena masih lebih kecil dari awal Oktober.",
+            "Tidak masuk laporan mana pun karena lebih besar dari 23:59:59."
+          ],
+          "answer": 1,
+          "explanation": "Batas akhir adalah awal Oktober, bukan detik bulat terakhir September.",
+          "feedback": [
+            "Pecahan detik tidak mengubah bulan kalender instant tersebut.",
+            "Benar: interval half-open tidak kehilangan pecahan detik akhir hari.",
+            "Itu kelemahan batas 23:59:59; gunakan awal bulan berikutnya sebagai batas eksklusif."
+          ]
+        },
+        {
+          "id": "l2m03l01-edge-2",
+          "question": "Apa perlakuan tepat untuk payment succeeded dengan paid_at NULL pada laporan ini?",
+          "options": [
+            "Masukkan ke September dengan menganggap NULL sama dengan awal bulan.",
+            "Anggap pasti tidak ada uang yang diterima.",
+            "Tidak lolos filter tanggal; tandai waktu yang hilang sebagai masalah kualitas data."
+          ],
+          "answer": 2,
+          "explanation": "Perbandingan timestamp NULL tidak bernilai TRUE; waktu penerimaan tidak boleh ditebak.",
+          "feedback": [
+            "COALESCE ke tanggal buatan mengarang periode penerimaan yang belum diketahui.",
+            "Status berhasil dan waktu tidak diketahui adalah dua informasi berbeda.",
+            "Benar: pengecualian dari rentang tidak membuktikan penerimaan bernilai nol."
+          ]
+        }
+      ],
+      "hints": [
+        "Tentukan zona bisnis dahulu; tanggal UTC saja belum menetapkan bulan lokal.",
+        "Buat starts_at dan ends_at dari TIMESTAMP lokal AT TIME ZONE Asia/Jakarta.",
+        "Gabungkan status succeeded dengan paid_at >= starts_at AND paid_at < ends_at, lalu SUM amount."
+      ],
+      "solutionSql": "WITH bounds AS (\n  SELECT TIMESTAMP '2026-09-01 00:00:00' AT TIME ZONE 'Asia/Jakarta' AS starts_at,\n         TIMESTAMP '2026-10-01 00:00:00' AT TIME ZONE 'Asia/Jakarta' AS ends_at\n)\nSELECT COUNT(*) AS payment_count, COALESCE(SUM(p.amount), 0.00) AS received\nFROM school.payments p CROSS JOIN bounds b\nWHERE p.status = 'succeeded'\n  AND p.paid_at >= b.starts_at\n  AND p.paid_at < b.ends_at;",
+      "solutionExplanation": "Dua batas lokal dikonversi menjadi instant secara eksplisit. Filter sukses dan rentang half-open memilih payment 202, 207, dan 211 sekali masing-masing. COUNT menghasilkan tiga dan total 1350000; bulan tanpa payment menghasilkan count nol dan received 0.00, sedangkan timestamp hilang tetap memerlukan tindak lanjut kualitas data.",
+      "critical": false
+    },
+    "reflection": "Mengapa akhir periode memakai awal bulan berikutnya dan bukan 23:59:59? Jelaskan pengaruh zona bisnis serta alasan paid_at NULL tidak boleh otomatis dianggap penerimaan nol."
+  },
+  {
+    "id": "l2m03l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "sql",
+      "time-series",
+      "reporting",
+      "school-finance"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/functions-srf.html",
+      "https://www.postgresql.org/docs/17/queries-table-expressions.html"
+    ],
+    "hook": "Grafik penerimaan hanya menampilkan Agustus dan September, sehingga tampak seolah setiap bulan memiliki transaksi. Bagaimana menampilkan dua belas bulan, mempertahankan bulan kosong, dan membandingkan bulan kalender yang benar?",
+    "objectives": [
+      "Membentuk kalender dua belas bulan dengan generate_series dan batas yang tepat.",
+      "Memakai kalender sebagai sumber LEFT JOIN ke penerimaan yang sudah diagregasi bulanan.",
+      "Menghitung LAG setelah bulan kosong diisi agar pembanding mengikuti kalender."
+    ],
+    "sections": [
+      {
+        "title": "Kalender adalah data, bukan hiasan grafik",
+        "paragraphs": [
+          "GROUP BY pada payments hanya menghasilkan bulan yang memiliki baris cocok. Seed mempunyai penerimaan berhasil pada Agustus dan September 2026, sehingga pengelompokan langsung menghasilkan dua baris. Itu belum menjawab laporan tahunan dua belas bulan. CTE calendar membuat satu baris untuk setiap awal bulan dari Januari sampai Desember. Kita memakai overload generate_series dengan TIMESTAMP tanpa zona secara eksplisit agar deret label kalender tidak bergantung timezone sesi. Baris kalender ini adalah kerangka laporan, bukan payment buatan yang dimasukkan ke database.",
+          "generate_series memasukkan stop bila nilai tersebut tercapai oleh langkah. Dengan start 1 Januari, stop 1 Desember, dan interval satu bulan, hasilnya dua belas awal bulan. Stop 1 Januari tahun berikutnya akan memberi tiga belas baris karena kedua Januari ikut. Ini berbeda dari filter payment half-open yang memakai batas akhir eksklusif 1 Januari tahun berikutnya. Kalender membangkitkan label bulan, sedangkan filter waktu menentukan instant transaksi yang termasuk tahun laporan. Kedua batas tidak boleh disalin tanpa memahami perannya."
+        ]
+      },
+      {
+        "title": "Agregasikan fakta, lalu pertahankan kalender",
+        "paragraphs": [
+          "CTE receipts menyaring status succeeded dan rentang tahun dengan batas Asia/Jakarta. paid_at AT TIME ZONE Asia/Jakarta diubah ke jam lokal sebelum date_trunc month agar pengelompokan memakai bulan yang sama dengan filter. Setelah agregasi ada paling banyak satu baris penerimaan per bulan. LEFT JOIN dari calendar mempertahankan semua bulan walaupun receipts tidak memiliki pasangan. COALESCE pada count dan amount mengubah ketidakadaan pasangan menjadi nol laporan. Ini sah untuk bulan yang diketahui tidak memiliki payment cocok, tetapi tidak memperbaiki payment sukses dengan waktu yang hilang.",
+          "Jangan meletakkan WHERE r.received > 0 pada hasil LEFT JOIN bila kontraknya harus dua belas bulan. Baris bulan kosong memiliki kolom r bernilai NULL, sehingga filter itu membuangnya. Filter payment diletakkan di CTE receipts; setelah join, pilih kolom dari calendar dan hasil COALESCE. COUNT(*) pada CTE receipts aman karena sumbernya payment nyata sebelum LEFT JOIN. Jika menghitung langsung dari kalender yang di-LEFT JOIN ke payment mentah, COUNT(*) justru menghitung baris kalender kosong sebagai satu; COUNT(payment_id) menghitung hanya pasangan payment yang ada."
+        ]
+      },
+      {
+        "title": "Window mengikuti kalender yang sudah lengkap",
+        "paragraphs": [
+          "Hitung LAG pada filled, setelah semua bulan tersedia. previous_received Januari tetap NULL karena kalender laporan dimulai di sana dan tidak menyediakan Desember 2025. Nilai Februari adalah nol dari Januari. Oktober membaca penerimaan September 1350000; November membaca Oktober nol, bukan melompati bulan kosong kembali ke September. Karena month_start unik, urutan window deterministik. Bila diminta rata-rata penerimaan bulanan tahunan, penyebutnya dua belas pada kontrak kalender penuh ini, bukan dua bulan aktif. Nol bulan kosong memiliki arti analitis dan tidak boleh hilang hanya karena grafik lebih ringkas.",
+          "Nol di contoh ini berarti tidak ada payment cocok pada fixture statis, bukan jaminan bahwa sistem sumber lengkap atau bulan masa depan sudah selesai. Pada laporan berjalan, periode yang belum terjadi atau data yang belum masuk dapat memerlukan label belum tersedia. Pastikan cakupan dan kelengkapan data sebelum menafsirkan semua bulan kosong sebagai penerimaan aktual nol."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "WITH calendar AS (\n  SELECT g.month_start::date AS month_start\n  FROM generate_series(TIMESTAMP '2026-01-01', TIMESTAMP '2026-12-01',\n                       INTERVAL '1 month') AS g(month_start)\n), receipts AS (\n  SELECT date_trunc('month', p.paid_at AT TIME ZONE 'Asia/Jakarta')::date AS month_start,\n         COUNT(*) AS payment_count, SUM(p.amount) AS received\n  FROM school.payments p\n  WHERE p.status = 'succeeded'\n    AND p.paid_at >= (TIMESTAMP '2026-01-01' AT TIME ZONE 'Asia/Jakarta')\n    AND p.paid_at < (TIMESTAMP '2027-01-01' AT TIME ZONE 'Asia/Jakarta')\n  GROUP BY 1\n), filled AS (\n  SELECT c.month_start, COALESCE(r.payment_count, 0) AS payment_count,\n         COALESCE(r.received, 0.00) AS received\n  FROM calendar c LEFT JOIN receipts r ON r.month_start = c.month_start\n)\nSELECT to_char(month_start, 'YYYY-MM') AS month, payment_count, received,\n       LAG(received) OVER (ORDER BY month_start) AS previous_received\nFROM filled\nORDER BY month_start;",
+      "columns": [
+        "month",
+        "payment_count",
+        "received",
+        "previous_received"
+      ],
+      "rows": [
+        [
+          "2026-01",
+          "0",
+          "0.00",
+          null
+        ],
+        [
+          "2026-02",
+          "0",
+          "0.00",
+          "0.00"
+        ],
+        [
+          "2026-03",
+          "0",
+          "0.00",
+          "0.00"
+        ],
+        [
+          "2026-04",
+          "0",
+          "0.00",
+          "0.00"
+        ],
+        [
+          "2026-05",
+          "0",
+          "0.00",
+          "0.00"
+        ],
+        [
+          "2026-06",
+          "0",
+          "0.00",
+          "0.00"
+        ],
+        [
+          "2026-07",
+          "0",
+          "0.00",
+          "0.00"
+        ],
+        [
+          "2026-08",
+          "6",
+          "2050000.00",
+          "0.00"
+        ],
+        [
+          "2026-09",
+          "3",
+          "1350000.00",
+          "2050000.00"
+        ],
+        [
+          "2026-10",
+          "0",
+          "0.00",
+          "1350000.00"
+        ],
+        [
+          "2026-11",
+          "0",
+          "0.00",
+          "0.00"
+        ],
+        [
+          "2026-12",
+          "0",
+          "0.00",
+          "0.00"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Ada dua belas baris, dua bulan dengan penerimaan dan sepuluh bulan nol. Total seluruh received tetap 3400000. LAG November membaca nol Oktober karena window berjalan di kalender lengkap; NULL Januari berarti bulan sebelum awal cakupan belum disediakan."
+    },
+    "checks": [
+      {
+        "id": "l2m03l02-check-1",
+        "question": "Mengapa laporan tahunan dimulai dari calendar, bukan hanya GROUP BY payments?",
+        "options": [
+          "Agar bulan tanpa transaksi tetap memiliki satu baris laporan.",
+          "Agar database menyimpan dua belas payment baru.",
+          "Agar semua payment pending otomatis menjadi succeeded."
+        ],
+        "answer": 0,
+        "explanation": "Calendar menyediakan domain dua belas bulan; LEFT JOIN menambahkan penerimaan bila ada.",
+        "feedback": [
+          "Benar: bulan kosong adalah bagian dari bentuk hasil yang diminta.",
+          "generate_series pada SELECT hanya menghasilkan baris laporan, bukan INSERT payment.",
+          "Join kalender tidak mengubah status payment apa pun."
+        ]
+      },
+      {
+        "id": "l2m03l02-check-2",
+        "question": "Pada join langsung kalender ke payment mentah, count mana memberi nol untuk bulan tanpa pasangan?",
+        "options": [
+          "COUNT(*) karena setiap baris kalender pasti payment.",
+          "COUNT(payment_id) karena nilai NULL dari pasangan yang tidak ada tidak dihitung.",
+          "COUNT(month_start) karena label bulan hilang pada LEFT JOIN."
+        ],
+        "answer": 1,
+        "explanation": "LEFT JOIN mempertahankan baris kalender; COUNT kolom payment yang non-NULL pada sumber menghitung pasangan nyata saja.",
+        "feedback": [
+          "COUNT(*) tetap menghitung baris kalender meskipun payment tidak ada.",
+          "Benar: payment_id asli adalah primary key, dan pasangan yang hilang menghasilkan NULL.",
+          "month_start dari calendar tetap ada sehingga count itu bukan jumlah payment."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi bentuk laporan dua belas bulan dan nilai LAG setelah bulan kosong diisi.",
+      "setup": "Gunakan tahun kalender 2026 dalam Asia/Jakarta. Kalender berisi Januari sampai Desember; receipts hanya berisi payment succeeded dengan paid_at dalam tahun itu. Nol adalah tidak ada payment cocok pada bulan tersebut, bukan pengganti timestamp yang tidak diketahui.",
+      "starterSql": "WITH calendar AS (\n  SELECT month_start::date AS month_start\n  FROM generate_series(TIMESTAMP '2026-01-01', TIMESTAMP '2026-12-01',\n                       INTERVAL '1 month') AS g(month_start)\n)\nSELECT month_start FROM calendar ORDER BY month_start;",
+      "variants": [
+        {
+          "id": "l2m03l02-variant-1",
+          "question": "Bulan mana yang memiliki penerimaan nonnol dan berapa totalnya pada kalender 2026?",
+          "options": [
+            "Agustus 2050000 dan September 1350000; sepuluh bulan lain nol.",
+            "Agustus dan September masing-masing 3400000.",
+            "Hanya September 1350000; bulan tanpa invoice diabaikan."
+          ],
+          "answer": 0,
+          "explanation": "Kalender menambah bulan kosong tanpa mengubah total payment berhasil: 2050000 + 1350000 = 3400000.",
+          "feedback": [
+            "Benar: bentuk hasil bertambah, tetapi fakta penerimaan tidak digandakan.",
+            "3400000 adalah total tahunan, bukan total yang diulang sebagai penerimaan tiap bulan.",
+            "Laporan ini memakai paid_at payment, bukan keberadaan invoice untuk membentuk kalender."
+          ]
+        },
+        {
+          "id": "l2m03l02-variant-2",
+          "question": "Berapa previous_received November setelah calendar diisi sebelum LAG?",
+          "options": [
+            "1350000 dari September karena bulan nol dilewati.",
+            "Nol dari Oktober yang sekarang memiliki baris kalender.",
+            "NULL karena November sendiri tidak memiliki payment."
+          ],
+          "answer": 1,
+          "explanation": "LAG membaca baris sebelumnya pada input filled; Oktober tetap ada dengan received nol.",
+          "feedback": [
+            "LAG tidak melewati nilai nol secara otomatis; Oktober tetap baris sebelumnya.",
+            "Benar: window kini mengikuti bulan kalender berurutan, bukan hanya bulan aktif.",
+            "NULL batas hanya terjadi ketika baris pembanding tidak tersedia; Oktober tersedia."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l2m03l02-edge-1",
+          "question": "Apa akibat WHERE r.received > 0 setelah calendar LEFT JOIN receipts?",
+          "options": [
+            "Semua dua belas bulan tetap ada karena LEFT JOIN kebal terhadap WHERE.",
+            "Bulan kosong mendapat payment_count satu.",
+            "Bulan tanpa pasangan dibuang sehingga kontrak kalender lengkap rusak."
+          ],
+          "answer": 2,
+          "explanation": "Kolom r pada bulan tanpa pasangan bernilai NULL; predicate > 0 tidak TRUE sehingga WHERE membuang baris itu.",
+          "feedback": [
+            "WHERE tetap dapat membuang baris yang sebelumnya dipertahankan LEFT JOIN.",
+            "Filter tidak menciptakan payment; masalahnya adalah kehilangan baris kalender.",
+            "Benar: saring fakta di receipts dan pertahankan calendar pada hasil akhir."
+          ]
+        },
+        {
+          "id": "l2m03l02-edge-2",
+          "question": "Berapa baris generate_series dari 1 Januari 2026 sampai 1 Januari 2027 dengan langkah satu bulan?",
+          "options": [
+            "Tiga belas karena stop yang tercapai ikut masuk.",
+            "Dua belas karena stop selalu eksklusif seperti filter payment.",
+            "Sebelas karena kedua ujung dibuang."
+          ],
+          "answer": 0,
+          "explanation": "generate_series memasukkan start dan stop yang tercapai; gunakan stop 1 Desember untuk dua belas label bulan 2026.",
+          "feedback": [
+            "Benar: semantik batas pembangkit kalender berbeda dari filter half-open.",
+            "Batas eksklusif adalah pilihan predicate waktu, bukan perilaku stop generate_series.",
+            "Start dan stop yang tercapai justru termasuk dalam deret."
+          ]
+        }
+      ],
+      "hints": [
+        "Buat dua belas label bulan terlebih dahulu; jangan meminta GROUP BY menemukan bulan yang tidak ada.",
+        "Agregasikan payment ke bulan lokal yang sama dengan calendar sebelum LEFT JOIN.",
+        "Isi count dan received dengan COALESCE setelah join, lalu jalankan LAG pada hasil filled."
+      ],
+      "solutionSql": "WITH calendar AS (\n  SELECT g.month_start::date AS month_start\n  FROM generate_series(TIMESTAMP '2026-01-01', TIMESTAMP '2026-12-01',\n                       INTERVAL '1 month') AS g(month_start)\n), receipts AS (\n  SELECT date_trunc('month', p.paid_at AT TIME ZONE 'Asia/Jakarta')::date AS month_start,\n         COUNT(*) AS payment_count, SUM(p.amount) AS received\n  FROM school.payments p\n  WHERE p.status = 'succeeded'\n    AND p.paid_at >= (TIMESTAMP '2026-01-01' AT TIME ZONE 'Asia/Jakarta')\n    AND p.paid_at < (TIMESTAMP '2027-01-01' AT TIME ZONE 'Asia/Jakarta')\n  GROUP BY 1\n), filled AS (\n  SELECT c.month_start, COALESCE(r.payment_count, 0) AS payment_count,\n         COALESCE(r.received, 0.00) AS received\n  FROM calendar c LEFT JOIN receipts r ON r.month_start = c.month_start\n)\nSELECT to_char(month_start, 'YYYY-MM') AS month, payment_count, received,\n       LAG(received) OVER (ORDER BY month_start) AS previous_received\nFROM filled\nORDER BY month_start;",
+      "solutionExplanation": "Calendar menetapkan dua belas baris, receipts menetapkan fakta penerimaan bulanan, dan LEFT JOIN menggabungkan keduanya tanpa menghapus bulan kosong. COALESCE menampilkan nol pada bulan tanpa pasangan. LAG dihitung terakhir agar November membaca Oktober nol. Total penerimaan tetap 3400000 dan tidak ada payment yang dibuat atau diubah.",
+      "critical": false
+    },
+    "reflection": "Mengapa kalender harus ada sebelum LEFT JOIN dan LAG? Jelaskan perbedaan nol bulan kosong, NULL pada awal cakupan, dan bahaya WHERE pada tabel kanan setelah LEFT JOIN."
+  },
+  {
+    "id": "l2m03l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "sql",
+      "aging",
+      "reporting",
+      "school-finance"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/functions-datetime.html",
+      "https://www.postgresql.org/docs/17/functions-conditional.html"
+    ],
+    "hook": "Bendahara melihat dua invoice bernilai sama tetapi usia tunggakannya berbeda. Bagaimana menghitung sisa tagihan pada tanggal acuan, mengurangi hanya pembayaran yang sudah terjadi, lalu membaginya ke bucket tanpa overlap?",
+    "objectives": [
+      "Menghitung outstanding per invoice dari penerimaan berhasil sampai akhir tanggal acuan.",
+      "Mengukur usia dengan pengurangan DATE dan menetapkan bucket 0–30, 31–60, dan >60 hari.",
+      "Memisahkan belum jatuh tempo, lunas, dan kredit dari tunggakan positif."
+    ],
+    "sections": [
+      {
+        "title": "Outstanding adalah sisa tagihan pada suatu cakupan",
+        "paragraphs": [
+          "Outstanding dihitung sebagai amount invoice dikurangi jumlah payment succeeded yang boleh masuk cakupan. Payment pending 205 tidak melunasi invoice 104; payment failed 206 tidak melunasi invoice 105. Invoice 102 baru menerima 200000 dari tagihan 500000 sehingga sisanya 300000, bukan seluruh amount invoice dan bukan nol hanya karena ada payment. Jumlahkan payment per invoice terlebih dahulu agar dua cicilan invoice 103 tidak menggandakan amount tagihannya. LEFT JOIN menjaga invoice tanpa payment, dan COALESCE membuat penerimaan yang tidak ada menjadi nol.",
+          "Tanggal acuan contoh adalah 10 Oktober 2026 pada zona Asia/Jakarta, mencakup penerimaan sampai akhir hari itu. Batas eksklusif payment adalah tengah malam tanggal berikutnya, dibentuk dari as_of + 1 lalu diberi zona Jakarta. Payment hipotetis pada 11 Oktober tidak boleh mengurangi saldo pada laporan 10 Oktober. Seed ini dianggap memuat invoice yang sudah diterbitkan; tidak ada issued_at, histori perubahan status, refund, atau koreksi ledger untuk merekonstruksi semua keadaan masa lalu. Query ini adalah model snapshot pendidikan dengan asumsi eksplisit tersebut, bukan pengganti ledger historis lengkap."
+        ]
+      },
+      {
+        "title": "Usia memakai tanggal acuan, bukan jam saat halaman dibuka",
+        "paragraphs": [
+          "due_date bertipe DATE, sehingga as_of - due_date menghasilkan selisih hari berupa integer. Tidak perlu mengubahnya menjadi bulan atau membagi detik dengan 86400. Dari 10 September ke 10 Oktober ada 30 hari; dari 10 Agustus ke 10 Oktober ada 61 hari. Angka ini berasal dari jarak tanggal, bukan asumsi setiap bulan memiliki 30 hari. Gunakan parameter tetap yang sama untuk semua invoice, bukan CURRENT_DATE yang membuat hasil belajar berubah saat dibuka pada hari lain.",
+          "Kontrak bucket di sini adalah days_past_due < 0 untuk not_due, 0 sampai 30 untuk 0-30, 31 sampai 60 untuk 31-60, dan lebih dari 60 untuk >60. Hari jatuh tempo sendiri bernilai nol dan sengaja ikut bucket 0-30; jelaskan kebijakan itu kepada pembaca karena nol hari bukan keterlambatan satu hari. CASE diperiksa dari atas ke bawah: uji nilai negatif dahulu, lalu <= 30, lalu <= 60. Dengan urutan itu setiap invoice positif masuk tepat satu bucket, dan angka 30, 31, 60, serta 61 tidak bertumpang tindih."
+        ]
+      },
+      {
+        "title": "Rekonsiliasi total dan nyatakan keterbatasan",
+        "paragraphs": [
+          "Hanya outstanding > 0 masuk aged. Invoice yang lunas tidak menambah jumlah invoice bertunggakan. Jika hasil amount - paid negatif, ada kredit atau overpayment yang perlu diperiksa terpisah; jangan menyembunyikannya dengan menganggap setiap saldo pasti nonnegatif. Constraint seed tidak otomatis mencegah jumlah payment melebihi invoice karena aturan itu melintasi beberapa baris. Laporan ini hanya menjumlah sisa tagihan positif, bukan net balance yang mengompensasikan kredit antar-invoice. Payment succeeded dengan paid_at NULL juga perlu investigasi karena tidak lolos cutoff waktu.",
+          "Pada seed, empat invoice September memiliki sisa total 1300000 pada usia 30 hari dan invoice 105 menyisakan 650000 pada usia 61 hari. Total 1950000 cocok dengan tagihan 5350000 dikurangi penerimaan berhasil 3400000 karena seluruh payment berhasil seed terjadi sebelum cutoff dan tidak ada kredit. Solusi ringkasan membuat daftar label bucket lebih dulu lalu LEFT JOIN aged agar bucket kosong 31-60 tetap terlihat dengan count dan amount nol. Nama bucket adalah nilai data teknis yang dipertahankan sama saat bahasa tampilan berganti."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "WITH params AS (\n  SELECT DATE '2026-10-10' AS as_of\n), receipts AS (\n  SELECT p.invoice_id, SUM(p.amount) AS paid\n  FROM school.payments p CROSS JOIN params cfg\n  WHERE p.status = 'succeeded'\n    AND p.paid_at < ((cfg.as_of + 1)::timestamp AT TIME ZONE 'Asia/Jakarta')\n  GROUP BY p.invoice_id\n), balances AS (\n  SELECT i.invoice_id, i.due_date, cfg.as_of - i.due_date AS days_past_due,\n         i.amount - COALESCE(r.paid, 0.00) AS outstanding\n  FROM school.invoices i\n  LEFT JOIN receipts r ON r.invoice_id = i.invoice_id\n  CROSS JOIN params cfg\n), aged AS (\n  SELECT invoice_id, due_date, days_past_due, outstanding,\n         CASE WHEN days_past_due < 0 THEN 'not_due'\n              WHEN days_past_due <= 30 THEN '0-30'\n              WHEN days_past_due <= 60 THEN '31-60'\n              ELSE '>60' END AS bucket\n  FROM balances\n  WHERE outstanding > 0\n)\nSELECT invoice_id, due_date, days_past_due, outstanding, bucket\nFROM aged ORDER BY invoice_id;",
+      "columns": [
+        "invoice_id",
+        "due_date",
+        "days_past_due",
+        "outstanding",
+        "bucket"
+      ],
+      "rows": [
+        [
+          "102",
+          "2026-09-10",
+          "30",
+          "300000.00",
+          "0-30"
+        ],
+        [
+          "104",
+          "2026-09-10",
+          "30",
+          "450000.00",
+          "0-30"
+        ],
+        [
+          "105",
+          "2026-08-10",
+          "61",
+          "650000.00",
+          ">60"
+        ],
+        [
+          "106",
+          "2026-09-10",
+          "30",
+          "150000.00",
+          "0-30"
+        ],
+        [
+          "108",
+          "2026-09-10",
+          "30",
+          "400000.00",
+          "0-30"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Lima invoice memiliki sisa positif, total 1950000. Usia 30 hari masuk 0-30; usia 61 masuk >60. Invoice 103 tidak muncul karena dua cicilannya menjumlah tepat 450000. Tidak ada invoice not_due atau 31-60 pada seed di tanggal acuan ini."
+    },
+    "checks": [
+      {
+        "id": "l2m03l03-check-1",
+        "question": "Berapa days_past_due untuk invoice jatuh tempo 10 September pada as_of 10 Oktober 2026?",
+        "options": [
+          "Satu karena kedua tanggal berada pada tanggal 10.",
+          "Tiga puluh dari pengurangan DATE acuan dengan due_date.",
+          "Tiga puluh satu karena semua bulan memiliki 31 hari."
+        ],
+        "answer": 1,
+        "explanation": "Pengurangan DATE menghitung jarak hari sebenarnya; September memiliki 30 hari.",
+        "feedback": [
+          "Kesamaan nomor tanggal tidak menentukan jarak hari antarbulan.",
+          "Benar: selisih tanggal adalah 30, sehingga masuk bucket 0-30.",
+          "Jangan mengasumsikan semua bulan sama panjang atau membulatkan ke bulan."
+        ]
+      },
+      {
+        "id": "l2m03l03-check-2",
+        "question": "Urutan bucket mana benar untuk usia 30, 31, 60, dan 61 hari?",
+        "options": [
+          "0-30, 0-30, 31-60, >60.",
+          "0-30, 31-60, >60, >60.",
+          "0-30, 31-60, 31-60, >60."
+        ],
+        "answer": 2,
+        "explanation": "Batas 30 dan 60 inklusif di bucket masing-masing; bucket berikutnya mulai 31 dan 61.",
+        "feedback": [
+          "Hari 31 sudah keluar dari bucket 0-30.",
+          "Hari 60 masih termasuk 31-60, belum >60.",
+          "Benar: setiap batas masuk tepat satu bucket tanpa overlap."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Hitung sisa invoice dan pilih bucket pada 10 Oktober 2026, lalu periksa batas jatuh tempo serta cutoff payment.",
+      "setup": "Anggap seluruh invoice seed sudah diterbitkan. Hanya succeeded sebelum 11 Oktober 00:00 Jakarta mengurangi sisa. Invoice belum jatuh tempo mendapat not_due; yang lunas dan kredit tidak masuk aged. Contoh tambahan pada kuis tidak mengubah data.",
+      "starterSql": "WITH params AS (SELECT DATE '2026-10-10' AS as_of)\nSELECT i.invoice_id, i.due_date, cfg.as_of - i.due_date AS days_past_due\nFROM school.invoices i CROSS JOIN params cfg\nORDER BY i.invoice_id;",
+      "variants": [
+        {
+          "id": "l2m03l03-variant-1",
+          "question": "Berapa outstanding invoice 102 dan bucket-nya pada tanggal acuan?",
+          "options": [
+            "300000 pada bucket 0-30.",
+            "500000 pada bucket 0-30 karena payment parsial diabaikan.",
+            "Nol karena sudah pernah memiliki payment succeeded."
+          ],
+          "answer": 0,
+          "explanation": "Tagihan 500000 dikurangi payment berhasil 200000 menyisakan 300000; usia jatuh tempo 30 hari.",
+          "feedback": [
+            "Benar: keberadaan payment bukan bukti pelunasan penuh.",
+            "Payment parsial tetap mengurangi kewajiban sebesar uang yang diterima.",
+            "Harus membandingkan jumlah penerimaan dengan amount invoice, bukan hanya EXISTS payment."
+          ]
+        },
+        {
+          "id": "l2m03l03-variant-2",
+          "question": "Apa total outstanding pada bucket 0-30, 31-60, dan >60 untuk seed ini?",
+          "options": [
+            "1950000, 0, 0 karena semua invoice dianggap baru.",
+            "1300000, 0, 650000.",
+            "1750000, 0, 650000 karena payment pending ikut menjadi tagihan baru."
+          ],
+          "answer": 1,
+          "explanation": "Empat invoice September menyisakan 300000 + 450000 + 150000 + 400000; invoice 105 menyisakan 650000.",
+          "feedback": [
+            "Invoice 105 berusia 61 hari dan harus dipisah ke >60.",
+            "Benar: ketiga total menjumlah 1950000 tanpa menambah invoice atau payment.",
+            "Payment pending tidak membuat tagihan baru dan tidak menambah amount invoice."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l2m03l03-edge-1",
+          "question": "Invoice hipotetis dengan sisa positif yang jatuh tempo besok memiliki usia -1. Bucket apa yang dipakai?",
+          "options": [
+            "0-30 karena semua angka <= 30 harus diuji pertama.",
+            ">60 karena belum ada payment.",
+            "not_due, diperiksa sebelum kondisi <= 30."
+          ],
+          "answer": 2,
+          "explanation": "Usia negatif berarti belum jatuh tempo; jangan menjadikannya tunggakan dengan GREATEST(age, 0).",
+          "feedback": [
+            "Periksa negatif dahulu agar invoice masa depan tidak masuk bucket tunggakan.",
+            "Tidak ada payment tidak menentukan usia; usia berasal dari due_date.",
+            "Benar: not_due mempertahankan perbedaan belum jatuh tempo dan jatuh tempo hari ini."
+          ]
+        },
+        {
+          "id": "l2m03l03-edge-2",
+          "question": "Payment succeeded hipotetis diterima 11 Oktober pukul 00:00 Jakarta. Apakah ia mengurangi laporan as_of 10 Oktober?",
+          "options": [
+            "Tidak; instant itu tepat batas eksklusif hari berikutnya.",
+            "Ya karena status succeeded selalu mengalahkan cutoff waktu.",
+            "Ya jika memakai BETWEEN sampai awal tanggal 11."
+          ],
+          "answer": 0,
+          "explanation": "Status dan cutoff sama-sama wajib dipenuhi; paid_at harus lebih kecil dari awal tanggal 11.",
+          "feedback": [
+            "Benar: pembayaran masa depan tidak boleh mengubah saldo pada tanggal acuan.",
+            "Status berhasil tidak mengizinkan data setelah batas laporan masuk lebih awal.",
+            "BETWEEN akan memasukkan batas atas dan merusak kontrak akhir hari yang eksklusif."
+          ]
+        }
+      ],
+      "hints": [
+        "Kurangi invoice dengan payment succeeded yang diagregasi per invoice dan lolos cutoff tanggal acuan.",
+        "Hitung days_past_due sebagai DATE acuan dikurangi due_date; usia negatif berarti not_due.",
+        "Urutkan CASE: < 0, <= 30, <= 60, lalu >60; saring hanya outstanding positif dan pertahankan label bucket kosong."
+      ],
+      "solutionSql": "WITH params AS (\n  SELECT DATE '2026-10-10' AS as_of\n), receipts AS (\n  SELECT p.invoice_id, SUM(p.amount) AS paid\n  FROM school.payments p CROSS JOIN params cfg\n  WHERE p.status = 'succeeded'\n    AND p.paid_at < ((cfg.as_of + 1)::timestamp AT TIME ZONE 'Asia/Jakarta')\n  GROUP BY p.invoice_id\n), balances AS (\n  SELECT i.invoice_id, i.due_date, cfg.as_of - i.due_date AS days_past_due,\n         i.amount - COALESCE(r.paid, 0.00) AS outstanding\n  FROM school.invoices i\n  LEFT JOIN receipts r ON r.invoice_id = i.invoice_id\n  CROSS JOIN params cfg\n), aged AS (\n  SELECT invoice_id, due_date, days_past_due, outstanding,\n         CASE WHEN days_past_due < 0 THEN 'not_due'\n              WHEN days_past_due <= 30 THEN '0-30'\n              WHEN days_past_due <= 60 THEN '31-60'\n              ELSE '>60' END AS bucket\n  FROM balances\n  WHERE outstanding > 0\n), bucket_labels AS (\n  SELECT * FROM (VALUES (0, 'not_due'), (1, '0-30'), (2, '31-60'), (3, '>60'))\n    AS b(sort_order, bucket)\n)\nSELECT b.bucket, COUNT(a.invoice_id) AS invoice_count,\n       COALESCE(SUM(a.outstanding), 0.00) AS outstanding\nFROM bucket_labels b LEFT JOIN aged a ON a.bucket = b.bucket\nGROUP BY b.sort_order, b.bucket\nORDER BY b.sort_order;",
+      "solutionExplanation": "Receipts memakai cutoff akhir tanggal acuan dan satu baris per invoice. Balances menghitung sisa serta selisih DATE; aged menyimpan sisa positif dan menetapkan kategori tanpa overlap. Daftar bucket mempertahankan not_due dan 31-60 yang kosong: count nol, amount 0.00. Ringkasan berisi empat invoice 0-30 senilai 1300000 dan satu invoice >60 senilai 650000. Kredit serta histori status/refund tetap di luar model ini.",
+      "critical": false
+    },
+    "reflection": "Mengapa aging perlu satu tanggal acuan dan cutoff payment yang konsisten? Jelaskan batas 30/31/60/61, perlakuan invoice belum jatuh tempo, dan kapan model tanpa histori ledger tidak cukup."
+  }
+]

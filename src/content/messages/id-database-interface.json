@@ -1,4 +1,8 @@
 {
+  "time-zones": "zona waktu",
+  "time-series": "deret waktu",
+  "reporting": "pelaporan",
+  "aging": "usia piutang",
   "window-functions": "fungsi window",
   "ranking": "peringkat",
   "window-frame": "frame window",

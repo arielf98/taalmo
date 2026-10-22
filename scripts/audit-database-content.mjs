@@ -11,6 +11,7 @@ export const authored = [
   "l1-mutation",
   "l2-subqueries",
   "l2-windows",
+  "l2-time-reports",
 ].flatMap((file) => read(`src/content/database/${file}.json`));
 const modules = blueprint.levels.flatMap((level) => level.modules);
 const lessons = modules.flatMap((module) => module.lessons);

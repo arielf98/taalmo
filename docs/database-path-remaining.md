@@ -1,16 +1,8 @@
 # Remaining curriculum authoring
 
-The following 93 canonical lessons remain draft. Each checkbox means: substantive teaching body, worked example, two concept checks with feedback, two practice variants, two graded edge cases, progressive hints, reflection, required fixture/simulator and validation. Follow the current AGENTS.md restrictions on validation; the L2M02 continuation was reviewed through code and diff only.
+The following 90 canonical lessons remain draft. Each checkbox means: substantive teaching body, worked example, two concept checks with feedback, two practice variants, two graded edge cases, progressive hints, reflection, required fixture/simulator and validation. Follow the current AGENTS.md restrictions on validation; L2M02–L2M03 were reviewed through code and diff only.
 
 ## L2 — SQL Problem Solving
-
-### L2M03 — Analitik Waktu dan Laporan
-
-Prerequisite: l2m02. Scenario: School Finance.
-
-- [ ] `l2m03l01` — Rentang tanggal dan timezone
-- [ ] `l2m03l02` — Deret waktu dan bulan kosong
-- [ ] `l2m03l03` — Outstanding dan aging buckets
 
 ### L2M04 — Kebenaran Hasil Query
 

@@ -26,7 +26,7 @@ def transaction(query):
     return query if re.search(r'\b(?:BEGIN|COMMIT|ROLLBACK)\s*;', query, re.I) else 'BEGIN;\n' + query + '\nROLLBACK;'
 
 seed = (root/'curriculum/taalmo-database-zero-to-master/school_finance_seed.sql').read_text()
-lessons = sum([json.loads((root/f'src/content/database/{file}.json').read_text()) for file in ['l0','l1-query','l1-mutation','l2-subqueries','l2-windows']], [])
+lessons = sum([json.loads((root/f'src/content/database/{file}.json').read_text()) for file in ['l0','l1-query','l1-mutation','l2-subqueries','l2-windows','l2-time-reports']], [])
 try:
     run(docker + ['run', '--pull=never', '-d', '--name', name, '--label', 'taalmo.curriculum-check=true', '--network', 'none', '--memory', '512m', '--cpus', '1', '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', '-e', 'POSTGRES_DB=taalmo_curriculum_check', 'postgres:17-alpine', 'postgres', '-c', 'shared_buffers=32MB', '-c', 'max_connections=10'])
     for _ in range(100):
