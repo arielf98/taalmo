@@ -1,0 +1,695 @@
+[
+  {
+    "id": "l5m01l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "performance",
+      "explain",
+      "plan-operators",
+      "query-planner",
+      "commerce-analytics"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/using-explain.html",
+      "https://www.postgresql.org/docs/17/sql-explain.html",
+      "https://www.postgresql.org/docs/17/queries-table-expressions.html"
+    ],
+    "hook": "Dua skenario customer orders memakai filter broad dan selective; satu plan membaca hampir semua orders dan plan lain mulai dari customer yang sangat selektif. Bagaimana membaca operatornya tanpa menyebut salah satu plan pasti lebih cepat hanya dari nama operator?",
+    "objectives": [
+      "Menjelaskan bahwa EXPLAIN menampilkan pohon rencana dan cost unit, bukan waktu milidetik yang terukur.",
+      "Membedakan trade-off Seq Scan, Index Scan, Hash Join, Nested Loop, dan Sort berdasarkan bentuk data serta predicate.",
+      "Membandingkan dua plan dengan memperhatikan node root, child, estimasi baris, dan batas evidence dari plan authored."
+    ],
+    "sections": [
+      {
+        "title": "EXPLAIN adalah peta rencana, bukan stopwatch",
+        "paragraphs": [
+          "`EXPLAIN` meminta PostgreSQL memilih rencana tanpa menjalankan statement. Hasilnya berupa pohon: node paling atas menghasilkan hasil akhir, sedangkan node di bawahnya memasok baris kepada parent. Angka `cost=startup..total` adalah unit internal yang dipakai planner untuk membandingkan alternatif dalam konteks konfigurasi, statistik, dan bentuk query. Cost bukan durasi dan tidak boleh dibaca sebagai milidetik; plan dengan total cost 100 tidak otomatis selesai dua kali lebih cepat daripada plan dengan cost 200. `EXPLAIN` juga tidak membuktikan bahwa estimate rows akan sama dengan jumlah baris yang benar-benar keluar ketika query dijalankan.",
+          "Untuk membaca pohon, mulai dari kebutuhan query: filter apa yang selektif, relasi mana yang harus digabung, dan apakah output harus diurutkan. Lalu baca dari root ke child untuk memahami kontrak data, atau dari leaf ke root untuk mengikuti bagaimana baris dibuat. `rows` pada plan adalah perkiraan per loop, bukan hitungan yang sudah diamati. `width` juga perkiraan ukuran baris. Jika sebuah node terlihat murah, pertanyaan berikutnya adalah apakah estimate inputnya masuk akal dan apakah node tersebut mengulang pekerjaan melalui parent seperti nested loop."
+        ]
+      },
+      {
+        "title": "Lima operator membawa trade-off yang berbeda",
+        "paragraphs": [
+          "`Seq Scan` membaca tabel secara berurutan. Ia sering masuk akal untuk predicate yang mengambil porsi besar tabel, tabel kecil, atau saat membaca indeks lalu heap justru lebih mahal. `Index Scan` dapat menemukan subset melalui indeks dan biasanya menarik ketika predicate selektif, tetapi random access ke heap dan biaya menjaga indeks tetap relevan tetap ada. Nama indeks tidak membuktikan bahwa semua halaman data akan dilewati. `Sort` menambahkan pekerjaan untuk mengurutkan baris; ukuran input, memory, dan kemungkinan spill memengaruhi pilihan, sehingga sort kecil tidak sama dengan sort besar.",
+          "`Hash Join` membangun hash dari salah satu input lalu mencocokkan key pada input lain; ia cocok untuk equality join ketika ukuran hash dan memory mendukungnya. `Nested Loop` menjalankan sisi dalam untuk setiap baris dari sisi luar; bentuk ini bisa efisien jika sisi luar kecil dan sisi dalam punya lookup yang tepat, tetapi menjadi mahal ketika outer estimate membesar. `Hash Join` tidak otomatis lebih baik daripada `Nested Loop`, dan `Index Scan` tidak otomatis lebih baik daripada `Seq Scan`. Planner memilih kombinasi operator, bukan satu pemenang universal."
+        ]
+      },
+      {
+        "title": "Bandingkan plan dengan bukti yang memang tersedia",
+        "paragraphs": [
+          "Worked example memakai dua plan authored untuk pertanyaan customer orders. Plan broad memakai `Seq Scan` dan `Hash Join`, lalu `Sort` untuk output; plan selective memakai `Index Scan` pada customer dan orders melalui `Nested Loop`. Tabel itu sengaja menyimpan operator, relasi, estimated rows, serta cost sebagai data latihan. Nilai tersebut bukan keluaran `EXPLAIN` yang direkam dari database dan bukan dasar untuk klaim benchmark. Tujuannya adalah melatih mata melihat mengapa bentuk predicate dan perkiraan cardinality mengarahkan pilihan planner.",
+          "Saat menghadapi plan nyata, jangan berhenti pada operator yang terdengar canggih. Periksa apakah predicate benar-benar terpasang pada node yang diharapkan, apakah join key cocok, apakah sort diperlukan, dan apakah estimasi baris berubah drastis antar-node. Dua plan hanya dapat dibandingkan dengan adil bila query, data, parameter, konfigurasi, dan versi relevan diketahui. Lesson ini tidak mengukur latency atau I/O; pengukuran runtime dibahas pada lesson berikutnya dengan batas keamanan yang lebih tegas."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset P1 — authored plan fragments untuk query customer orders. Broad plan mengilustrasikan Seq Scan + Hash Join + Sort; selective plan mengilustrasikan Index Scan + Nested Loop. Semua cost dan estimated rows adalah angka pedagogis yang ditulis untuk lesson ini, bukan output EXPLAIN runtime.",
+      "setupSql": "CREATE TEMP TABLE lesson_plan_nodes (\n  plan_label TEXT NOT NULL,\n  node_order INTEGER NOT NULL,\n  node_type TEXT NOT NULL,\n  relation_name TEXT NOT NULL,\n  estimated_rows INTEGER NOT NULL,\n  startup_cost NUMERIC(8,2) NOT NULL,\n  total_cost NUMERIC(8,2) NOT NULL,\n  parent_node INTEGER NULL,\n  PRIMARY KEY (plan_label, node_order)\n);\nINSERT INTO pg_temp.lesson_plan_nodes VALUES\n  ('broad_customer_orders', 1, 'Sort', 'customers+orders', 120, 42.00, 44.40, NULL),\n  ('broad_customer_orders', 2, 'Hash Join', 'customers+orders', 120, 18.00, 38.00, 1),\n  ('broad_customer_orders', 3, 'Seq Scan', 'orders', 5000, 0.00, 10.50, 2),\n  ('broad_customer_orders', 4, 'Hash', 'customers', 120, 4.20, 8.50, 2),\n  ('broad_customer_orders', 5, 'Seq Scan', 'customers', 120, 0.00, 4.20, 4),\n  ('selective_customer_orders', 1, 'Nested Loop', 'customers+orders', 8, 0.50, 12.80, NULL),\n  ('selective_customer_orders', 2, 'Index Scan', 'customers', 1, 0.20, 0.40, 1),\n  ('selective_customer_orders', 3, 'Index Scan', 'orders', 8, 0.30, 12.00, 1);",
+      "sql": "SELECT plan_label, node_order, node_type, relation_name, estimated_rows, startup_cost, total_cost, parent_node\nFROM pg_temp.lesson_plan_nodes\nORDER BY plan_label, node_order;",
+      "columns": [
+        "plan_label",
+        "node_order",
+        "node_type",
+        "relation_name",
+        "estimated_rows",
+        "startup_cost",
+        "total_cost",
+        "parent_node"
+      ],
+      "rows": [
+        [
+          "broad_customer_orders",
+          "1",
+          "Sort",
+          "customers+orders",
+          "120",
+          "42.00",
+          "44.40",
+          null
+        ],
+        [
+          "broad_customer_orders",
+          "2",
+          "Hash Join",
+          "customers+orders",
+          "120",
+          "18.00",
+          "38.00",
+          "1"
+        ],
+        [
+          "broad_customer_orders",
+          "3",
+          "Seq Scan",
+          "orders",
+          "5000",
+          "0.00",
+          "10.50",
+          "2"
+        ],
+        [
+          "broad_customer_orders",
+          "4",
+          "Hash",
+          "customers",
+          "120",
+          "4.20",
+          "8.50",
+          "2"
+        ],
+        [
+          "broad_customer_orders",
+          "5",
+          "Seq Scan",
+          "customers",
+          "120",
+          "0.00",
+          "4.20",
+          "4"
+        ],
+        [
+          "selective_customer_orders",
+          "1",
+          "Nested Loop",
+          "customers+orders",
+          "8",
+          "0.50",
+          "12.80",
+          null
+        ],
+        [
+          "selective_customer_orders",
+          "2",
+          "Index Scan",
+          "customers",
+          "1",
+          "0.20",
+          "0.40",
+          "1"
+        ],
+        [
+          "selective_customer_orders",
+          "3",
+          "Index Scan",
+          "orders",
+          "8",
+          "0.30",
+          "12.00",
+          "1"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Tabel ini memudahkan pembaca membandingkan dua pohon: broad plan membaca customers dan orders secara berurutan, membangun hash, lalu melakukan Sort; selective plan memakai satu customer dan lookup orders melalui Nested Loop. Angka cost adalah unit planner yang authored, bukan milidetik. Estimated rows juga bukan actual rows. Karena tidak ada EXPLAIN runtime, pembaca tidak boleh menyimpulkan plan selective pasti lebih cepat, penggunaan indeks pasti lebih baik, atau memory dan I/O tertentu."
+    },
+    "checks": [
+      {
+        "id": "l5m01l01-check-1",
+        "question": "Apa arti total_cost pada output EXPLAIN tanpa ANALYZE?",
+        "options": [
+          "Perkiraan unit planner untuk membandingkan rencana, bukan waktu milidetik yang sudah diukur.",
+          "Durasi pasti statement dalam milidetik pada server tempat query nanti dijalankan.",
+          "Jumlah halaman disk yang pasti dibaca oleh operator tersebut."
+        ],
+        "answer": 0,
+        "explanation": "EXPLAIN tanpa ANALYZE menghasilkan rencana dan cost estimate; ia tidak menjalankan statement untuk mengukur waktu atau I/O.",
+        "feedback": [
+          "Benar. Cost adalah unit perbandingan planner dan perlu dibaca bersama konteks estimate.",
+          "Belum tepat. Waktu runtime membutuhkan pengukuran seperti EXPLAIN ANALYZE, dan hasilnya dapat berubah antar-run.",
+          "Belum tepat. Cost bukan counter halaman disk dan tidak membuktikan I/O fisik."
+        ]
+      },
+      {
+        "id": "l5m01l01-check-2",
+        "question": "Kapan Nested Loop dengan Index Scan pada sisi dalam dapat menjadi pilihan masuk akal?",
+        "options": [
+          "Selalu, karena Nested Loop tidak mengulang sisi dalam.",
+          "Hanya ketika tidak ada join key dan output tidak perlu difilter.",
+          "Saat sisi luar kecil atau sangat selektif dan lookup sisi dalam dapat menemukan sedikit baris."
+        ],
+        "answer": 2,
+        "explanation": "Nested Loop mengulang sisi dalam per baris outer, sehingga efisien bila outer dan setiap lookup tetap kecil.",
+        "feedback": [
+          "Belum tepat. Sisi dalam memang dapat dijalankan berulang; estimate outer yang besar bisa membuatnya mahal.",
+          "Belum tepat. Nested Loop tetap membutuhkan kondisi join atau cara menghasilkan pasangan baris yang sah.",
+          "Benar. Cardinality outer dan biaya lookup menentukan apakah pengulangan tersebut wajar."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Baca operator plan authored dan pilih bentuk yang paling masuk akal untuk predicate broad versus predicate customer_id yang selektif.",
+      "setup": "Gunakan schema school dari school_finance_seed.sql sebagai query domain (students, invoices, dan payments), lalu gunakan Dataset P1 untuk membaca fragmen plan yang ditulis untuk latihan. Player tidak menjalankan EXPLAIN dan tidak mengamati benchmark. Perhatikan node root, child, estimated rows, dan hubungan parent_node.",
+      "starterSql": "SELECT s.student_id, i.invoice_id, i.amount\nFROM school.students AS s\nJOIN school.invoices AS i ON i.student_id = s.student_id\nWHERE s.student_id = 1\nORDER BY i.invoice_id;",
+      "variants": [
+        {
+          "id": "l5m01l01-variant-1",
+          "question": "Sebuah predicate mengambil 80% orders. Dari pilihan authored berikut, operator mana yang layak dipertimbangkan lebih dulu?",
+          "options": [
+            "Nested Loop tanpa outer relation, karena join operator dapat menggantikan filter.",
+            "Seq Scan, karena membaca sebagian besar tabel dapat lebih sederhana daripada banyak lookup indeks.",
+            "Index Scan, karena indeks selalu lebih cepat berapa pun selectivity-nya."
+          ],
+          "answer": 1,
+          "explanation": "Predicate yang mengambil sebagian besar tabel dapat membuat pembacaan berurutan lebih sesuai, walaupun plan nyata tetap memerlukan estimate dan data.",
+          "feedback": [
+            "Belum tepat. Nested Loop menggabungkan input dan tidak menggantikan predicate filter tanpa relasi yang jelas.",
+            "Benar. Ini alasan untuk mempertimbangkan Seq Scan, bukan jaminan bahwa planner pasti memilihnya.",
+            "Belum tepat. Index Scan dapat kalah ketika sebagian besar heap tetap perlu diambil."
+          ]
+        },
+        {
+          "id": "l5m01l01-variant-2",
+          "question": "Dua plan memiliki hasil query sama. Plan A memiliki estimate outer 5 dan inner Index Scan; Plan B memiliki estimate outer 500000 dan Hash Join. Apa kesimpulan paling aman dari data authored ini?",
+          "options": [
+            "Plan A pasti lebih cepat karena Index Scan selalu unggul daripada Hash Join.",
+            "Plan B pasti salah karena Hash Join tidak boleh dipakai pada data commerce.",
+            "Bentuk operator merespons estimate yang berbeda; belum ada bukti latency nyata atau bahwa satu plan selalu unggul."
+          ],
+          "answer": 2,
+          "explanation": "Plan shape dapat masuk akal untuk cardinality berbeda, tetapi latency, cache, memory, dan data nyata belum diukur.",
+          "feedback": [
+            "Belum tepat. Tidak ada operator yang selalu unggul pada semua cardinality dan cache state.",
+            "Belum tepat. Hash Join umum untuk equality join; konteks input dan memory yang menentukan.",
+            "Benar. Interpretasi berhenti pada evidence authored: trade-off operator dan batas kesimpulan."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l5m01l01-edge-1",
+          "question": "Planner memilih Seq Scan meskipun indeks ada. Apa penjelasan yang tidak berlebihan?",
+          "options": [
+            "PostgreSQL mengabaikan semua indeks setelah query pertama.",
+            "Predicate mungkin tidak selektif, tabel kecil, atau biaya heap lookup membuat Seq Scan diperkirakan lebih murah.",
+            "Indeks pasti rusak dan harus langsung dihapus."
+          ],
+          "answer": 1,
+          "explanation": "Keberadaan indeks hanya salah satu input; planner membandingkan biaya alternatif berdasarkan estimate dan konfigurasi.",
+          "feedback": [
+            "Belum tepat. Pemilihan indeks dievaluasi per rencana, bukan dimatikan permanen setelah satu query.",
+            "Benar. Periksa selectivity dan estimates sebelum menyimpulkan ada kerusakan.",
+            "Belum tepat. Seq Scan yang dipilih bukan bukti indeks rusak."
+          ]
+        },
+        {
+          "id": "l5m01l01-edge-2",
+          "question": "Apa risiko membaca Hash Join sebagai bukti bahwa query pasti memakai sedikit memory?",
+          "options": [
+            "Hash Join selalu memakai nol memory karena hash hanya label visual.",
+            "Hash Join selalu spill ke disk dan berarti query pasti gagal.",
+            "Hash Join dapat membangun hash table; kebutuhan memory bergantung pada input, row width, dan work_mem, sehingga nama operator saja tidak cukup."
+          ],
+          "answer": 2,
+          "explanation": "Operator memberi bentuk algoritme, tetapi ukuran input dan konfigurasi menentukan resource yang dipakai.",
+          "feedback": [
+            "Belum tepat. Hash table memang membutuhkan memory kerja.",
+            "Belum tepat. Spill mungkin terjadi pada kondisi tertentu, bukan konsekuensi pasti Hash Join.",
+            "Benar. Perlu melihat detail plan dan measurement yang relevan untuk menilai memory atau spill."
+          ]
+        }
+      ],
+      "hints": [
+        "Mulai dari estimated rows pada sisi luar dan tanyakan berapa kali sisi dalam Nested Loop akan dipanggil.",
+        "Bedakan cost unit dengan waktu dan bedakan nama operator dengan bukti resource yang benar-benar dipakai.",
+        "Tuliskan kesimpulan hanya sejauh dataset memberi evidence: bentuk plan dan trade-off, bukan benchmark production."
+      ],
+      "solutionSql": "SELECT plan_label, node_order, node_type, estimated_rows, total_cost\nFROM pg_temp.lesson_plan_nodes\nWHERE node_type IN ('Seq Scan', 'Index Scan', 'Hash Join', 'Hash', 'Nested Loop', 'Sort')\nORDER BY plan_label, node_order;",
+      "solutionExplanation": "Reference query mempertahankan satu row per plan node dan mengurutkannya secara deterministik agar pembaca dapat mengikuti kedua pohon. Interpretasi yang benar menyebut broad plan sebagai authored Seq Scan/Hash Join/Sort dan selective plan sebagai authored Index Scan/Nested Loop. Ia tidak mengubah cost menjadi milidetik, tidak mengklaim plan tertentu tercepat, dan tidak menyamakan estimated rows dengan actual rows.",
+      "critical": false
+    },
+    "reflection": "Jelaskan bagaimana membaca node root dan child pada dua plan customer orders, kapan Seq Scan atau Index Scan dapat masuk akal, serta mengapa cost dan estimated rows tidak boleh dipresentasikan sebagai latency atau actual evidence."
+  },
+  {
+    "id": "l5m01l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "performance",
+      "explain-analyze",
+      "buffers",
+      "actual-rows",
+      "query-profiling"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/using-explain.html",
+      "https://www.postgresql.org/docs/17/sql-explain.html",
+      "https://www.postgresql.org/docs/17/runtime-config-resource.html"
+    ],
+    "hook": "Query customer orders tampak murah pada EXPLAIN, tetapi pengguna melaporkan lambat. Apa yang berubah ketika kita menambahkan ANALYZE dan BUFFERS, dan mengapa statement yang diprofilkan dapat benar-benar berjalan?",
+    "objectives": [
+      "Menjelaskan actual rows, loops, timing, dan inclusive node time dari EXPLAIN ANALYZE.",
+      "Membedakan shared hit dan shared read sebagai buffer accounting dari klaim sederhana tentang CPU atau physical disk.",
+      "Menjelaskan risiko EXPLAIN ANALYZE yang mengeksekusi statement dan memilih profiling yang aman serta repeatable."
+    ],
+    "sections": [
+      {
+        "title": "ANALYZE mengubah pertanyaan menjadi pengukuran eksekusi",
+        "paragraphs": [
+          "`EXPLAIN ANALYZE` menjalankan statement lalu menampilkan rencana yang dipakai bersama informasi runtime. Untuk query `SELECT`, efek datanya biasanya hanya membaca, tetapi tetap ada beban CPU, lock, cache, dan kemungkinan side effect dari fungsi yang dipanggil. Untuk `INSERT`, `UPDATE`, atau `DELETE`, statement benar-benar dapat mengubah data; profiling harus memakai transaction aman dengan rollback bila memang sesuai, fixture disposable, dan izin yang tepat. Menambahkan `ANALYZE` bukan sekadar menampilkan angka yang lebih detail: ia mengubah operasi dari prediksi menjadi eksekusi.",
+          "`actual rows` menunjukkan baris yang dihasilkan per loop. `loops` menunjukkan berapa kali node berjalan; pada inner side Nested Loop, actual rows satu dengan loops dua puluh dapat berarti dua puluh baris total. `actual time=start..end` adalah timing runtime yang dilaporkan node, biasanya dalam milidetik pada output PostgreSQL; `start` adalah waktu menuju row pertama dan `end` adalah waktu selesai per loop, bukan timestamp wall-clock yang dapat dibandingkan lintas node. Waktu parent bersifat inclusive: ia mencakup pekerjaan child, sehingga menjumlahkan semua waktu node dapat menghitung pekerjaan yang sama lebih dari sekali. Bandingkan estimated rows dengan actual rows untuk menemukan salah estimasi, tetapi jangan menganggap satu run sebagai benchmark yang stabil."
+        ]
+      },
+      {
+        "title": "BUFFERS membantu melihat jalur buffer, bukan sensor disk langsung",
+        "paragraphs": [
+          "`EXPLAIN (ANALYZE, BUFFERS)` menambahkan counter buffer seperti `shared hit` dan `shared read`. Hit berarti kebutuhan halaman ditemukan di shared buffers pada saat itu; read berarti halaman dimuat ke shared buffers. Counter ini berguna untuk melihat apakah query menyentuh banyak halaman dan node mana yang berkontribusi, tetapi `shared read` bukan janji bahwa setiap halaman dibaca dari physical disk. OS cache, storage, backend settings, temporary buffers, dan jenis buffer lain memengaruhi cerita I/O. Sebaliknya, shared hit juga bukan bukti CPU gratis: memeriksa banyak halaman yang sudah cached tetap memerlukan kerja.",
+          "Timing, actual rows, loops, dan buffer counters harus dibaca bersama. Inner Index Scan yang murah per loop dapat menjadi mahal bila loops besar. Parent Nested Loop dapat melaporkan waktu inclusive yang mencakup semua lookup. Buffer counts pada node dan parent juga perlu dipahami sebagai accounting plan, bukan dijumlahkan tanpa tahu apakah counter bersifat per-node atau cumulative. Profil yang baik mencatat query, parameter, data state, versi, konfigurasi, cold atau warm cache, dan beberapa run sebelum membuat klaim p50 atau p95. Baseline p50/p95 membutuhkan pengulangan query dengan parameter dan kondisi yang terdokumentasi, pencatatan durasi total setiap run, pengurutan sampel, lalu pemilihan median dan kuantil 95 sesuai metode yang disepakati. Satu output EXPLAIN ANALYZE atau angka authored pada lesson ini tidak dapat menghasilkan p50/p95."
+        ]
+      },
+      {
+        "title": "Worked fragment adalah latihan membaca, bukan hasil benchmark",
+        "paragraphs": [
+          "Worked example memakai `VALUES` yang ditulis sebagai plan fragment terkurasi. Baris root Nested Loop memiliki `actual_rows` 20 dan `loops` 1, sementara inner Index Scan memiliki `actual_rows` 1 dan `loops` 20. Angka timing dan buffer sengaja diberi label authored pada dataset; lesson tidak menjalankan query dan tidak mengklaim angka tersebut diukur dari PostgreSQL. Pembaca berlatih mengalikan rows per loop secara konseptual, menghindari double-count pada waktu parent, serta membaca hit/read sebagai petunjuk buffer.",
+          "Saat memprofilkan query customer orders yang nyata, gunakan `EXPLAIN (ANALYZE, BUFFERS)` hanya pada statement yang aman. Jangan menyalin output satu run menjadi SLA; warm cache, concurrency, parameter, autovacuum, dan resource contention dapat mengubah hasil. Jika perintah mutasi perlu dianalisis, transaction rollback bukan solusi untuk side effect eksternal atau fungsi non-transactional. Lesson ini mengajarkan cara membaca evidence, bukan memberi izin menjalankan profiling pada production."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset P2 — authored EXPLAIN ANALYZE BUFFERS fragments untuk query customer orders. Field actual_rows, loops, timing, shared_hit, dan shared_read meniru bentuk informasi plan, tetapi semua angka diberi label ilustratif dan tidak berasal dari eksekusi PostgreSQL.",
+      "setupSql": "CREATE TEMP TABLE lesson_analyze_nodes (\n  node_order INTEGER PRIMARY KEY,\n  node_type TEXT NOT NULL,\n  actual_rows INTEGER NOT NULL,\n  loops INTEGER NOT NULL,\n  authored_start_ms NUMERIC(8,3) NOT NULL,\n  authored_end_ms NUMERIC(8,3) NOT NULL,\n  shared_hit INTEGER NOT NULL,\n  shared_read INTEGER NOT NULL,\n  note TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_analyze_nodes VALUES\n  (1, 'Nested Loop', 20, 1, 0.200, 1.900, 45, 2, 'inclusive parent illustration'),\n  (2, 'Index Scan', 20, 1, 0.120, 0.400, 5, 0, 'outer customer lookup illustration'),\n  (3, 'Index Scan', 1, 20, 0.010, 0.060, 40, 2, 'inner lookup per loop illustration');",
+      "sql": "SELECT node_order, node_type, actual_rows, loops, authored_start_ms, authored_end_ms, shared_hit, shared_read, note\nFROM pg_temp.lesson_analyze_nodes\nORDER BY node_order;",
+      "columns": [
+        "node_order",
+        "node_type",
+        "actual_rows",
+        "loops",
+        "authored_start_ms",
+        "authored_end_ms",
+        "shared_hit",
+        "shared_read",
+        "note"
+      ],
+      "rows": [
+        [
+          "1",
+          "Nested Loop",
+          "20",
+          "1",
+          "0.200",
+          "1.900",
+          "45",
+          "2",
+          "inclusive parent illustration"
+        ],
+        [
+          "2",
+          "Index Scan",
+          "20",
+          "1",
+          "0.120",
+          "0.400",
+          "5",
+          "0",
+          "outer customer lookup illustration"
+        ],
+        [
+          "3",
+          "Index Scan",
+          "1",
+          "20",
+          "0.010",
+          "0.060",
+          "40",
+          "2",
+          "inner lookup per loop illustration"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Baris authored menunjukkan cara membaca actual rows dan loops: inner Index Scan menghasilkan 1 row per loop dan dipanggil 20 kali, sedangkan root menghasilkan 20 row pada satu loop. Timing diberi nama authored_start_ms dan authored_end_ms agar tidak disalahartikan sebagai pengukuran wall-clock; pada output runtime, start berarti waktu menuju row pertama dan end waktu selesai per loop, dengan nilai yang perlu dibaca dalam konteks loops. Parent time juga inclusive. shared_hit dan shared_read adalah buffer counters ilustratif, bukan bukti physical disk atau CPU time. Tabel ini tidak pernah menjalankan EXPLAIN ANALYZE."
+    },
+    "checks": [
+      {
+        "id": "l5m01l02-check-1",
+        "question": "Apa hubungan actual rows = 1 dan loops = 20 pada inner node?",
+        "options": [
+          "Node menghasilkan sekitar 1 row pada setiap loop dan dipanggil 20 kali, sehingga kontribusi totalnya perlu dibaca dengan konteks loop.",
+          "Node hanya menghasilkan 1 row sepanjang query dan angka loops adalah jumlah tabel.",
+          "Node menghasilkan 20 row pada setiap loop sehingga totalnya selalu 400 row."
+        ],
+        "answer": 0,
+        "explanation": "Pada node yang diulang, actual rows ditampilkan per loop; loops menjelaskan berapa kali node dijalankan.",
+        "feedback": [
+          "Benar. Inner node pada Nested Loop harus dibaca sebagai pekerjaan berulang.",
+          "Belum tepat. loops bukan jumlah tabel dan actual rows per loop tidak berarti hanya sekali.",
+          "Belum tepat. Actual rows 1 per loop bukan 20 per loop; total konseptualnya sekitar 20 sebelum detail filtering lain."
+        ]
+      },
+      {
+        "id": "l5m01l02-check-2",
+        "question": "Mengapa shared_read tidak boleh diterjemahkan langsung sebagai jumlah physical disk read?",
+        "options": [
+          "Karena shared_read selalu berarti halaman ditemukan di cache tanpa membaca apa pun.",
+          "Karena BUFFERS hanya menghitung waktu CPU dan tidak menyimpan counter halaman.",
+          "Ia menghitung buffer yang dibaca ke shared buffers; OS cache, storage, dan jenis buffer lain membuat physical I/O tidak identik."
+        ],
+        "answer": 2,
+        "explanation": "BUFFERS memberi accounting buffer PostgreSQL, bukan sensor lengkap untuk semua lapisan cache dan storage.",
+        "feedback": [
+          "Belum tepat. shared_read menunjukkan buffer perlu dibaca ke shared buffers, bukan tidak ada pembacaan.",
+          "Belum tepat. BUFFERS memang menambahkan counter page/buffer, bukan CPU timing saja.",
+          "Benar. Gunakan counter sebagai petunjuk jalur buffer, lalu nyatakan batas inferensinya."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Gunakan loops, timing inclusive, dan shared buffers untuk menjelaskan bottleneck pada plan fragment tanpa mengubah angka authored menjadi klaim production.",
+      "setup": "Gunakan schema school dari school_finance_seed.sql sebagai query domain (students, invoices, dan payments), lalu gunakan Dataset P2 untuk membaca fragmen authored. Angka timing dan buffer adalah ilustrasi; player tidak mengeksekusi statement, tidak mengukur p50/p95, dan tidak mengamati physical disk. Perhatikan inner node yang diulang 20 kali.",
+      "starterSql": "SELECT i.invoice_id, p.payment_id, p.amount\nFROM school.invoices AS i\nJOIN school.payments AS p ON p.invoice_id = i.invoice_id\nWHERE p.status = 'succeeded'\nORDER BY i.invoice_id, p.payment_id;",
+      "variants": [
+        {
+          "id": "l5m01l02-variant-1",
+          "question": "Jika inner Index Scan menghasilkan 1 row dan loops naik dari 20 menjadi 200, apa risiko yang perlu diperiksa?",
+          "options": [
+            "Tidak ada perubahan karena actual rows per loop tetap 1 dan loops tidak relevan.",
+            "Pekerjaan lookup dapat meningkat sekitar sepuluh kali pada node itu; periksa apakah outer estimate atau selectivity salah sebelum menyimpulkan latency.",
+            "Query pasti lebih cepat karena Index Scan dipanggil lebih sering."
+          ],
+          "answer": 1,
+          "explanation": "Loops memperbanyak pekerjaan inner; penyebab dan dampak latency tetap harus dikonfirmasi dengan measurement yang aman.",
+          "feedback": [
+            "Belum tepat. loops adalah bagian penting dari biaya node yang diulang.",
+            "Benar. Loop amplification adalah sinyal untuk memeriksa outer cardinality dan lookup cost.",
+            "Belum tepat. Memanggil lookup lebih sering biasanya menambah kerja, bukan bukti percepatan."
+          ]
+        },
+        {
+          "id": "l5m01l02-variant-2",
+          "question": "Apa tindakan paling aman jika ingin memakai EXPLAIN ANALYZE pada UPDATE yang mengubah customer orders?",
+          "options": [
+            "Gunakan disposable fixture atau transaction rollback yang sesuai, pahami fungsi dan side effect, lalu jalankan dengan izin yang tepat.",
+            "Jalankan langsung di production karena EXPLAIN selalu mencegah UPDATE.",
+            "Hapus WHERE agar plan menjadi lebih sederhana dan hasil mudah dibandingkan."
+          ],
+          "answer": 0,
+          "explanation": "ANALYZE mengeksekusi statement; mutasi harus diperlakukan sebagai mutasi, bukan preview tanpa efek.",
+          "feedback": [
+            "Benar. Batas keselamatan dan rollback harus disiapkan sebelum profiling mutasi.",
+            "Belum tepat. EXPLAIN ANALYZE tidak mencegah statement mutasi berjalan.",
+            "Belum tepat. Menghapus WHERE berisiko mengubah atau merusak data dan bukan metode profiling."
+          ],
+          "critical": true
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l5m01l02-edge-1",
+          "question": "Jika shared_hit tinggi dan shared_read nol, apa kesimpulan yang masih aman?",
+          "options": [
+            "Query pasti bebas dari semua bottleneck karena semua halaman cached.",
+            "Banyak kebutuhan halaman ditemukan di shared buffers pada run tersebut; itu belum membuktikan CPU rendah atau storage tidak pernah bekerja.",
+            "Semua halaman pasti dibaca dari physical disk sebelum query dimulai."
+          ],
+          "answer": 1,
+          "explanation": "Hit memberi petunjuk cache PostgreSQL pada run, tetapi pekerjaan CPU dan lapisan cache lain tetap mungkin dominan.",
+          "feedback": [
+            "Belum tepat. Cache hit tidak menghapus CPU, lock, join, sort, atau contention.",
+            "Benar. Nyatakan tepat apa yang dihitung counter dan jangan melampaui evidence.",
+            "Belum tepat. shared_hit justru menunjukkan halaman sudah tersedia di shared buffers saat diakses."
+          ]
+        },
+        {
+          "id": "l5m01l02-edge-2",
+          "question": "Mengapa menjumlahkan semua actual time node dapat menyesatkan?",
+          "options": [
+            "Karena actual time selalu berupa cost unit, bukan waktu.",
+            "Karena setiap node berjalan hanya sekali sehingga penjumlahan selalu tepat.",
+            "Waktu parent biasanya inclusive terhadap child dan node inner dapat berulang melalui loops, sehingga penjumlahan naif menggandakan pekerjaan."
+          ],
+          "answer": 2,
+          "explanation": "Plan adalah pohon dengan waktu parent dan child yang saling mencakup; loops membuat konteks menjadi lebih penting.",
+          "feedback": [
+            "Belum tepat. Dengan ANALYZE, timing dilaporkan sebagai waktu runtime, bukan cost unit.",
+            "Belum tepat. Inner node dapat dijalankan berkali-kali dan parent mencakup pekerjaan child.",
+            "Benar. Gunakan root dan struktur plan untuk memahami inclusive time."
+          ]
+        }
+      ],
+      "hints": [
+        "Baca actual rows per loop, lalu lihat loops sebelum menilai total kerja inner node.",
+        "Ingat bahwa ANALYZE mengeksekusi statement; bedakan SELECT read-only dari mutation dan side effect.",
+        "Gunakan shared_hit/read sebagai buffer evidence yang terbatas, bukan sebagai p50/p95 atau physical disk meter."
+      ],
+      "solutionSql": "SELECT node_order, node_type, actual_rows, loops, authored_start_ms, authored_end_ms, shared_hit, shared_read\nFROM pg_temp.lesson_analyze_nodes\nORDER BY node_order;",
+      "solutionExplanation": "Reference query memperlihatkan semua field yang dibutuhkan untuk membaca fragment: actual rows per loop, jumlah loops, timing authored, dan buffer counters. Jawaban yang benar mengidentifikasi inner Index Scan sebagai pekerjaan berulang, memahami timing parent sebagai inclusive, serta menyebut bahwa angka dan buffer hanyalah ilustrasi yang tidak membuktikan latency atau physical I/O. Untuk statement mutasi, EXPLAIN ANALYZE harus diperlakukan sebagai eksekusi nyata.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa EXPLAIN ANALYZE berbeda dari EXPLAIN, bagaimana loops mengubah makna actual rows, apa yang dapat dan tidak dapat disimpulkan dari shared hit/read, serta guard yang diperlukan sebelum profiling statement mutasi."
+  },
+  {
+    "id": "l5m01l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "performance",
+      "statistics",
+      "estimates",
+      "data-skew",
+      "analyze"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/planner-stats.html",
+      "https://www.postgresql.org/docs/17/sql-analyze.html",
+      "https://www.postgresql.org/docs/17/using-explain.html"
+    ],
+    "hook": "Kolom customer_segment pada fixture berisi delapan baris VIP dan dua GENERAL, tetapi estimate lama hanya memperkirakan satu baris VIP. Mengapa estimate buruk dapat mengubah join strategy, dan apa sebenarnya yang diperbaiki oleh ANALYZE?",
+    "objectives": [
+      "Menjelaskan bagaimana statistik distribusi membantu planner memperkirakan cardinality dan memilih join atau scan.",
+      "Membedakan ANALYZE yang memperbarui statistik dari EXPLAIN ANALYZE yang menjalankan query dan mengamati actual rows.",
+      "Menilai estimate error pada data skew tanpa mengklaim plan authored sebagai pengukuran runtime."
+    ],
+    "sections": [
+      {
+        "title": "Planner membuat prediksi dari statistik, bukan membaca seluruh masa depan",
+        "paragraphs": [
+          "Planner perlu memperkirakan berapa banyak baris yang lolos predicate dan berapa banyak pasangan yang dihasilkan join. Ia memakai statistik kolom dan relasi, seperti jumlah baris, distinct value, most-common values, histogram, serta informasi lain yang tersedia. Pada data skew, frekuensi satu nilai dapat jauh berbeda dari asumsi seragam. Jika predicate `customer_segment = 'VIP'` sebenarnya memilih sebagian besar baris tetapi statistic lama menggambarkannya sebagai nilai langka, planner dapat meng-underestimate outer relation. Sebaliknya, nilai langka yang dianggap umum dapat membuat planner memilih jalur yang tidak sebanding dengan hasil query.",
+          "Estimate bukan hanya angka kosmetik. Cardinality yang terlalu kecil dapat membuat Nested Loop terlihat murah karena inner lookup diperkirakan berulang sedikit kali. Cardinality yang lebih besar dapat membuat Hash Join atau Seq Scan tampak lebih layak. Namun plan shape adalah keputusan berdasarkan informasi yang tersedia saat planning; ia bukan janji hasil, dan estimate yang benar pun tidak menjamin query tercepat karena memory, cache, parameter, parallelism, dan resource contention masih berperan."
+        ]
+      },
+      {
+        "title": "ANALYZE memperbarui statistik; bukan pengganti EXPLAIN ANALYZE",
+        "paragraphs": [
+          "`ANALYZE` membaca sample atau data yang relevan lalu memperbarui statistik planner pada catalog. Ia membantu planner berikutnya melihat distribusi yang lebih baru, tetapi tidak menjalankan query customer orders untuk melaporkan actual rows atau latency. Sampling dan target statistik berarti ringkasan tidak selalu memuat setiap nilai. Setelah bulk load, perubahan distribusi besar, atau operasi yang membuat statistik stale, ANALYZE dapat menjadi bagian dari pemeliharaan yang diperlukan. Untuk pola yang sangat berkorelasi atau distribusi penting, extended statistics atau target yang sesuai mungkin dibutuhkan; itu keputusan lanjutan, bukan jaminan otomatis.",
+          "`EXPLAIN` menggunakan statistik saat menyusun plan tanpa menjalankan statement. `EXPLAIN ANALYZE` mengeksekusi statement dan membandingkan plan dengan actual rows serta timing. Karena keduanya menjawab pertanyaan berbeda, menjalankan EXPLAIN ANALYZE tidak sama dengan memperbarui statistic planner, dan menjalankan ANALYZE tidak sama dengan mengukur latency. Pada mutasi, EXPLAIN ANALYZE dapat mengubah data; pada SELECT dengan fungsi volatile atau akses eksternal, membaca saja juga belum tentu tanpa side effect."
+        ]
+      },
+      {
+        "title": "Gunakan error ratio untuk memutuskan investigasi, bukan menyalahkan satu operator",
+        "paragraphs": [
+          "Worked example menyimpan data skew dan dua fragmen plan authored: sebelum ANALYZE, VIP diperkirakan 1 baris; setelah ANALYZE, angka pedagogisnya lebih dekat ke 8 baris pada fixture kecil. Tabel itu hanya menunjukkan arah perbaikan estimate dan kemungkinan plan choice; ia tidak menghasilkan actual rows dari PostgreSQL. Error ratio dapat dibahas sebagai perbedaan antara estimated rows dan known fixture rows dalam latihan, tetapi angka tersebut tidak boleh disebut runtime benchmark. Pada database nyata, validasi membutuhkan EXPLAIN ANALYZE yang aman dan pengamatan berulang.",
+          "Jika estimate tetap buruk, telusuri apakah data berubah setelah statistik terakhir, sample tidak menangkap skew, predicate memakai expression, kolom saling berkorelasi, atau parameter membuat generic plan tidak cocok. Jangan langsung memaksa indeks atau mengubah join method hanya karena satu output. Simpan query dan parameter, bandingkan estimate dengan actual rows, cek statistik, lalu ukur perubahan dalam lingkungan yang representatif. Lesson ini berhenti pada reasoning dan plan fragments authored agar learner tidak mengira tabel contoh sebagai evidence production."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset P3 — fixture skew dan authored estimate fragments. Baris VIP sengaja dominan pada sample kecil agar perubahan estimate sebelum/sesudah ANALYZE mudah dibaca. Kolom estimate dan plan_choice adalah data ilustratif, bukan output EXPLAIN atau EXPLAIN ANALYZE runtime.",
+      "setupSql": "CREATE TEMP TABLE lesson_skew_orders (\n  order_id INTEGER PRIMARY KEY,\n  customer_segment TEXT NOT NULL,\n  customer_id INTEGER NOT NULL\n);\nINSERT INTO pg_temp.lesson_skew_orders VALUES\n  (1, 'VIP', 10),\n  (2, 'VIP', 11),\n  (3, 'VIP', 12),\n  (4, 'VIP', 13),\n  (5, 'VIP', 14),\n  (6, 'VIP', 15),\n  (7, 'VIP', 16),\n  (8, 'VIP', 17),\n  (9, 'GENERAL', 18),\n  (10, 'GENERAL', 19);\nCREATE TEMP TABLE lesson_estimate_fragments (\n  stage TEXT NOT NULL,\n  relation_name TEXT NOT NULL,\n  predicate TEXT NOT NULL,\n  estimated_rows INTEGER NOT NULL,\n  plan_choice TEXT NOT NULL,\n  authoring_note TEXT NOT NULL,\n  PRIMARY KEY (stage, relation_name)\n);\nINSERT INTO pg_temp.lesson_estimate_fragments VALUES\n  ('before ANALYZE', 'orders filter', 'customer_segment = VIP', 1, 'Nested Loop candidate', 'authored stale estimate'),\n  ('after ANALYZE', 'orders filter', 'customer_segment = VIP', 8, 'Hash Join candidate', 'authored estimate aligned to curated skew'),\n  ('before ANALYZE', 'orders join', 'orders.customer_id = customers.customer_id', 2, 'Nested Loop candidate', 'authored downstream underestimation'),\n  ('after ANALYZE', 'orders join', 'orders.customer_id = customers.customer_id', 8, 'Hash Join candidate', 'authored downstream estimate update');",
+      "sql": "SELECT stage, relation_name, predicate, estimated_rows, plan_choice, authoring_note\nFROM pg_temp.lesson_estimate_fragments\nORDER BY CASE stage WHEN 'before ANALYZE' THEN 1 ELSE 2 END, relation_name;",
+      "columns": [
+        "stage",
+        "relation_name",
+        "predicate",
+        "estimated_rows",
+        "plan_choice",
+        "authoring_note"
+      ],
+      "rows": [
+        [
+          "before ANALYZE",
+          "orders filter",
+          "customer_segment = VIP",
+          "1",
+          "Nested Loop candidate",
+          "authored stale estimate"
+        ],
+        [
+          "before ANALYZE",
+          "orders join",
+          "orders.customer_id = customers.customer_id",
+          "2",
+          "Nested Loop candidate",
+          "authored downstream underestimation"
+        ],
+        [
+          "after ANALYZE",
+          "orders filter",
+          "customer_segment = VIP",
+          "8",
+          "Hash Join candidate",
+          "authored estimate aligned to curated skew"
+        ],
+        [
+          "after ANALYZE",
+          "orders join",
+          "orders.customer_id = customers.customer_id",
+          "8",
+          "Hash Join candidate",
+          "authored downstream estimate update"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Fixture menunjukkan 8 baris VIP dan 2 baris GENERAL, sedangkan fragment authored menggambarkan estimate VIP berubah dari 1 menjadi 8 setelah tahap ANALYZE. Itu adalah narasi pedagogis tentang arah perbaikan, bukan bukti bahwa PostgreSQL benar-benar menghasilkan estimate tersebut pada setup ini. ANALYZE memperbarui statistik; EXPLAIN memakai statistik untuk planning; EXPLAIN ANALYZE baru menjalankan statement dan mengukur actual rows. Plan choice candidate tidak boleh dianggap benchmark atau rekomendasi universal."
+    },
+    "checks": [
+      {
+        "id": "l5m01l03-check-1",
+        "question": "Apa fungsi utama ANALYZE dalam konteks planner?",
+        "options": [
+          "Memperbarui statistik yang dipakai planner untuk memperkirakan distribusi dan cardinality pada planning berikutnya.",
+          "Menjalankan setiap query aplikasi dan menyimpan latency p95 secara otomatis.",
+          "Memaksa semua query memakai Hash Join setelah tabel selesai dianalisis."
+        ],
+        "answer": 0,
+        "explanation": "ANALYZE mengumpulkan atau memperbarui statistik planner; ia bukan profiler query dan bukan hint join method.",
+        "feedback": [
+          "Benar. Statistik yang lebih relevan dapat membantu estimate, tetapi tidak menjamin plan atau latency tertentu.",
+          "Belum tepat. Latency dan actual rows membutuhkan eksekusi seperti EXPLAIN ANALYZE.",
+          "Belum tepat. ANALYZE tidak memaksa satu operator join untuk semua query."
+        ]
+      },
+      {
+        "id": "l5m01l03-check-2",
+        "question": "Mengapa estimate yang terlalu kecil pada outer relation dapat berbahaya bagi Nested Loop?",
+        "options": [
+          "Karena Nested Loop tidak memiliki inner relation dan selalu membaca seluruh database.",
+          "Karena estimate hanya memengaruhi label output dan tidak pernah memengaruhi plan choice.",
+          "Planner dapat meremehkan berapa kali inner lookup dijalankan sehingga Nested Loop tampak lebih murah daripada kenyataan."
+        ],
+        "answer": 2,
+        "explanation": "Cardinality outer memengaruhi jumlah pengulangan inner; salah estimate dapat memilih strategi yang tidak cocok ketika runtime rows lebih besar.",
+        "feedback": [
+          "Belum tepat. Nested Loop memiliki outer dan inner input; inner diproses per outer row.",
+          "Belum tepat. Estimate adalah input penting dalam pemilihan plan, walaupun bukan jaminan hasil.",
+          "Benar. Periksa estimate outer, loops, dan actual rows sebelum menilai biaya lookup."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Bandingkan estimate sebelum dan sesudah ANALYZE pada data skew, lalu pilih kesimpulan yang tetap membedakan statistik dari runtime evidence.",
+      "setup": "Gunakan schema school dari school_finance_seed.sql sebagai query domain (students, invoices, dan payments), lalu gunakan Dataset P3 untuk membandingkan estimate fragments. Fixture dan fragments terpisah: fixture menunjukkan isi curated, sedangkan plan fragments adalah input authored. Player tidak menjalankan ANALYZE atau EXPLAIN ANALYZE dan tidak menyebut angka sebagai benchmark.",
+      "starterSql": "SELECT s.grade, COUNT(i.invoice_id) AS invoice_count\nFROM school.students AS s\nLEFT JOIN school.invoices AS i ON i.student_id = s.student_id\nGROUP BY s.grade\nORDER BY s.grade;",
+      "variants": [
+        {
+          "id": "l5m01l03-variant-1",
+          "question": "Setelah bulk load membuat nilai VIP sangat dominan, langkah diagnosis pertama yang paling tepat adalah apa?",
+          "options": [
+            "Paksa Nested Loop selamanya karena plan lama pernah memilihnya.",
+            "Pastikan statistik diperbarui dengan ANALYZE yang sesuai, lalu bandingkan estimate dan actual rows melalui profiling aman.",
+            "Jalankan EXPLAIN ANALYZE pada DELETE production tanpa transaction guard agar statistik ikut berubah."
+          ],
+          "answer": 1,
+          "explanation": "Distribusi baru dapat membuat statistik stale; perbarui statistik lalu ukur dengan aman sebelum memilih tuning lebih jauh.",
+          "feedback": [
+            "Belum tepat. Memaksa method dapat menyembunyikan akar masalah dan mengikat semua query pada satu pilihan.",
+            "Benar. Pisahkan pemeliharaan statistic dari pengukuran dan keputusan plan.",
+            "Belum tepat. EXPLAIN ANALYZE mengeksekusi mutation; statistik dan data tidak boleh dipertaruhkan."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l5m01l03-variant-2",
+          "question": "Estimate 2 dan actual rows 800 pada join menunjukkan apa?",
+          "options": [
+            "Ada estimate error besar yang perlu diinvestigasi; itu belum sendirinya membuktikan operator tertentu harus dipaksa.",
+            "Hash Join pasti rusak dan harus diganti dengan Nested Loop tanpa melihat query.",
+            "ANALYZE pasti gagal karena actual rows tidak boleh berbeda dari estimate."
+          ],
+          "answer": 0,
+          "explanation": "Perbedaan besar adalah sinyal investigasi terhadap statistik, skew, correlation, atau parameter; bukan perintah otomatis mengganti operator.",
+          "feedback": [
+            "Benar. Cari penyebab estimate error dan ukur rencana perbaikan pada konteks yang sama.",
+            "Belum tepat. Operator yang tepat bergantung pada cardinality, memory, dan bentuk query.",
+            "Belum tepat. Estimate adalah prediksi; actual rows memang dapat berbeda."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l5m01l03-edge-1",
+          "question": "Mengapa ANALYZE tidak menjamin estimate selalu sama persis dengan jumlah row?",
+          "options": [
+            "Karena ANALYZE sengaja menghapus separuh data sebelum menghitung statistik.",
+            "Karena planner tidak pernah memakai statistik dan hanya memilih operator secara acak.",
+            "Statistik adalah ringkasan atau sample distribusi; nilai baru, skew, correlation, dan predicate dapat tetap membuat prediksi meleset."
+          ],
+          "answer": 2,
+          "explanation": "ANALYZE meningkatkan informasi planner tetapi tetap menghasilkan model statistik, bukan daftar hasil semua kemungkinan predicate.",
+          "feedback": [
+            "Belum tepat. ANALYZE tidak dimaksudkan untuk menghapus data.",
+            "Belum tepat. Planner memakai statistik, walaupun keputusan tidak deterministic terhadap satu operator universal.",
+            "Benar. Sampling dan bentuk distribusi menjelaskan mengapa estimate adalah prediksi."
+          ]
+        },
+        {
+          "id": "l5m01l03-edge-2",
+          "question": "Apa perbedaan utama ANALYZE dan EXPLAIN ANALYZE yang perlu disebut dalam review?",
+          "options": [
+            "Keduanya identik dan hanya berbeda penulisan nama command.",
+            "ANALYZE mengukur p95, sedangkan EXPLAIN ANALYZE hanya memperbarui catalog tanpa menjalankan query.",
+            "ANALYZE memperbarui statistik; EXPLAIN ANALYZE mengeksekusi statement dan melaporkan runtime evidence, sehingga mutation dapat mengubah data."
+          ],
+          "answer": 2,
+          "explanation": "Kedua command dapat muncul dalam workflow performa, tetapi fungsi dan risikonya berbeda secara mendasar.",
+          "feedback": [
+            "Belum tepat. ANALYZE dan EXPLAIN ANALYZE memiliki tujuan berbeda.",
+            "Belum tepat. P95 memerlukan beberapa pengukuran, dan EXPLAIN ANALYZE mengeksekusi statement.",
+            "Benar. Nyatakan statistik versus eksekusi sebelum menyarankan langkah operasional."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Pisahkan tiga kata kerja: ANALYZE memperbarui statistic, EXPLAIN merencanakan, EXPLAIN ANALYZE mengeksekusi dan mengukur.",
+        "Bandingkan estimated rows dengan data skew, tetapi tandai plan fragment sebagai authored, bukan output runtime.",
+        "Jika estimate buruk, selidiki stale stats, sampling, correlation, expression, dan parameter sebelum memaksa join method."
+      ],
+      "solutionSql": "SELECT stage, relation_name, predicate, estimated_rows, plan_choice, authoring_note\nFROM pg_temp.lesson_estimate_fragments\nORDER BY CASE stage WHEN 'before ANALYZE' THEN 1 ELSE 2 END, relation_name;",
+      "solutionExplanation": "Reference query mengembalikan dua tahap authored untuk filter dan join. Solusi yang benar membaca perubahan estimate sebagai ilustrasi perbaikan setelah statistik diperbarui, bukan sebagai output yang diukur. ANALYZE memperbarui informasi planner, EXPLAIN menyusun rencana tanpa menjalankan statement, dan EXPLAIN ANALYZE menjalankan statement untuk memperoleh actual rows serta timing. Estimate error adalah sinyal diagnosis, bukan alasan otomatis memaksa satu operator.",
+      "critical": true
+    },
+    "reflection": "Jelaskan bagaimana data skew dapat membuat planner salah memilih join, apa yang diperbaiki ANALYZE, mengapa estimate tetap prediksi, dan bagaimana membedakan evidence EXPLAIN ANALYZE dari plan fragment authored."
+  }
+]

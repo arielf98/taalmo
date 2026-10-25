@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L4: 60 published / 60 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L4 and L5M01: 63 published / 57 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -210,3 +210,11 @@ Added three bilingual reliable-side-effect lessons. L4M05L01 pairs a payment and
 Totals: 20 authored modules, 60 published / 60 draft lessons; 63 combined lessons plus three labs (66 activity milestones). Existing E2E expectations only change the count and next draft route to l5m01l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
 
 Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L5M01**.
+
+## L5M01 continuation — 25 October 2026
+
+Added three bilingual planner lessons. L5M01L01 compares authored broad and selective customer-order plan trees and distinguishes planner cost from runtime. L5M01L02 explains actual rows, loops, inclusive times and buffers, the risks of EXPLAIN ANALYZE executing a write, and repeated baseline measurement limits. L5M01L03 uses ten curated orders (eight VIP) with authored stale/refreshed estimate fragments, distinguishing ANALYZE from EXPLAIN ANALYZE and estimates from observations. Root review corrected the hash-build subtree and inclusive parent buffer counts. The SQL reads deterministic illustration tables rather than running EXPLAIN, changing statistics or measuring performance.
+
+Totals: 21 authored modules, 63 published / 57 draft lessons; 66 combined lessons plus three labs (69 activity milestones). Existing E2E expectations only change the count and next draft route to l5m02l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
+
+Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L5M02**.

@@ -164,5 +164,18 @@
   "worker-retry": "retry worker",
   "deduplication": "deduplikasi",
   "concurrency-certification": "rubrik konkurensi",
-  "evidence": "bukti"
+  "evidence": "bukti",
+  "performance": "performa",
+  "explain": "EXPLAIN",
+  "plan-operators": "operator plan",
+  "query-planner": "query planner",
+  "commerce-analytics": "Commerce dan Analytics",
+  "explain-analyze": "EXPLAIN ANALYZE",
+  "buffers": "buffer",
+  "actual-rows": "baris aktual",
+  "query-profiling": "profiling query",
+  "statistics": "statistik",
+  "estimates": "estimasi",
+  "data-skew": "distribusi data timpang",
+  "analyze": "ANALYZE"
 }

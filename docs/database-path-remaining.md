@@ -1,16 +1,8 @@
 # Remaining curriculum authoring
 
-The following 60 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
+The following 57 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L5 — Performance Engineering
-
-### L5M01 — Membaca Query Planner
-
-Prerequisite: l4m05. Scenario: Commerce + Analytics.
-
-- [ ] `l5m01l01` — EXPLAIN dan operator plan
-- [ ] `l5m01l02` — EXPLAIN ANALYZE BUFFERS
-- [ ] `l5m01l03` — Statistics dan estimates
 
 ### L5M02 — Index Design
 
