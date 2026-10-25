@@ -12,6 +12,7 @@ import englishWindows from "./messages/en-database-windows.json" with { type: "j
 import englishTimeReports from "./messages/en-database-time-reports.json" with { type: "json" };
 import englishCorrectness from "./messages/en-database-correctness.json" with { type: "json" };
 import englishModeling from "./messages/en-database-modeling.json" with { type: "json" };
+import englishNormalization from "./messages/en-database-normalization.json" with { type: "json" };
 export type Locale = "en" | "id";
 const indonesian: Record<string, string> = {
   ...interfaceMessages,
@@ -30,6 +31,7 @@ const english: Record<string, string> = {
   ...englishTimeReports,
   ...englishCorrectness,
   ...englishModeling,
+  ...englishNormalization,
 };
 const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

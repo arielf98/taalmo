@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L2 plus L3M01: 36 published / 84 draft. The original implementation evidence below is retained as release history. L2M02–L2M04 and L3M01 have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L2 plus L3M01–L3M02: 39 published / 81 draft. The original implementation evidence below is retained as release history. L2M02–L2M04 and L3M01–L3M02 have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -140,3 +140,17 @@ Added three bilingual lessons in `l3-modeling.json` and the registered `en-datab
 Counts: twelve authored modules, 36 published / 84 draft lessons; combined transaction/database availability is 39 lessons plus three labs (42 activity milestones). L3M01 follows L2M04, and L3's stage assessment remains unavailable while later modules are draft. Content/SQL file registries include the new JSON for a future explicitly authorized run. Existing E2E expectations only update the count and next draft route to l3m02l01; no tests or registered browser lesson coverage were added.
 
 Review is source/diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run under AGENTS.md. Numerical, Boolean and rejection outputs are authored expectations rather than runtime evidence. Next: **L3M02 — Normalization dan Trade-off**.
+
+## L3M02 continuation — 25 October 2026
+
+Added `l3-normalization.json` and its registered English dictionary, with three complete bilingual lessons and additional typed UML/ERD data using the existing renderer:
+
+- `l3m02l01`: functional dependency, candidate/superkeys and 1NF reasoning for operations on individual references. A curated TEMP invoice/payment fixture contrasts legacy ID strings with PK/FK rows. Invoice 103 has two receipts totaling 450000 and zero remaining; invoice 108 has an empty legacy string, zero payment rows, paid zero and 400000 outstanding. No automatic token parser or actual migration is supplied.
+- `l3m02l02`: 2NF partial dependency, formal 3NF/BCNF distinction, update/insert/delete anomalies and lossless versus dependency-preserving decomposition. Independent TEMP customer/product/order/item tables reconstruct three lines: order 501 totals 35000 and 502 totals 14000. Customer 42 exists without orders. Current names are separated from agreed historical prices; NOTE legitimately has item prices 15000 and 14000. The reference updates one current-name source without changing item prices.
+- `l3m02l03`: derived-data source of truth, invalidation coverage, freshness contracts and replacement reconciliation. Initial four-order cache results are 501: 30000 versus 35000 (stale), 502: NULL versus 14000 (missing), 503: NULL versus zero (missing), 504: zero versus zero (fresh). Deltas stay NULL when cache is unknown. Reconciliation starts from orders, includes empty parents and replaces cache with 35000/14000/0/0 rather than adding again.
+
+Cache prose explicitly addresses old-worker publication races, every writer participating in the chosen protocol, both aggregates on item moves, and the difference between a fixed-fixture script and concurrent production enforcement. No worker, trigger, online invalidation, arbitrary SQL runner, or production cache protocol was added. All TEMP FKs point to explicit TEMP endpoints; no School Finance or prior L3M01 fixture/version was changed. Diagrams show PK/FK roles, composite keys, column types and 1–0..N relationships with localized prose. Runtime player behavior and persistence format are unchanged.
+
+Current totals are thirteen authored modules, 39 published / 81 draft lessons, and 42 combined lessons plus three labs (45 activity milestones). L3M02 follows L3M01; the L3 level assessment remains hidden while later modules are draft. Existing E2E expectations only change available count and next draft route to l3m03l01. Content/SQL file registries include the new JSON for a future authorized run; no test cases or registered browser lesson coverage were added.
+
+Review is source/diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run under AGENTS.md. Numeric, empty-string and NULL rows remain authored expectations rather than executed evidence. Next: **L3M03 — Tipe dan Constraint Lanjutan**.

@@ -1,4 +1,11 @@
 {
+  "normalization": "normalisasi",
+  "functional-dependency": "ketergantungan fungsional",
+  "first-normal-form": "bentuk normal pertama",
+  "normal-forms": "bentuk normal",
+  "denormalization": "denormalisasi",
+  "derived-data": "data turunan",
+  "cache-invalidation": "invalidasi cache",
   "domain-modeling": "pemodelan domain",
   "entities": "entitas",
   "lifecycle": "siklus hidup",

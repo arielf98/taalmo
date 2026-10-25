@@ -1,16 +1,8 @@
 # Remaining curriculum authoring
 
-The following 84 canonical lessons remain draft. Each checkbox means: substantive teaching body, worked example, two concept checks with feedback, two practice variants, two graded edge cases, progressive hints, reflection, required fixture/simulator and validation. Follow the current AGENTS.md restrictions on validation; L2M02–L2M04 and L3M01 were reviewed through code and diff only.
+The following 81 canonical lessons remain draft. Each checkbox means: substantive teaching body, worked example, two concept checks with feedback, two practice variants, two graded edge cases, progressive hints, reflection, required fixture/simulator and validation. Follow the current AGENTS.md restrictions on validation; L2M02–L2M04 and L3M01–L3M02 were reviewed through code and diff only.
 
 ## L3 — Data Modeling & Schema Evolution
-
-### L3M02 — Normalization dan Trade-off
-
-Prerequisite: l3m01. Scenario: Commerce.
-
-- [ ] `l3m02l01` — Functional dependency dan 1NF
-- [ ] `l3m02l02` — 2NF, 3NF, dan BCNF praktis
-- [ ] `l3m02l03` — Denormalization dan derived data
 
 ### L3M03 — Tipe dan Constraint Lanjutan
 

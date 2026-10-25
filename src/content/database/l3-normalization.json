@@ -1,0 +1,616 @@
+[
+  {
+    "id": "l3m02l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "normalization",
+      "functional-dependency",
+      "first-normal-form",
+      "school-finance"
+    ],
+    "officialRefs": [
+      "https://www.db-book.com/Previous-editions/db5/slide-dir/ch7.pdf",
+      "https://www.postgresql.org/docs/17/ddl-constraints.html"
+    ],
+    "hook": "Invoice 103 menyimpan payment_ids sebagai teks 203,204. Bagaimana memastikan setiap ID benar-benar payment, tidak terulang, dan masih milik invoice tersebut tanpa membongkar string setiap kali laporan dibaca?",
+    "objectives": [
+      "Menyatakan functional dependency berdasarkan aturan domain, bukan kebetulan data contoh.",
+      "Menilai satu nilai menurut operasi yang diperlukan dan memisahkan kumpulan referensi payment.",
+      "Menelusuri invoice–payment dengan PK/FK sambil mempertahankan invoice tanpa payment."
+    ],
+    "sections": [
+      {
+        "title": "Dependency menyatakan fakta yang ditentukan",
+        "paragraphs": [
+          "Functional dependency X → Y berarti dua baris sah dengan nilai X sama harus mempunyai nilai Y sama. Pada kontrak contoh, invoice_id menentukan amount invoice, sedangkan payment_id menentukan invoice_id, amount payment, dan status. Sebaliknya invoice_id tidak menentukan satu payment_id karena satu invoice boleh menerima beberapa cicilan. Aturan ini berlaku untuk semua state yang sah, bukan hanya dua payment yang terlihat sekarang. Jumlah baris kecil bisa membuat suatu kolom tampak unik tanpa menjadikannya kunci bisnis.",
+          "Candidate key adalah kumpulan atribut minimal yang menentukan seluruh baris; superkey juga menentukan baris tetapi boleh mengandung atribut tambahan. Memilih primary key memberi satu identitas utama, bukan menghapus dependency lain. Dalam contoh, payment_id merupakan kunci minimal payment dan invoice_id adalah foreign key ke invoice. Menambahkan nomor baris baru pada desain yang buruk tidak otomatis memindahkan fakta ke pemiliknya. Tulis dulu grain dan dependency yang ingin dipertahankan sebelum memilih cara menyimpan daftar."
+        ]
+      },
+      {
+        "title": "String scalar dapat menyembunyikan kumpulan referensi",
+        "paragraphs": [
+          "1NF membahas nilai dalam domain yang diperlakukan sebagai unit pada model relasional. PostgreSQL memang melihat payment_ids sebagai satu nilai TEXT, tetapi kebutuhan kita adalah memeriksa, mencari, dan menghubungkan setiap payment secara terpisah. Teks 203,204 menyembunyikan dua referensi yang seharusnya dapat menjadi baris anak. Mengganti koma menjadi titik koma, array, atau JSON tidak dengan sendirinya memberi foreign key per anggota. Ini bukan larangan umum terhadap teks atau JSON; payload mentah boleh menjadi satu fakta utuh jika tidak dipakai menggantikan relasi yang harus dijaga.",
+          "Pisahkan invoice dan payment. Setiap payment menyimpan satu invoice_id wajib, sedangkan invoice tanpa payment mempunyai nol baris anak. Payment 203 dan 204 tetap dua record bernilai 250000 dan 200000 yang merujuk invoice 103. PK payment_id menolak pengulangan identitas record; FK memeriksa invoice target. Tabel ini tidak membutuhkan junction karena satu payment pada kebijakan contoh hanya membayar satu invoice. Jika aturan bisnis kelak mengizinkan satu payment dialokasikan ke beberapa invoice, grain berubah dan diperlukan model alokasi tersendiri."
+        ]
+      },
+      {
+        "title": "Perbaikan desain bukan parser migrasi otomatis",
+        "paragraphs": [
+          "Setup menampilkan representasi lama serta tabel baru dengan data yang sudah dikurasi. Nilai kosong pada payment_ids invoice 108 bukan identitas payment; setelah pemisahan, invoice tersebut tetap ada dengan count nol dan outstanding 400000. Query mengagregasikan payment sebelum LEFT JOIN agar grain hasil tetap satu invoice. Untuk data lama sungguhan, token bukan angka, ID ganda, target hilang, dan klaim invoice yang saling bertentangan harus ditinjau sebelum dipindahkan. Memecah string saja bukan bukti migrasi benar dan tidak dijalankan oleh lesson ini."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Mini fixture normalisasi invoice: dua invoice dan dua payment yang diadaptasi dari School Finance. Tabel legacy dan tabel hasil desain berada di pg_temp; tidak ada parser migrasi atau perubahan school.*.",
+      "setupSql": "CREATE TEMP TABLE lesson_legacy_invoice_lists (\n  invoice_id BIGINT PRIMARY KEY,\n  amount NUMERIC(12,2) NOT NULL,\n  payment_ids TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_legacy_invoice_lists VALUES\n (103,450000,'203,204'), (108,400000,'');\nCREATE TEMP TABLE lesson_nf_invoices (\n  invoice_id BIGINT PRIMARY KEY,\n  amount NUMERIC(12,2) NOT NULL CHECK (amount >= 0)\n);\nCREATE TEMP TABLE lesson_nf_payments (\n  payment_id BIGINT PRIMARY KEY,\n  invoice_id BIGINT NOT NULL REFERENCES pg_temp.lesson_nf_invoices(invoice_id),\n  amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),\n  status TEXT NOT NULL CHECK (status IN ('succeeded','pending','failed'))\n);\nINSERT INTO pg_temp.lesson_nf_invoices VALUES (103,450000),(108,400000);\nINSERT INTO pg_temp.lesson_nf_payments VALUES\n (203,103,250000,'succeeded'), (204,103,200000,'succeeded');",
+      "sql": "WITH receipts AS (\n  SELECT invoice_id, COUNT(*) AS payment_count, SUM(amount) AS paid\n  FROM pg_temp.lesson_nf_payments WHERE status = 'succeeded'\n  GROUP BY invoice_id\n)\nSELECT i.invoice_id, l.payment_ids AS legacy_ids,\n       COALESCE(r.payment_count,0) AS payment_count,\n       COALESCE(r.paid,0.00) AS paid,\n       i.amount - COALESCE(r.paid,0.00) AS outstanding\nFROM pg_temp.lesson_nf_invoices i\nJOIN pg_temp.lesson_legacy_invoice_lists l ON l.invoice_id = i.invoice_id\nLEFT JOIN receipts r ON r.invoice_id = i.invoice_id\nORDER BY i.invoice_id;",
+      "columns": [
+        "invoice_id",
+        "legacy_ids",
+        "payment_count",
+        "paid",
+        "outstanding"
+      ],
+      "rows": [
+        [
+          "103",
+          "203,204",
+          "2",
+          "450000.00",
+          "0.00"
+        ],
+        [
+          "108",
+          "",
+          "0",
+          "0.00",
+          "400000.00"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "String lama tetap ditampilkan sebagai pembanding. Dua payment invoice 103 menjumlah 450000 tanpa menggandakan invoice; invoice 108 mempunyai string kosong tetapi tidak mempunyai baris payment. Count nol dan paid 0.00 berasal dari ketiadaan anak, bukan payment palsu dengan ID kosong."
+    },
+    "checks": [
+      {
+        "id": "l3m02l01-check-1",
+        "question": "Dependency mana berlaku ketika satu payment hanya dimiliki satu invoice, tetapi invoice dapat memiliki banyak cicilan?",
+        "options": [
+          "invoice_id → payment_id untuk semua state sah.",
+          "payment_id → invoice_id, tetapi arah kebalikannya tidak dijamin.",
+          "amount → invoice_id karena nominal uang selalu unik."
+        ],
+        "answer": 1,
+        "explanation": "Identitas payment menentukan pemiliknya; satu invoice dapat menjadi target beberapa payment yang berbeda.",
+        "feedback": [
+          "Dua cicilan invoice 103 mempunyai payment_id berbeda, sehingga arah itu tidak berlaku.",
+          "Benar: dependency mengikuti aturan kepemilikan, bukan arah penulisan join.",
+          "Nominal sama dapat dimiliki banyak payment dan tidak menjadi identitas invoice."
+        ]
+      },
+      {
+        "id": "l3m02l01-check-2",
+        "question": "Mengapa mengganti payment_ids TEXT menjadi array ID saja belum menyelesaikan kebutuhan relasi ini?",
+        "options": [
+          "Referensi dan keunikan setiap payment tetap perlu aturan serta grain yang jelas.",
+          "PostgreSQL tidak dapat menyimpan array.",
+          "Semua nilai teks pasti melanggar 1NF."
+        ],
+        "answer": 0,
+        "explanation": "Pilihan format koleksi tidak otomatis memberi foreign key per anggota atau menetapkan kepemilikan payment.",
+        "feedback": [
+          "Benar: struktur harus mendukung operasi dan penjagaan yang diminta domain.",
+          "Array tersedia di PostgreSQL; persoalannya adalah kontrak relasi, bukan ketiadaan tipe.",
+          "Teks yang merupakan satu nilai domain dapat tepat; jangan menilai hanya dari tipe SQL."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi hasil pemisahan invoice–payment dan identifikasi dependency yang harus dipertahankan.",
+      "setup": "Invoice 103 bernilai 450000 dengan payment 203 sebesar 250000 dan 204 sebesar 200000. Invoice 108 bernilai 400000 tanpa payment. Data terkurasi ini bukan hasil parsing string yang tidak dipercaya.",
+      "starterSql": "SELECT invoice_id, payment_ids\nFROM pg_temp.lesson_legacy_invoice_lists\nWHERE payment_ids LIKE '%203%';",
+      "variants": [
+        {
+          "id": "l3m02l01-variant-1",
+          "question": "Berapa payment_count dan outstanding invoice 103 setelah dipisahkan menjadi baris payment?",
+          "options": [
+            "1 dan 200000 karena string adalah satu payment.",
+            "2 dan 450000 karena PK mengabaikan nominal payment.",
+            "2 dan 0 karena kedua cicilan berjumlah 450000."
+          ],
+          "answer": 2,
+          "explanation": "Dua identitas payment tetap dua baris; totalnya sama dengan nominal invoice.",
+          "feedback": [
+            "Satu string bukan satu identitas payment; 203 dan 204 adalah record terpisah.",
+            "PK menjaga identitas, sedangkan perhitungan tetap memakai seluruh payment succeeded.",
+            "Benar: pemisahan mempertahankan fakta cicilan dan hasil bisnis."
+          ]
+        },
+        {
+          "id": "l3m02l01-variant-2",
+          "question": "Jika payment lain mempunyai ID 1203 pada contoh hipotetis, apakah LIKE %203% pasti hanya menemukan ID 203?",
+          "options": [
+            "Ya, LIKE memahami batas identitas payment.",
+            "Tidak; pencarian substring dapat cocok dengan 1203 dan tidak memeriksa FK.",
+            "Ya, primary key invoice memvalidasi isi semua string."
+          ],
+          "answer": 1,
+          "explanation": "Substring bukan perbandingan kunci integer; token dan referensi tidak dijaga oleh LIKE.",
+          "feedback": [
+            "LIKE mencocokkan pola karakter, bukan identitas bisnis per anggota.",
+            "Benar: baris payment dengan FK memberi semantik yang berbeda dari pencarian karakter.",
+            "Primary key invoice tidak mengaudit token pada kolom TEXT."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l3m02l01-edge-1",
+          "question": "Bagaimana invoice 108 tanpa payment direpresentasikan setelah perbaikan?",
+          "options": [
+            "Satu invoice, nol baris payment, count nol, outstanding 400000.",
+            "Satu payment dengan payment_id NULL agar relasi tetap ada.",
+            "Invoice dihapus karena tidak bisa mempunyai daftar kosong."
+          ],
+          "answer": 0,
+          "explanation": "Ketiadaan anak adalah state sah; LEFT JOIN mempertahankan tagihan tanpa membuat identitas payment palsu.",
+          "feedback": [
+            "Benar: hubungan opsional tidak memerlukan endpoint NULL.",
+            "PK payment_id melarang NULL dan ketiadaan payment bukan payment yang belum dikenal.",
+            "Ketiadaan penerimaan tidak menghapus tagihan yang sah."
+          ]
+        },
+        {
+          "id": "l3m02l01-edge-2",
+          "question": "Data legacy mengklaim payment 203 sekaligus milik invoice 103 dan 108. Apa langkah aman sebelum migrasi?",
+          "options": [
+            "Salin kedua klaim dan hapus primary key payment.",
+            "Pilih invoice terakhir secara diam-diam.",
+            "Tandai konflik dan tentukan pemilik dari sumber berwenang sebelum mengisi model baru."
+          ],
+          "answer": 2,
+          "explanation": "Aturan satu payment ke satu invoice membuat dua klaim itu konflik; normalisasi tidak menentukan fakta yang benar secara otomatis.",
+          "feedback": [
+            "Menghapus identitas unik menyembunyikan konflik dan dapat menggandakan penerimaan.",
+            "Urutan pemrosesan bukan bukti kepemilikan yang sah.",
+            "Benar: validasi data mendahului pemindahan struktur."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Tulis invoice_id → amount dan payment_id → invoice_id sebelum membahas format string.",
+        "Setiap payment adalah satu baris dengan satu FK invoice, bukan anggota tersembunyi dalam TEXT.",
+        "Agregasikan payment succeeded per invoice lalu LEFT JOIN agar invoice tanpa payment tetap tampil."
+      ],
+      "solutionSql": "WITH receipts AS (\n  SELECT invoice_id, COUNT(*) AS payment_count, SUM(amount) AS paid\n  FROM pg_temp.lesson_nf_payments WHERE status = 'succeeded'\n  GROUP BY invoice_id\n)\nSELECT i.invoice_id, l.payment_ids AS legacy_ids,\n       COALESCE(r.payment_count,0) AS payment_count,\n       COALESCE(r.paid,0.00) AS paid,\n       i.amount - COALESCE(r.paid,0.00) AS outstanding\nFROM pg_temp.lesson_nf_invoices i\nJOIN pg_temp.lesson_legacy_invoice_lists l ON l.invoice_id = i.invoice_id\nLEFT JOIN receipts r ON r.invoice_id = i.invoice_id\nORDER BY i.invoice_id;",
+      "solutionExplanation": "Tabel baru menjaga identitas payment dan satu pemilik invoice. Query membandingkan daftar legacy dengan dua baris payment yang sudah dikurasi, menghitung paid 450000 untuk 103, serta mempertahankan 108 dengan paid nol. Pemecahan token, deduplikasi, dan penyelesaian konflik data lama bukan fungsi query ini.",
+      "critical": true
+    },
+    "reflection": "Nyatakan dependency invoice dan payment, lalu jelaskan mengapa satu TEXT bisa menyembunyikan relasi yang perlu dijaga. Kapan payload utuh boleh tetap teks/JSON, dan konflik apa yang perlu diselesaikan sebelum migrasi daftar ID?"
+  },
+  {
+    "id": "l3m02l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "normalization",
+      "functional-dependency",
+      "normal-forms",
+      "commerce"
+    ],
+    "officialRefs": [
+      "https://www.db-book.com/Previous-editions/db5/slide-dir/ch7.pdf",
+      "https://www.cs.rpi.edu/~sibel/csci4380/fall2026/lecture_notes/lecture5.html",
+      "https://opencs.aalto.fi/en/courses/databases/part-8/4-normalization"
+    ],
+    "hook": "Nama pelanggan Ari tersimpan pada tiga baris item. Satu perubahan terlewat membuat pelanggan yang sama mempunyai dua nama saat ini. Fakta mana seharusnya berpindah tabel, dan fakta harga mana justru harus tetap pada item?",
+    "objectives": [
+      "Mengenali partial dependency, transitive dependency, dan perbedaan 3NF–BCNF.",
+      "Memisahkan customer, order, product, dan item tanpa mengarang pasangan join.",
+      "Menjelaskan update/insert/delete anomaly serta melindungi harga transaksi historis."
+    ],
+    "sections": [
+      {
+        "title": "Mulai dari grain dan candidate key",
+        "paragraphs": [
+          "Grain tabel besar adalah satu baris item dengan candidate key (order_id, line_no). Aturan contoh menyatakan order_id → customer_id, customer_id → customer_name saat ini, dan sku → product_name katalog saat ini. Quantity serta unit_price_at_order ditentukan oleh baris item. Inilah dependency yang ingin dipertahankan, bukan kesimpulan dari kebetulan tiga baris input. Customer 42 juga boleh ada sebelum pernah membuat order. Memaksanya masuk tabel item membutuhkan order atau barang palsu dan merupakan insertion anomaly.",
+          "2NF mensyaratkan atribut non-prime bergantung penuh pada setiap candidate key, bukan hanya bagian key. Non-prime berarti atribut yang tidak termasuk candidate key mana pun. Customer_id bergantung pada order_id saja, sehingga pada key gabungan contoh ini terjadi partial dependency. Pisahkan order_id dan customer_id ke tabel orders, lalu item merujuk order lewat FK. Menambah surrogate ID pada tabel besar tidak menghapus dependency dari candidate key alami yang masih berlaku; nomor baru tidak menyembuhkan pengulangan fakta."
+        ]
+      },
+      {
+        "title": "3NF, BCNF, dan batas dekomposisi",
+        "paragraphs": [
+          "Setelah memisahkan order, customer_name tetap tidak perlu disalin ke orders: order_id menentukan customer_id, lalu customer_id menentukan nama saat ini. Simpan nama di customers. Product_name katalog ditentukan sku dan ditempatkan di products. Secara formal, 3NF mengizinkan dependency nontrivial X → A bila X superkey atau A atribut prime, yaitu anggota setidaknya satu candidate key. BCNF lebih ketat: setiap determinant dependency nontrivial harus superkey. Aturan populer tidak ada ketergantungan transitif adalah ringkasan praktis untuk kasus sederhana, bukan definisi lengkap semua 3NF.",
+          "Sebagai contoh batas, tetapkan hubungan customer, region, dan rep dengan aturan (customer, region) → rep serta rep → region. Candidate key-nya (customer, region) dan (customer, rep); semua atribut prime. Dependency rep → region lolos 3NF tetapi tidak BCNF karena rep bukan superkey seluruh hubungan. Memisahkan pasangan rep–region dan customer–rep dapat lossless, namun aturan satu rep per customer per region tidak otomatis terjaga oleh constraint lokal kedua tabel. Desain perlu menimbang dependency preservation, bukan menganggap semua pemecahan selalu lebih baik."
+        ]
+      },
+      {
+        "title": "Pisahkan fakta saat ini dari snapshot transaksi",
+        "paragraphs": [
+          "Pada worked example, customer 41 hanya mempunyai satu nama saat ini di customers; menggantinya cukup mengubah satu baris. Tabel besar lama memerlukan tiga pembaruan dan berisiko update anomaly bila satu terlewat. Menghapus item terakhir order pada model lama dapat sekaligus menghilangkan satu-satunya informasi pelanggan, sebuah delete anomaly. Setelah pemisahan, keberadaan customer tidak bergantung pada item. Join kembali memakai PK/FK, bukan nama yang mungkin sama, sehingga setiap item memperoleh tepat satu customer dan satu product yang sesuai.",
+          "Harga yang disepakati bukan harga katalog saat ini. NOTE pada order 501 berharga 15000, tetapi pada order 502 berharga 14000; kedua transaksi tetap sah. Karena itu sku tidak menentukan unit_price_at_order pada kontrak ini. Mengganti harga transaksi dengan join ke katalog terbaru akan mengubah histori, bukan menormalisasi fakta yang sama. Nama pada dokumen penagihan juga dapat merupakan snapshot berbeda dari nama pelanggan saat ini. Definisikan makna kolom sebelum menghapus duplikasi; bentuk yang tampak berulang bisa menyimpan fakta pada waktu berbeda."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Mini fixture order normalisasi: tiga baris legacy dan empat tabel TEMP hasil desain. Customer/product menyimpan nama saat ini; item menyimpan quantity dan harga transaksi. Data ini terpisah dari mini fixture lifecycle L3M01.",
+      "setupSql": "CREATE TEMP TABLE lesson_legacy_order_lines (\n  order_id BIGINT, line_no INTEGER,\n  customer_id BIGINT NOT NULL, customer_name TEXT NOT NULL,\n  sku TEXT NOT NULL, product_name TEXT NOT NULL,\n  quantity INTEGER NOT NULL, unit_price_at_order NUMERIC(12,2) NOT NULL,\n  PRIMARY KEY (order_id,line_no)\n);\nINSERT INTO pg_temp.lesson_legacy_order_lines VALUES\n (501,1,41,'Ari','NOTE','Notebook',2,15000),\n (501,2,41,'Ari','PEN','Pen',1,5000),\n (502,1,41,'Ari','NOTE','Notebook',1,14000);\nCREATE TEMP TABLE lesson_nf_customers (\n  customer_id BIGINT PRIMARY KEY, full_name TEXT NOT NULL\n);\nCREATE TEMP TABLE lesson_nf_products (\n  sku TEXT PRIMARY KEY, product_name TEXT NOT NULL\n);\nCREATE TEMP TABLE lesson_nf_orders (\n  order_id BIGINT PRIMARY KEY,\n  customer_id BIGINT NOT NULL REFERENCES pg_temp.lesson_nf_customers(customer_id)\n);\nCREATE TEMP TABLE lesson_nf_order_items (\n  order_id BIGINT NOT NULL REFERENCES pg_temp.lesson_nf_orders(order_id),\n  line_no INTEGER NOT NULL CHECK (line_no > 0),\n  sku TEXT NOT NULL REFERENCES pg_temp.lesson_nf_products(sku),\n  quantity INTEGER NOT NULL CHECK (quantity > 0),\n  unit_price_at_order NUMERIC(12,2) NOT NULL CHECK (unit_price_at_order >= 0),\n  PRIMARY KEY (order_id,line_no)\n);\nINSERT INTO pg_temp.lesson_nf_customers VALUES (41,'Ari'),(42,'Bela');\nINSERT INTO pg_temp.lesson_nf_products VALUES ('NOTE','Notebook'),('PEN','Pen');\nINSERT INTO pg_temp.lesson_nf_orders VALUES (501,41),(502,41);\nINSERT INTO pg_temp.lesson_nf_order_items VALUES\n (501,1,'NOTE',2,15000),(501,2,'PEN',1,5000),(502,1,'NOTE',1,14000);",
+      "sql": "SELECT o.order_id, i.line_no, c.full_name AS customer_name,\n       i.sku, p.product_name, i.quantity, i.unit_price_at_order,\n       i.quantity * i.unit_price_at_order AS line_total\nFROM pg_temp.lesson_nf_orders o\nJOIN pg_temp.lesson_nf_customers c ON c.customer_id = o.customer_id\nJOIN pg_temp.lesson_nf_order_items i ON i.order_id = o.order_id\nJOIN pg_temp.lesson_nf_products p ON p.sku = i.sku\nORDER BY o.order_id, i.line_no;",
+      "columns": [
+        "order_id",
+        "line_no",
+        "customer_name",
+        "sku",
+        "product_name",
+        "quantity",
+        "unit_price_at_order",
+        "line_total"
+      ],
+      "rows": [
+        [
+          "501",
+          "1",
+          "Ari",
+          "NOTE",
+          "Notebook",
+          "2",
+          "15000.00",
+          "30000.00"
+        ],
+        [
+          "501",
+          "2",
+          "Ari",
+          "PEN",
+          "Pen",
+          "1",
+          "5000.00",
+          "5000.00"
+        ],
+        [
+          "502",
+          "1",
+          "Ari",
+          "NOTE",
+          "Notebook",
+          "1",
+          "14000.00",
+          "14000.00"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Join mengembalikan tiga item, total order 501 sebesar 35000 dan 502 sebesar 14000. Nama Ari di hasil berulang karena ditampilkan bersama item, tetapi disimpan sekali pada sumber customers. Dua harga NOTE adalah dua kesepakatan transaksi, bukan konflik harga katalog."
+    },
+    "checks": [
+      {
+        "id": "l3m02l02-check-1",
+        "question": "Mengapa order_id → customer_id menunjukkan masalah 2NF pada tabel dengan key (order_id,line_no)?",
+        "options": [
+          "Customer_id selalu harus menjadi bagian semua primary key.",
+          "Semua foreign key pasti melanggar 2NF.",
+          "Atribut non-prime customer_id bergantung pada bagian key, bukan seluruh key."
+        ],
+        "answer": 2,
+        "explanation": "Customer adalah fakta order, bukan fakta spesifik line_no; pemisahan menghilangkan partial dependency itu.",
+        "feedback": [
+          "Menambah atribut ke key bukan alasan domain yang memperbaiki dependency.",
+          "FK dapat tepat pada tabel ternormalisasi; masalahnya adalah dependency pada grain saat ini.",
+          "Benar: satu customer order tidak perlu disimpan ulang pada setiap item."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l3m02l02-check-2",
+        "question": "Apa perbedaan definisi 3NF dan BCNF untuk dependency nontrivial X → A?",
+        "options": [
+          "3NF mengizinkan X superkey atau A prime; BCNF mensyaratkan X superkey.",
+          "BCNF hanya berarti tabel punya surrogate ID.",
+          "3NF melarang semua foreign key, sedangkan BCNF melarang join."
+        ],
+        "answer": 0,
+        "explanation": "Prime adalah anggota candidate key mana pun; pengecualian itulah yang membuat 3NF lebih longgar.",
+        "feedback": [
+          "Benar: periksa seluruh dependency yang berlaku, bukan hanya primary key pilihan.",
+          "Surrogate ID tidak menghapus dependency pada atribut lain.",
+          "FK dan join justru dapat menghubungkan dekomposisi yang benar."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Tunjukkan anomali pada tabel besar dan hasil pembaruan satu sumber fakta.",
+      "setup": "Nama customer 41 adalah nama saat ini, bukan snapshot dokumen. Tiga baris legacy menyimpan Ari. Empat tabel baru memisahkan fakta customer, order, product, dan item; customer 42 belum memiliki order.",
+      "starterSql": "UPDATE pg_temp.lesson_legacy_order_lines\nSET customer_name = 'Ari Updated'\nWHERE order_id = 501 AND line_no = 1;",
+      "variants": [
+        {
+          "id": "l3m02l02-variant-1",
+          "question": "Apa akibat starter SQL yang hanya mengubah satu dari tiga salinan nama customer 41?",
+          "options": [
+            "Semua salinan otomatis ikut berubah karena customer_id sama.",
+            "Nama saat ini menjadi tidak konsisten; pada desain baru cukup memperbarui satu record customer.",
+            "Harga NOTE otomatis menjadi sama pada kedua order."
+          ],
+          "answer": 1,
+          "explanation": "Tabel legacy tidak menghubungkan salinan nama melalui dependency yang ditegakkan; model baru menyimpan sumber nama tunggal.",
+          "feedback": [
+            "Nilai customer_id sama tidak membuat PostgreSQL menyalin UPDATE ke baris lain.",
+            "Benar: inilah update anomaly dan perbaikannya melalui pemilik fakta.",
+            "Perubahan nama tidak mengubah kesepakatan harga transaksi."
+          ]
+        },
+        {
+          "id": "l3m02l02-variant-2",
+          "question": "Bagaimana menyimpan customer 42 yang belum pernah mempunyai order pada desain baru?",
+          "options": [
+            "Simpan baris customers saja tanpa membuat order atau item palsu.",
+            "Wajib membuat order bernilai nol sebagai identitas customer.",
+            "Simpan customer sebagai sku kosong pada item pertama."
+          ],
+          "answer": 0,
+          "explanation": "Keberadaan customer terpisah dari keberadaan order; ini menghindari insertion anomaly.",
+          "feedback": [
+            "Benar: relasi induk boleh mempunyai nol anak pada struktur contoh.",
+            "Order palsu menambah fakta bisnis yang belum terjadi.",
+            "SKU mengidentifikasi produk, bukan pelanggan yang belum membeli."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l3m02l02-edge-1",
+          "question": "NOTE mempunyai harga transaksi 15000 pada order 501 dan 14000 pada 502. Haruskah keduanya dipaksa sama demi normalisasi?",
+          "options": [
+            "Ya, sku selalu menentukan seluruh harga dalam semua histori.",
+            "Ya, pilih harga terakhir lalu ubah semua invoice lama.",
+            "Tidak; unit_price_at_order adalah fakta baris transaksi, bukan harga katalog saat ini."
+          ],
+          "answer": 2,
+          "explanation": "Dependency bergantung pada makna atribut; snapshot per transaksi dapat berbeda secara sah.",
+          "feedback": [
+            "Kontrak ini tidak menyatakan sku → harga transaksi setiap order.",
+            "Mengubah histori menghapus kesepakatan lama dan bukan perbaikan dependency.",
+            "Benar: fakta berbeda tidak boleh digabung hanya karena label harganya mirip."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l3m02l02-edge-2",
+          "question": "Jika semua item order 502 dihapus pada contoh desain baru, apakah customer 41 otomatis ikut hilang?",
+          "options": [
+            "Ya, seluruh tabel adalah satu record yang dipecah secara visual.",
+            "Tidak; identitas customer tetap berada pada tabelnya sendiri.",
+            "Ya, FK child selalu menghapus parent saat child dihapus."
+          ],
+          "answer": 1,
+          "explanation": "Menghapus child tidak menghapus parent secara otomatis; fakta customer tidak lagi bergantung pada satu-satunya item.",
+          "feedback": [
+            "Setiap tabel menyimpan grain berbeda dan tidak mengalami penghapusan otomatis bersama.",
+            "Benar: pemisahan menghindari hilangnya fakta customer bersama item terakhir.",
+            "Foreign key memeriksa referensi; ia tidak memberi aturan penghapusan parent dari child."
+          ]
+        }
+      ],
+      "hints": [
+        "Cari atribut yang ditentukan order_id saja pada key gabungan order_id dan line_no.",
+        "Pisahkan nama saat ini menurut customer_id/sku, tetapi pertahankan harga yang disepakati pada item.",
+        "Ubah customers satu kali lalu JOIN lewat PK/FK; periksa bahwa jumlah dan nilai item tetap sama."
+      ],
+      "solutionSql": "UPDATE pg_temp.lesson_nf_customers SET full_name = 'Ari Updated' WHERE customer_id = 41;\nSELECT o.order_id, i.line_no, c.full_name AS customer_name,\n       i.sku, p.product_name, i.quantity, i.unit_price_at_order,\n       i.quantity * i.unit_price_at_order AS line_total\nFROM pg_temp.lesson_nf_orders o\nJOIN pg_temp.lesson_nf_customers c ON c.customer_id = o.customer_id\nJOIN pg_temp.lesson_nf_order_items i ON i.order_id = o.order_id\nJOIN pg_temp.lesson_nf_products p ON p.sku = i.sku\nORDER BY o.order_id, i.line_no;",
+      "solutionExplanation": "UPDATE menyentuh satu sumber nama customer; query menampilkan Ari Updated pada ketiga item tanpa mengubah tiga harga transaksi. Legacy tetap contoh salinan lama, bukan tabel yang disinkronkan otomatis. Dekomposisi didasarkan pada dependency yang dinyatakan; snapshot dokumen dan dependency preservation pada contoh BCNF memerlukan keputusan tersendiri.",
+      "critical": true
+    },
+    "reflection": "Tunjukkan satu partial dependency dan satu transitive dependency pada tabel order besar. Jelaskan tiga anomaly yang dihindari, perbedaan 3NF–BCNF, serta alasan harga transaksi tidak dipindahkan begitu saja ke katalog."
+  },
+  {
+    "id": "l3m02l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "denormalization",
+      "derived-data",
+      "cache-invalidation",
+      "reconciliation",
+      "commerce"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/rules-materializedviews.html",
+      "https://www.postgresql.org/docs/17/ddl-constraints.html"
+    ],
+    "hook": "cached_total order 501 masih 30000 setelah satu item baru membuat total sebenarnya 35000. Kolom salinan mana yang boleh dipakai untuk keputusan, siapa sumber kebenarannya, dan bagaimana memulihkan angka tanpa menggandakan total?",
+    "objectives": [
+      "Menetapkan item sebagai sumber kebenaran dan cached_total sebagai data turunan yang dapat dibangun ulang.",
+      "Merancang invalidation serta rekonsiliasi untuk insert/update/delete dan order kosong.",
+      "Membedakan perbaikan snapshot terisolasi dari jaminan sinkronisasi concurrent di sistem nyata."
+    ],
+    "sections": [
+      {
+        "title": "Salinan terkontrol memerlukan kontrak",
+        "paragraphs": [
+          "Denormalisasi adalah keputusan menyimpan salinan atau hasil turunan untuk kebutuhan baca tertentu setelah sumber kebenaran ditetapkan. Pada contoh ini, total pesanan selalu berasal dari SUM(quantity × unit_price_at_order) pada item. Cached_total hanyalah salinan yang dapat dihitung ulang, bukan input mandiri yang bersaing dengan item. Ukur kebutuhan baca dan biaya pemeliharaan sebelum menambah salinan; sedikit JOIN tidak otomatis berarti desain lambat. Mengganti nama kolom menjadi cache tidak membuat sinkronisasinya terjadi sendiri.",
+          "Makna total ini adalah nilai barang yang disepakati, bukan outstanding atau uang bersih setelah refund. Perubahan katalog tidak mengubah unit_price_at_order lama sehingga tidak otomatis mengubah total tersebut. Nilai cache NULL berarti belum tersedia atau sengaja diinvalidate, sedangkan angka nol adalah total yang diketahui untuk order tanpa item. Menyamakan NULL dengan nol pada keputusan pembayaran dapat memberi nilai palsu untuk order 502 yang sebenarnya 14000. Tabel hasil mempertahankan delta NULL saat cache tidak diketahui agar perbedaan ini terlihat."
+        ]
+      },
+      {
+        "title": "Setiap penulis ikut menjaga invalidation",
+        "paragraphs": [
+          "Daftar perubahan yang memengaruhi cache mencakup penambahan item, penghapusan item, perubahan quantity, dan perubahan harga transaksi yang memang diizinkan bisnis. Jika item dipindahkan ke order lain, kedua order terpengaruh. Strategi sinkron dapat menghitung ulang cache dalam transaksi yang sama dengan perubahan item, memakai protokol koordinasi order yang diikuti semua penulis. Strategi lain menandai cache tidak valid pada transaksi penulisan, lalu pembaca menghitung dari item atau menunggu pembaruan. Pilih satu kebijakan kesegaran secara eksplisit; jangan membiarkan jalur impor atau administrasi melewati aturan.",
+          "Pembaruan asynchronous mempunyai race: worker lama dapat memublikasikan hasil lama setelah perubahan baru. Menulis NULL sekali atau menjalankan UPDATE total saja belum menyelesaikan race itu. Sistem nyata memerlukan koordinasi yang konsisten atau penanda versi yang diperiksa saat publikasi, serta perilaku baca ketika cache tidak valid. Pilihan teknis tersebut dibahas pada materi transaksi berikutnya; contoh TEMP ini tidak menerapkan worker, trigger, atau lock protokol produksi. Cache tidak boleh diam-diam menjadi otoritas keputusan finansial bila kesegarannya belum terbukti."
+        ]
+      },
+      {
+        "title": "Rekonsiliasi mengganti dari sumber, bukan menambah ulang",
+        "paragraphs": [
+          "Worked example membandingkan cache dengan total item pada satu snapshot terisolasi. Order 501 stale karena cache 30000 berbeda dari 35000; 502 missing karena NULL walaupun item bernilai 14000; 503 missing walaupun tidak ada item; 504 fresh dengan nol yang sudah diketahui. Reference solution menghitung ulang semua order lewat LEFT JOIN, termasuk order tanpa item, lalu mengganti cached_total dengan hasilnya. Menjalankan penggantian itu lagi pada input tetap tidak menambah total. Menambahkan seluruh total ke cache lama justru menggandakan angka dan bukan rekonsiliasi.",
+          "View biasa menghitung hasil dari query ketika dibaca, sedangkan materialized view PostgreSQL menyimpan hasil yang diperbarui melalui REFRESH; kesegaran tetap bagian kontrak aplikasi. Kolom cache pada latihan ini diperbarui oleh script referensi saja, bukan otomatis seperti trigger. Rekonsiliasi batch yang ditunjukkan aman untuk fixture tanpa penulis lain dan tidak membuktikan perilaku produksi ketika update berlangsung bersamaan. Menghapus atau mengosongkan cache tidak boleh menghapus item sumber; sumber itulah yang memungkinkan pemulihan setelah salinan hilang."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Mini fixture cache Commerce: empat order dan tiga item TEMP. Cached_total 501 sengaja usang; 502/503 NULL; 504 nol. Total canonical hanya berasal dari quantity dan unit_price_at_order, tanpa payment/refund.",
+      "setupSql": "CREATE TEMP TABLE lesson_cache_orders (\n  order_id BIGINT PRIMARY KEY,\n  cached_total NUMERIC(12,2) NULL CHECK (cached_total >= 0)\n);\nCREATE TEMP TABLE lesson_cache_items (\n  order_id BIGINT NOT NULL REFERENCES pg_temp.lesson_cache_orders(order_id),\n  line_no INTEGER NOT NULL CHECK (line_no > 0),\n  quantity INTEGER NOT NULL CHECK (quantity > 0),\n  unit_price_at_order NUMERIC(12,2) NOT NULL CHECK (unit_price_at_order >= 0),\n  PRIMARY KEY (order_id,line_no)\n);\nINSERT INTO pg_temp.lesson_cache_orders VALUES (501,30000),(502,NULL),(503,NULL),(504,0);\nINSERT INTO pg_temp.lesson_cache_items VALUES\n (501,1,2,15000),(501,2,1,5000),(502,1,1,14000);",
+      "sql": "WITH totals AS (\n  SELECT o.order_id, COALESCE(SUM(i.quantity * i.unit_price_at_order),0.00) AS canonical_total\n  FROM pg_temp.lesson_cache_orders o\n  LEFT JOIN pg_temp.lesson_cache_items i ON i.order_id = o.order_id\n  GROUP BY o.order_id\n)\nSELECT o.order_id, o.cached_total, t.canonical_total,\n       t.canonical_total - o.cached_total AS delta,\n       CASE WHEN o.cached_total IS NULL THEN 'missing'\n            WHEN o.cached_total <> t.canonical_total THEN 'stale'\n            ELSE 'fresh' END AS cache_state\nFROM pg_temp.lesson_cache_orders o JOIN totals t ON t.order_id = o.order_id\nORDER BY o.order_id;",
+      "columns": [
+        "order_id",
+        "cached_total",
+        "canonical_total",
+        "delta",
+        "cache_state"
+      ],
+      "rows": [
+        [
+          "501",
+          "30000.00",
+          "35000.00",
+          "5000.00",
+          "stale"
+        ],
+        [
+          "502",
+          null,
+          "14000.00",
+          null,
+          "missing"
+        ],
+        [
+          "503",
+          null,
+          "0.00",
+          null,
+          "missing"
+        ],
+        [
+          "504",
+          "0.00",
+          "0.00",
+          "0.00",
+          "fresh"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Delta adalah canonical_total dikurangi cached_total. NULL tidak diubah menjadi nol: missing berbeda dari fresh pada order kosong. Ibarat salinan ringkasan, cache dapat dibangun ulang menjadi 35000, 14000, 0, dan 0 dari item, tanpa mengubah sumber."
+    },
+    "checks": [
+      {
+        "id": "l3m02l03-check-1",
+        "question": "Ketika cached_total berbeda dari jumlah item pada kontrak ini, fakta mana yang menentukan total?",
+        "options": [
+          "Nilai cache karena selalu dibaca lebih cepat.",
+          "Quantity dan unit_price_at_order pada item; cache harus direkonsiliasi.",
+          "Nilai terbesar agar tidak pernah kekurangan tagihan."
+        ],
+        "answer": 1,
+        "explanation": "Sumber kebenaran ditentukan kontrak, bukan kecepatan baca atau kebiasaan memilih nominal.",
+        "feedback": [
+          "Kecepatan tidak menjamin kesegaran atau kebenaran nilai turunan.",
+          "Benar: cache dibangun ulang dari sumber, bukan sumber diubah agar cocok cache.",
+          "Memilih nominal tanpa dasar dapat menagih nilai yang salah."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l3m02l03-check-2",
+        "question": "Apakah UPDATE rekonsiliasi pada fixture ini otomatis menjamin cache benar ketika ada penulis concurrent?",
+        "options": [
+          "Ya, semua UPDATE memberi jaminan sinkronisasi lintas seluruh request.",
+          "Ya, NULL pada cache mencegah semua race publikasi.",
+          "Belum; semua penulis dan publikasi hasil perlu koordinasi atau pemeriksaan versi yang sesuai."
+        ],
+        "answer": 2,
+        "explanation": "Perbaikan satu snapshot tidak sama dengan protokol sinkronisasi di bawah perubahan bersamaan.",
+        "feedback": [
+          "UPDATE saja tidak menetapkan cara seluruh penulis mengoordinasikan perubahan item.",
+          "Worker lama tetap dapat menulis hasil lama setelah invalidation baru tanpa guard tambahan.",
+          "Benar: batas contoh harus dibedakan dari jaminan produksi."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi perbedaan cache dan sumber, lalu rancang invalidation serta rekonsiliasi yang jelas.",
+      "setup": "Cached_total adalah salinan nilai barang. Tidak ada writer lain pada fixture. Script referensi hanya mengganti cache dari agregat item; ia tidak memasang mekanisme sinkronisasi online.",
+      "starterSql": "SELECT order_id, COALESCE(cached_total,0.00) AS assumed_total\nFROM pg_temp.lesson_cache_orders ORDER BY order_id;",
+      "variants": [
+        {
+          "id": "l3m02l03-variant-1",
+          "question": "Apa masalah menganggap cached_total NULL order 502 sebagai nol?",
+          "options": [
+            "Total belum diketahui pada cache, padahal item bernilai 14000; fallback harus membaca sumber.",
+            "Tidak ada; NULL selalu berarti order tidak punya item.",
+            "COALESCE membuat 14000 otomatis tersimpan pada cache."
+          ],
+          "answer": 0,
+          "explanation": "COALESCE memilih nilai ekspresi, bukan memverifikasi item atau memperbaiki salinan.",
+          "feedback": [
+            "Benar: unknown tidak boleh disamakan dengan total nol yang sah.",
+            "Order 502 mempunyai satu item 14000 meskipun cache belum tersedia.",
+            "SELECT COALESCE tidak memperbarui baris sumber atau cache."
+          ]
+        },
+        {
+          "id": "l3m02l03-variant-2",
+          "question": "Setelah reference solution pada input tetap dijalankan dua kali, berapa cached_total order 501?",
+          "options": [
+            "70000 karena setiap reconcile menambahkan seluruh total.",
+            "35000 karena cache diganti dari total canonical, bukan ditambah ulang.",
+            "30000 karena cache lama selalu menjadi otoritas."
+          ],
+          "answer": 1,
+          "explanation": "Replacement dari sumber tetap menghasilkan angka sama; ini sifat script pada fixture tetap, bukan klaim idempotensi seluruh sistem.",
+          "feedback": [
+            "Menambah ulang total adalah bug yang dihindari oleh assignment dari sumber.",
+            "Benar: pengulangan pada sumber tetap tidak menggandakan nilai cache.",
+            "Cache lama diganti ketika tidak sesuai dengan sumber."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l3m02l03-edge-1",
+          "question": "Setelah item terakhir suatu order dihapus, apa yang harus dipertahankan rekonsiliasi total?",
+          "options": [
+            "Order hilang dari agregat sehingga cache lama dibiarkan.",
+            "Buat item bernominal nol untuk mewakili kekosongan.",
+            "Order tetap dihitung dengan total nol lewat LEFT JOIN dari order."
+          ],
+          "answer": 2,
+          "explanation": "Agregasi dari item saja melewatkan induk kosong; mulai dari order agar cache sisa tidak bertahan.",
+          "feedback": [
+            "Itu membiarkan nilai turunan usang setelah semua sumber item hilang.",
+            "Item palsu mengubah data domain demi memperbaiki ringkasan.",
+            "Benar: ketiadaan item mempunyai nilai canonical nol yang eksplisit."
+          ]
+        },
+        {
+          "id": "l3m02l03-edge-2",
+          "question": "Jika item dipindahkan dari order A ke B, cache mana yang perlu diperbarui atau diinvalidate?",
+          "options": [
+            "Keduanya, karena total A berkurang dan total B bertambah.",
+            "Hanya B karena nilai item tidak berubah.",
+            "Tidak ada karena foreign key menjaga total secara otomatis."
+          ],
+          "answer": 0,
+          "explanation": "Perubahan kepemilikan menyentuh dua agregat; FK hanya memastikan order target ada.",
+          "feedback": [
+            "Benar: cakupan invalidation mengikuti semua sumber yang berubah.",
+            "A juga kehilangan item sehingga cache lamanya tidak lagi benar.",
+            "Foreign key tidak menghitung SUM atau memperbarui cached_total."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Hitung canonical_total dari item sebelum membaca cached_total.",
+        "Pertahankan order kosong melalui LEFT JOIN dan bedakan cache NULL dari angka nol.",
+        "SET cached_total = canonical_total untuk semua order pada fixture tetap; protokol concurrent tetap desain terpisah."
+      ],
+      "solutionSql": "WITH totals AS (\n  SELECT o.order_id, COALESCE(SUM(i.quantity * i.unit_price_at_order),0.00) AS canonical_total\n  FROM pg_temp.lesson_cache_orders o\n  LEFT JOIN pg_temp.lesson_cache_items i ON i.order_id = o.order_id\n  GROUP BY o.order_id\n)\nUPDATE pg_temp.lesson_cache_orders o SET cached_total = t.canonical_total\nFROM totals t WHERE t.order_id = o.order_id;\nWITH totals AS (\n  SELECT o.order_id, COALESCE(SUM(i.quantity * i.unit_price_at_order),0.00) AS canonical_total\n  FROM pg_temp.lesson_cache_orders o\n  LEFT JOIN pg_temp.lesson_cache_items i ON i.order_id = o.order_id\n  GROUP BY o.order_id\n)\nSELECT o.order_id, o.cached_total, t.canonical_total,\n       t.canonical_total - o.cached_total AS delta,\n       CASE WHEN o.cached_total IS NULL THEN 'missing'\n            WHEN o.cached_total <> t.canonical_total THEN 'stale'\n            ELSE 'fresh' END AS cache_state\nFROM pg_temp.lesson_cache_orders o JOIN totals t ON t.order_id = o.order_id\nORDER BY o.order_id;",
+      "solutionExplanation": "Agregat dimulai dari seluruh order sehingga 503/504 yang kosong memperoleh nol. UPDATE mengganti cache menjadi 35000, 14000, 0, 0; SELECT berikutnya memperlihatkan fresh dengan delta nol untuk semuanya. Pada fixture tanpa penulis lain, pengulangan memberi hasil sama. Script tidak mengimplementasikan invalidation otomatis, version guard, atau sinkronisasi worker produksi.",
+      "critical": true
+    },
+    "reflection": "Jelaskan sumber kebenaran cached_total, semua perubahan item yang mengharuskan invalidation, dan cara menangani NULL serta order kosong. Mengapa rekonsiliasi replacement pada snapshot tetap belum membuktikan kebenaran cache dengan penulis concurrent?"
+  }
+]

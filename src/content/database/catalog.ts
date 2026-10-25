@@ -7,6 +7,7 @@ import windows from "./l2-windows.json";
 import timeReports from "./l2-time-reports.json";
 import correctness from "./l2-correctness.json";
 import modeling from "./l3-modeling.json";
+import normalization from "./l3-normalization.json";
 import type { AuthoredLesson, ConceptCheck } from "./types";
 import { pathHref } from "../lessons";
 export const databasePathHref = pathHref;
@@ -20,6 +21,7 @@ const authored = [
   ...timeReports,
   ...correctness,
   ...modeling,
+  ...normalization,
 ] as AuthoredLesson[];
 const byId = new Map(authored.map((lesson) => [lesson.id, lesson]));
 export const databaseLevels = blueprint.levels.map((level) => ({
