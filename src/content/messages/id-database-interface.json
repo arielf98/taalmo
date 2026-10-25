@@ -100,5 +100,16 @@
   "Commerce + Analytics": "Perdagangan + Analitik",
   "PostgreSQL Lab": "Lab PostgreSQL",
   "Production Simulator": "Simulator Produksi",
-  "Platform-scale": "Skala Platform"
+  "Platform-scale": "Skala Platform",
+  "database-design": "desain database",
+  "natural-key": "kunci natural",
+  "surrogate-key": "kunci surrogate",
+  "business-key": "kunci bisnis",
+  "check": "CHECK",
+  "composite-unique": "keunikan gabungan",
+  "foreign-key": "kunci asing",
+  "numeric": "numerik",
+  "money": "uang",
+  "timestamptz": "timestamptz",
+  "utc": "UTC"
 }

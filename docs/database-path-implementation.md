@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L2 plus L3M01–L3M02: 39 published / 81 draft. The original implementation evidence below is retained as release history. L2M02–L2M04 and L3M01–L3M02 have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L2 and L3M01–L3M03: 42 published / 78 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -154,3 +154,11 @@ Cache prose explicitly addresses old-worker publication races, every writer part
 Current totals are thirteen authored modules, 39 published / 81 draft lessons, and 42 combined lessons plus three labs (45 activity milestones). L3M02 follows L3M01; the L3 level assessment remains hidden while later modules are draft. Existing E2E expectations only change available count and next draft route to l3m03l01. Content/SQL file registries include the new JSON for a future authorized run; no test cases or registered browser lesson coverage were added.
 
 Review is source/diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run under AGENTS.md. Numeric, empty-string and NULL rows remain authored expectations rather than executed evidence. Next: **L3M03 — Tipe dan Constraint Lanjutan**.
+
+## L3M03 continuation — 25 October 2026
+
+Added three bilingual lessons plus typed key/constraint ERDs in l3-types-constraints.json, en-database-types-constraints.json and types-constraints-schemas.ts. L3M03L01 uses scoped invoice/payment business keys alongside identity PKs; a student without an invoice remains in the LEFT JOIN. L3M03L02 distinguishes exact-date uniqueness, NOT NULL, CHECK and FK responsibilities; duplicate student 1001/2026-10-01 expects SQLSTATE 23505 on its fresh TEMP fixture. L3M03L03 uses NUMERIC(12,2), explicit NaN rejection and bounded amounts, with explicit UTC/Jakarta output. Expected rounded amounts are 1250.01 and 10.00; the two instants display 03:00/10:00 and 04:30/11:30 respectively. Reference NaN insertion expects 23514. All results/rejections are source-derived expectations, not runtime evidence. Existing School Finance, earlier content versions and learner storage are unchanged.
+
+Totals: 14 authored modules, 42 published / 78 draft lessons; 45 combined lessons plus three labs (48 activity milestones). Existing E2E expectations only change the count and next draft route to l3m04l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
+
+Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L3M04**.

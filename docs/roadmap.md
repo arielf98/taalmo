@@ -13,13 +13,13 @@
 
 ## Database Engineering — database curriculum
 
-The unified Database Engineering path includes transaction practice and the Database Zero to Master source curriculum on `/learn/database-engineering`. Old path URLs redirect there; the dashboard/sidebar use one path and combined lesson/lab activity progress. The database curriculum registers all 10 levels, 40 modules and 120 canonical IDs. L0–L2 and L3M01–L3M02 have 39 published English/Indonesian lessons, practice variants/edge cases, progressive hints, reflection, versioned resume and module/level assessment gates. The remaining curriculum has 81 draft lessons, not available player content. Earlier SQL examples through L2M01 were verified on disposable PostgreSQL; L2M02–L2M04 and L3M01–L3M02 have source/diff review only under the current no-test policy. The website uses prediction-based formative activities and has no arbitrary SQL runner or account-backed certification.
+The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L2 and L3M01–L3M03 provide 42 published bilingual lessons; 78 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
 
-## Recommended next milestone: L3M03 authoring
+## Recommended next milestone: L3M04 authoring
 
-L2 remains fully authored. L3M01–L3M02 now cover domain relationships, invariants, normalization and derived-data trade-offs. L3M02 keeps its L3M01 prerequisite; L3 remains incomplete and its level assessment stays unavailable. All new SQL outcomes are source-reviewed expectations.
+L3M03 follows L3M02. L3 still lacks its final module, so its level assessment remains unavailable; L2 is fully authored and its existing mastery gates remain intact.
 
-Continue with **L3M03 — Tipe dan Constraint Lanjutan**: natural versus surrogate keys, CHECK/composite UNIQUE/FK, and numeric/timestamp choices for money. Follow `database-path-remaining.md` and the authoring contract. Establish business keys before adding surrogate IDs; distinguish row constraints from cross-row rules that require transaction coordination. Reuse or explicitly adapt the School Finance fixture for the canonical invoice/payment exercises. Use UML/ERD for structures, readable tables for data, and React Flow only for processes. Preserve IDs, versions and existing progress. Follow AGENTS.md: no tests, audit, SQL execution, lint, typecheck, build, or browser/manual checks without explicit user authorization.
+Continue with L3M04 — Perubahan Skema yang Aman: migration/versioning, expand–migrate–contract and independent before/after data reconciliation. Keep production-lock, writer compatibility and rollback limits explicit; examples must not mutate permanent data. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
 
 ## Later learning improvements
 

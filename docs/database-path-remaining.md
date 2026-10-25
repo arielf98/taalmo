@@ -1,16 +1,9 @@
 # Remaining curriculum authoring
 
-The following 81 canonical lessons remain draft. Each checkbox means: substantive teaching body, worked example, two concept checks with feedback, two practice variants, two graded edge cases, progressive hints, reflection, required fixture/simulator and validation. Follow the current AGENTS.md restrictions on validation; L2M02–L2M04 and L3M01–L3M02 were reviewed through code and diff only.
+The following 78 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L3 — Data Modeling & Schema Evolution
 
-### L3M03 — Tipe dan Constraint Lanjutan
-
-Prerequisite: l3m02. Scenario: Commerce.
-
-- [ ] `l3m03l01` — Natural vs surrogate keys
-- [ ] `l3m03l02` — CHECK, composite UNIQUE, dan FK
-- [ ] `l3m03l03` — Numeric, timestamps, dan uang
 
 ### L3M04 — Perubahan Skema yang Aman
 

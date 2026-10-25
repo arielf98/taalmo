@@ -1,3 +1,4 @@
+import { typesConstraintsLessonSchemas } from "./types-constraints-schemas";
 import type { SchemaTable } from "./schema";
 
 export interface ModelDiagram {
@@ -324,6 +325,7 @@ const cacheItems: SchemaTable = {
 };
 
 export const databaseLessonSchemas: Partial<Record<string, ModelDiagram>> = {
+  ...typesConstraintsLessonSchemas,
   l3m01l01: {
     title: "Commerce · identitas dan relasi UML/ERD",
     note: "PK = identitas unik; FK = referensi wajib; 1 = tepat satu; 0..N = nol atau banyak. Semua kolom wajib terisi kecuali paid_at. Tabel yang tampil kembali adalah entity yang sama, bukan salinan data. Garis menyatakan relasi, bukan urutan proses; batas refund dan lifecycle belum seluruhnya dijaga constraint.",

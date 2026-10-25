@@ -13,6 +13,7 @@ import englishTimeReports from "./messages/en-database-time-reports.json" with {
 import englishCorrectness from "./messages/en-database-correctness.json" with { type: "json" };
 import englishModeling from "./messages/en-database-modeling.json" with { type: "json" };
 import englishNormalization from "./messages/en-database-normalization.json" with { type: "json" };
+import englishTypesConstraints from "./messages/en-database-types-constraints.json" with { type: "json" };
 export type Locale = "en" | "id";
 const indonesian: Record<string, string> = {
   ...interfaceMessages,
@@ -32,6 +33,7 @@ const english: Record<string, string> = {
   ...englishCorrectness,
   ...englishModeling,
   ...englishNormalization,
+  ...englishTypesConstraints,
 };
 const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
