@@ -9,6 +9,7 @@ import correctness from "./l2-correctness.json";
 import modeling from "./l3-modeling.json";
 import normalization from "./l3-normalization.json";
 import typesConstraints from "./l3-types-constraints.json";
+import evolution from "./l3-evolution.json";
 import type { AuthoredLesson, ConceptCheck } from "./types";
 import { pathHref } from "../lessons";
 export const databasePathHref = pathHref;
@@ -24,6 +25,7 @@ const authored = [
   ...modeling,
   ...normalization,
   ...typesConstraints,
+  ...evolution,
 ] as AuthoredLesson[];
 const byId = new Map(authored.map((lesson) => [lesson.id, lesson]));
 export const databaseLevels = blueprint.levels.map((level) => ({

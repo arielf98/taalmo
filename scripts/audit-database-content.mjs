@@ -16,6 +16,7 @@ export const authored = [
   "l3-modeling",
   "l3-normalization",
   "l3-types-constraints",
+  "l3-evolution",
 ].flatMap((file) => read(`src/content/database/${file}.json`));
 const modules = blueprint.levels.flatMap((level) => level.modules);
 const lessons = modules.flatMap((module) => module.lessons);

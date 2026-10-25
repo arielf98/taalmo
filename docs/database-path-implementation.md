@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L2 and L3M01–L3M03: 42 published / 78 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L3: 45 published / 75 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -162,3 +162,11 @@ Added three bilingual lessons plus typed key/constraint ERDs in l3-types-constra
 Totals: 14 authored modules, 42 published / 78 draft lessons; 45 combined lessons plus three labs (48 activity milestones). Existing E2E expectations only change the count and next draft route to l3m04l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
 
 Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L3M04**.
+
+## L3M04 continuation — 25 October 2026
+
+Added three bilingual evolution lessons. L3M04L01 maps open/paid/void to issued/settled/cancelled while preserving the old status and describing version/rollback boundaries. L3M04L02 adds an address column, backfills, installs a trimmed nonempty NOT VALID CHECK, validates and sets NOT NULL on a fixed TEMP fixture; no zero-downtime production guarantee is claimed. L3M04L03 captures a separate before baseline and compares identities/NULL-aware values after backfill: before_rows3, after_rows3, equal illustrative checksums, missing address1, missing/unexpected identities0/0 and changed values0. Output is an aggregate summary; delimiter/sentinel ambiguity is taught and exact pair comparisons establish fixture equality. The fresh reference creates/backfills address_line before expected23514 validation failure. A patch for absent student99 is rejected by its FK23503 rather than reaching reconciliation. Entire L3 is now published and its existing level assessment condition becomes available. Earlier fixtures/versions and learner storage remain unchanged.
+
+Totals: 15 authored modules, 45 published / 75 draft lessons; 48 combined lessons plus three labs (51 activity milestones). Existing E2E expectations only change the count and next draft route to l4m01l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
+
+Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L4M01**.

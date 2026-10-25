@@ -111,5 +111,13 @@
   "numeric": "numerik",
   "money": "uang",
   "timestamptz": "timestamptz",
-  "utc": "UTC"
+  "utc": "UTC",
+  "schema-evolution": "evolusi skema",
+  "migration": "migrasi",
+  "schema-versioning": "versioning skema",
+  "rollback": "rollback",
+  "expand-migrate-contract": "expand–migrate–contract",
+  "backfill": "backfill",
+  "backward-compatibility": "kompatibilitas mundur",
+  "data-quality": "kualitas data"
 }

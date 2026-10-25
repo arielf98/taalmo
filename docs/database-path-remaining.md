@@ -1,17 +1,10 @@
 # Remaining curriculum authoring
 
-The following 78 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
+The following 75 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L3 — Data Modeling & Schema Evolution
 
 
-### L3M04 — Perubahan Skema yang Aman
-
-Prerequisite: l3m03. Scenario: Commerce.
-
-- [ ] `l3m04l01` — Migration dan schema versioning
-- [ ] `l3m04l02` — Expand–migrate–contract
-- [ ] `l3m04l03` — Data quality dan reconciliation
 
 ## L4 — Transactions & Concurrency
 

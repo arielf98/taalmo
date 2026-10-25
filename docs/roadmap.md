@@ -13,13 +13,13 @@
 
 ## Database Engineering — database curriculum
 
-The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L2 and L3M01–L3M03 provide 42 published bilingual lessons; 78 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
+The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L3 provide 45 published bilingual lessons; 75 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
 
-## Recommended next milestone: L3M04 authoring
+## Recommended next milestone: L4M01 authoring
 
-L3M03 follows L3M02. L3 still lacks its final module, so its level assessment remains unavailable; L2 is fully authored and its existing mastery gates remain intact.
+All L3 modules are now published. The existing all-modules condition exposes the L3 level assessment, while official passing still requires every module checkpoint, at least85% and all critical questions correct. No progress/version migration was added.
 
-Continue with L3M04 — Perubahan Skema yang Aman: migration/versioning, expand–migrate–contract and independent before/after data reconciliation. Keep production-lock, writer compatibility and rollback limits explicit; examples must not mutate permanent data. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
+Continue with L4M01 — ACID dan Transaction Boundary: atomicity/durability, consistency/invariants and transaction boundaries/errors. Use isolated transfer/ledger examples, distinguish TEMP experiments from durability proof, and do not claim database rollback reverses external provider effects. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
 
 ## Later learning improvements
 

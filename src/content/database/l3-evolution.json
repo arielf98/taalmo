@@ -1,0 +1,558 @@
+[
+  {
+    "id": "l3m04l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "schema-evolution",
+      "migration",
+      "schema-versioning",
+      "rollback",
+      "commerce"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/sql-altertable.html",
+      "https://www.postgresql.org/docs/17/sql-rollback.html",
+      "https://www.postgresql.org/docs/17/transactions.html"
+    ],
+    "hook": "Versi lama aplikasi Commerce membaca status invoice sebagai open atau paid. Tim ingin mengganti kontraknya menjadi issued, settled, atau cancelled tanpa membuat pembaca lama tiba-tiba gagal. Bagaimana memisahkan perubahan skema dari pemindahan data, memberi nama versi, dan menyiapkan rollback yang benar-benar dapat dijalankan?",
+    "objectives": [
+      "Menjelaskan schema versioning sebagai kontrak antara database dan beberapa versi aplikasi.",
+      "Menyusun migrasi forward yang dapat ditinjau, memetakan data lama, dan meninggalkan bukti hasil pemetaan.",
+      "Membedakan rollback struktural yang realistis dari pengembalian data yang sudah kehilangan informasi."
+    ],
+    "sections": [
+      {
+        "title": "Schema versioning adalah kontrak, bukan angka kosmetik",
+        "paragraphs": [
+          "Saat aplikasi dan database dirilis terpisah, nama kolom, nilai status, constraint, dan arti setiap nilai menjadi kontrak lintas versi. Sebuah migration version atau release ID membantu tim menyebut urutan perubahan, tetapi angka itu tidak membuktikan bahwa dua aplikasi kompatibel. Tulis dulu keadaan v1, keadaan v2, pembaca mana yang memakai masing-masing kolom, serta kondisi selesai. Status open dan paid bukan sekadar ejaan: keduanya membawa aturan bisnis yang harus dipetakan ke issued dan settled secara eksplisit.",
+          "Perubahan aman dimulai dari inventaris pemakai. Cari query laporan, job, API, trigger, dan penulis yang membaca atau mengisi kolom lama. Simpan migrasi sebagai langkah yang dapat diulang atau setidaknya dapat dideteksi: penamaan constraint, catatan versi, dan pemeriksaan jumlah baris membuat operator tahu apakah sebagian langkah sudah berjalan. Backward-compatible berarti versi lama masih dapat bekerja pada keadaan sementara; itu bukan janji bahwa semua perubahan database selalu tanpa lock, tanpa downtime, atau tanpa koordinasi deploy."
+        ]
+      },
+      {
+        "title": "Forward migration dan rollback yang jujur",
+        "paragraphs": [
+          "Untuk perubahan status, langkah forward yang masuk akal adalah menambah kolom baru yang nullable, mengisi nilai baru dari aturan mapping, memeriksa baris yang belum terpetakan, lalu mengubah pembaca secara bertahap. Selama masa transisi, penulis dapat melakukan dual-write atau memakai adapter yang menulis format lama dan baru dengan aturan konsisten. Setelah semua pembaca dan penulis pindah, kolom lama baru boleh dipensiunkan melalui kontrak rilis terpisah. Hasil pemetaan perlu disimpan atau dapat dihitung ulang agar audit tidak bergantung pada ingatan operator.",
+          "Rollback tidak selalu berarti menjalankan kebalikan sintaks. Menambah kolom dapat dibalik dengan DROP hanya jika tidak ada data atau pembaca yang bergantung padanya; rename dapat dikembalikan bila semua dependensi diketahui. Namun, jika migrasi telah menggabungkan dua nilai lama, menghapus kolom lama akan menghilangkan informasi yang tidak dapat direkonstruksi. Rencana yang lebih realistis adalah menghentikan rollout, mempertahankan kolom lama, mengarahkan aplikasi ke pembaca lama, dan melakukan kompensasi data dengan backup atau mapping tersimpan. Nyatakan titik tidak dapat balik sebelum eksekusi."
+        ]
+      },
+      {
+        "title": "Fixture terisolasi dan batas bukti",
+        "paragraphs": [
+          "Worked example memakai Dataset A, sebuah mini fixture Commerce yang dibuat sebagai TEMP table dengan tiga invoice. Kolom status lama dipetakan ke kolom status_v2; query memperlihatkan status asal, status hasil, dan penanda bahwa mapping selesai. Ini menunjukkan urutan berpikir dan bentuk laporan migrasi, bukan izin untuk mengubah school.invoices atau tabel produksi. Setiap nama tabel ditulis dengan pg_temp agar jelas bahwa contoh tidak menyentuh sumber permanen.",
+          "PostgreSQL dapat menjalankan banyak perubahan DDL dalam transaksi, dan ROLLBACK membuang perubahan transaksi yang belum di-commit. Itu berguna untuk percobaan terisolasi, tetapi bukan jaminan bahwa operasi produksi tidak menunggu lock atau bahwa aplikasi tidak sempat melihat keadaan transisi. ALTER TABLE, backup, observability, batas waktu lock, dan prosedur pemulihan perlu dinilai bersama. Lesson ini tidak menguji concurrency guard, tidak mengklaim zero-downtime, dan tidak menganggap ALTER atau backfill sebagai migrasi produksi yang aman dengan sendirinya."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset A — Commerce invoice status: tiga baris TEMP meniru kontrak lama open/paid/void dan hanya dipakai untuk demonstrasi mapping v1 ke v2. Tidak ada perubahan pada tabel School Finance atau sumber permanen.",
+      "setupSql": "CREATE TEMP TABLE lesson_evo_invoice_v1 (\n  invoice_id BIGINT PRIMARY KEY,\n  status TEXT NOT NULL,\n  amount NUMERIC(12,2) NOT NULL CHECK (amount > 0)\n);\nINSERT INTO pg_temp.lesson_evo_invoice_v1 VALUES\n (1001,'open',120000.00),\n (1002,'paid',120000.00),\n (1003,'void',90000.00);",
+      "sql": "ALTER TABLE pg_temp.lesson_evo_invoice_v1 ADD COLUMN status_v2 TEXT;\nUPDATE pg_temp.lesson_evo_invoice_v1\nSET status_v2 = CASE status\n  WHEN 'open' THEN 'issued'\n  WHEN 'paid' THEN 'settled'\n  WHEN 'void' THEN 'cancelled'\nEND;\nSELECT invoice_id, status, status_v2,\n       CASE WHEN status_v2 IS NULL THEN 'needs_review' ELSE 'mapped' END AS migration_state\nFROM pg_temp.lesson_evo_invoice_v1\nORDER BY invoice_id;",
+      "columns": [
+        "invoice_id",
+        "status",
+        "status_v2",
+        "migration_state"
+      ],
+      "rows": [
+        ["1001", "open", "issued", "mapped"],
+        ["1002", "paid", "settled", "mapped"],
+        ["1003", "void", "cancelled", "mapped"]
+      ],
+      "ordered": true,
+      "explanation": "Kolom lama tetap tersedia sebagai jejak dan kolom baru diisi menurut mapping yang terlihat. Tiga baris terpetakan, sehingga migration_state semuanya mapped. Contoh ini belum membuktikan kompatibilitas semua writer, belum menghapus kolom lama, dan tidak mewakili lock atau rollback pada sistem produksi."
+    },
+    "checks": [
+      {
+        "id": "l3m04l01-check-1",
+        "question": "Mengapa kolom status_v2 sebaiknya ditambah dan diisi sebelum status lama dihapus?",
+        "options": [
+          "Agar nilai status lama dapat dipetakan dan pembaca lama masih memiliki kontrak selama transisi.",
+          "Agar PostgreSQL otomatis menerjemahkan semua nilai lama tanpa aturan bisnis.",
+          "Agar DROP kolom lama selalu dapat dibatalkan tanpa backup."
+        ],
+        "answer": 0,
+        "explanation": "Kolom sementara memberi ruang untuk dual-read atau dual-write, pemeriksaan mapping, dan perpindahan bertahap. Database tidak dapat menebak arti status bisnis.",
+        "feedback": [
+          "Benar: expand lalu migrate memungkinkan kontrak v1 dan v2 hidup sementara sambil hasilnya diperiksa.",
+          "DDL tidak mengetahui bahwa open harus menjadi issued atau paid harus menjadi settled; mapping harus ditentukan.",
+          "DROP dapat menghilangkan data dan dependensi; kemampuan rollback harus dirancang sebelum perubahan."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l3m04l01-check-2",
+        "question": "Pernyataan mana yang paling jujur tentang rollback setelah status lama dihapus dan dua status lama digabung?",
+        "options": [
+          "Rollback cukup menjalankan ALTER TABLE DROP COLUMN pada kolom baru.",
+          "Rollback mungkin memerlukan backup atau mapping tersimpan karena informasi yang digabung tidak dapat ditebak kembali.",
+          "Rollback selalu dilakukan oleh PostgreSQL setiap kali aplikasi versi lama gagal membaca tabel."
+        ],
+        "answer": 1,
+        "explanation": "Kebalikan struktur tidak otomatis memulihkan nilai yang sudah hilang. Rencana pemulihan harus mempertahankan sumber informasi atau menghentikan rollout sebelum titik irreversibel.",
+        "feedback": [
+          "DROP kolom baru menghapus hasil migrasi; itu bukan pemulihan isi kolom lama.",
+          "Benar: data yang digabung membutuhkan backup, mapping, atau strategi kompensasi yang realistis.",
+          "Kegagalan aplikasi tidak memicu rollback database otomatis dan dapat terjadi setelah sebagian traffic berpindah."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi status hasil mapping Dataset A dan tuliskan langkah versioning yang menjaga pembaca lama sampai pembaca baru siap.",
+      "setup": "Dataset A memiliki status lama open, paid, dan void. Rencanakan kolom baru nullable, mapping yang dapat diaudit, pemeriksaan nilai yang belum dikenal, dan syarat kapan kolom lama boleh dipensiunkan. SQL starter hanya membaca TEMP fixture; player tidak menjalankan SQL atau melakukan migrasi otomatis.",
+      "starterSql": "SELECT invoice_id, status\nFROM pg_temp.lesson_evo_invoice_v1\nORDER BY invoice_id;",
+      "variants": [
+        {
+          "id": "l3m04l01-variant-1",
+          "question": "Jika status lama open, paid, dan void dipetakan ke issued, settled, dan cancelled, berapa baris yang harus memiliki migration_state mapped?",
+          "options": [
+            "Satu, karena hanya status pertama yang perlu dipindahkan.",
+            "Dua, karena void tidak boleh masuk kontrak baru.",
+            "Tiga, selama setiap nilai lama memiliki mapping yang disepakati dan tidak ada nilai NULL."
+          ],
+          "answer": 2,
+          "explanation": "Semua tiga baris Dataset A mempunyai nilai lama yang dikenal dan mapping eksplisit, sehingga ketiganya selesai pada langkah contoh.",
+          "feedback": [
+            "Satu baris tidak mewakili seluruh fixture; setiap invoice harus memiliki hasil mapping atau masuk karantina.",
+            "Void boleh menjadi cancelled bila aturan domain menyatakan padanan itu; keputusan harus ditulis, bukan diasumsikan.",
+            "Benar: tiga baris terpetakan dan tidak ada status yang tersisa untuk ditinjau."
+          ]
+        },
+        {
+          "id": "l3m04l01-variant-2",
+          "question": "Apa tindakan aman jika ditemukan status lama hold yang belum ada di mapping?",
+          "options": [
+            "Pilih issued karena itu status paling dekat secara ejaan.",
+            "Tandai needs_review dan minta pemilik domain menetapkan mapping sebelum constraint baru dipaksakan.",
+            "Hapus invoice tersebut agar semua baris tersisa dapat dipetakan."
+          ],
+          "answer": 1,
+          "explanation": "Nilai yang tidak dikenal adalah masalah kontrak dan kualitas data. Menebak atau menghapus fakta dapat merusak histori dan membuat rollback mustahil.",
+          "feedback": [
+            "Kemiripan ejaan tidak membuktikan arti bisnis; tebakan dapat salah pada laporan dan workflow.",
+            "Benar: karantina, keputusan domain, dan bukti mapping mendahului enforcement baru.",
+            "Menghapus fakta adalah kehilangan data, bukan strategi migrasi atau rollback."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l3m04l01-edge-1",
+          "question": "Versi baru sudah menulis status_v2, tetapi satu job lama masih hanya menulis status. Apa keputusan rilis yang paling aman?",
+          "options": [
+            "Pensiunkan kolom lama sekarang karena job lama pasti segera berhenti.",
+            "Pertahankan kontrak transisi, pantau dual-write atau adapter, dan hapus kolom lama hanya setelah seluruh writer terverifikasi pindah.",
+            "Salin nilai dari status_v2 ke semua baris setiap detik tanpa mengetahui sumber penulis."
+          ],
+          "answer": 1,
+          "explanation": "Writer lama yang masih aktif membuat DROP atau perubahan wajib berisiko memutus traffic. Perpindahan memerlukan bukti dependensi dan prosedur cutover.",
+          "feedback": [
+            "Asumsi job akan berhenti bukan bukti; penulisan berikutnya dapat gagal atau menghidupkan nilai lama.",
+            "Benar: masa transisi harus mempertahankan kompatibilitas dan memiliki kriteria cutover yang dapat diamati.",
+            "Penyalinan berkala dapat menimpa update yang sah dan tidak menyelesaikan ownership atau concurrency."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l3m04l01-edge-2",
+          "question": "Tim ingin menggabungkan paid dan settled menjadi satu nilai lalu menghapus pembeda. Apa yang harus dicatat sebelum menyetujui?",
+          "options": [
+            "Tidak ada risiko karena status hanyalah label tampilan.",
+            "Cukup mengandalkan nama migration version tanpa menyimpan mapping.",
+            "Pastikan makna kedua status benar-benar sama dan simpan bukti atau backup karena pembeda yang hilang tidak dapat dipulihkan dari nilai gabungan."
+          ],
+          "answer": 2,
+          "explanation": "Menggabungkan nilai adalah perubahan semantik. Jika paid dan settled memiliki aturan berbeda, data baru tidak lagi dapat menjawab pertanyaan lama.",
+          "feedback": [
+            "Status sering mengendalikan workflow, laporan, dan constraint; bukan sekadar dekorasi UI.",
+            "Nomor versi menunjukkan urutan, bukan isi data yang sudah dibuang.",
+            "Benar: kesetaraan semantik dan rencana pemulihan harus dibuktikan sebelum merge yang irreversibel."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Tulis keadaan v1, keadaan v2, dan siapa pembaca atau penulis yang masih memakai masing-masing kontrak.",
+        "Tambahkan kolom baru nullable, petakan nilai yang dikenal, lalu cari nilai yang belum terpetakan sebelum menambah constraint.",
+        "Anggap DROP atau penggabungan nilai sebagai titik risiko: siapkan mapping, backup, dan cara menghentikan rollout sebelum titik itu."
+      ],
+      "solutionSql": "ALTER TABLE pg_temp.lesson_evo_invoice_v1 ADD COLUMN status_v2 TEXT;\nUPDATE pg_temp.lesson_evo_invoice_v1\nSET status_v2 = CASE status\n  WHEN 'open' THEN 'issued'\n  WHEN 'paid' THEN 'settled'\n  WHEN 'void' THEN 'cancelled'\nEND;\nSELECT invoice_id, status, status_v2,\n       CASE WHEN status_v2 IS NULL THEN 'needs_review' ELSE 'mapped' END AS migration_state\nFROM pg_temp.lesson_evo_invoice_v1\nORDER BY invoice_id;",
+      "solutionExplanation": "Referensi mempertahankan status lama, menambah status_v2, dan mengisi mapping yang eksplisit. Output tiga baris semuanya mapped karena fixture hanya berisi tiga status yang dikenal. Pada sistem nyata, nilai NULL atau unknown harus ditinjau sebelum constraint atau cutover; skrip ini tidak membuktikan rollback, lock behavior, dual-write correctness, atau zero-downtime production migration.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa schema versioning perlu diperlakukan sebagai kontrak antarversi aplikasi. Untuk perubahan status ini, sebutkan langkah forward, bukti cutover, titik yang sulit di-rollback, dan informasi apa yang harus dipertahankan sebelum kolom lama dihapus."
+  },
+  {
+    "id": "l3m04l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "expand-migrate-contract",
+      "backfill",
+      "backward-compatibility",
+      "constraints",
+      "commerce"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/sql-altertable.html",
+      "https://www.postgresql.org/docs/17/ddl-alter.html",
+      "https://www.postgresql.org/docs/17/ddl-constraints.html"
+    ],
+    "hook": "Commerce sudah memiliki alamat pengiriman pada setiap order, tetapi tim ingin menyimpan versi yang sudah dinormalisasi dan mewajibkannya tidak kosong. Mengapa ADD COLUMN NOT NULL langsung berbahaya pada tabel berisi data, dan bagaimana expand–migrate–contract memberi ruang bagi versi aplikasi lama dan baru?",
+    "objectives": [
+      "Mengurutkan fase expand, migrate, dan contract berdasarkan kompatibilitas pembaca serta penulis.",
+      "Melakukan backfill pada kolom TEMP baru, memeriksa nilai kosong, lalu menambahkan constraint setelah data siap.",
+      "Menjelaskan bahwa NOT VALID, VALIDATE, dan backfill mengurangi bagian tertentu dari risiko tetapi bukan jaminan zero-downtime atau concurrency safety."
+    ],
+    "sections": [
+      {
+        "title": "Expand membuat ruang kompatibilitas",
+        "paragraphs": [
+          "Fase expand memperkenalkan struktur yang dapat dipahami versi lama tanpa memaksa semua writer berpindah pada detik yang sama. Kolom baru biasanya dimulai nullable dan tanpa asumsi bahwa seluruh data telah tersedia. Aplikasi baru dapat membaca kolom baru dengan fallback ke kolom lama, sedangkan aplikasi lama tetap menulis kolom lama. Pilihan dual-write harus mempunyai source of truth dan aturan saat dua nilai berbeda; menambah kolom saja tidak menyelesaikan konflik penulis.",
+          "Menambahkan NOT NULL langsung pada tabel berisi data akan gagal bila ada NULL, dan pemeriksaan constraint dapat memindai tabel. Bahkan operasi yang cepat pada fixture kecil dapat mengambil lock atau menghabiskan waktu pada tabel produksi besar. Karena itu kontrak fase harus menyebut bentuk sementara: kolom boleh NULL, nama lama belum dihapus, dan pembaca wajib menerima kedua bentuk. Ini membuat deployment bertahap mungkin, tetapi tidak menjanjikan lock tidak pernah terjadi atau semua request selalu berjalan."
+        ]
+      },
+      {
+        "title": "Migrate dengan backfill yang dapat diaudit",
+        "paragraphs": [
+          "Fase migrate mengisi kolom baru dari sumber yang disepakati, idealnya dalam batch terbatas dengan observability dan retry yang aman. Untuk alamat, normalisasi dapat memangkas spasi, tetapi perubahan teks tidak boleh dianggap benar hanya karena query berhasil. Hitung jumlah baris sumber dan target, cari baris yang tetap NULL atau kosong, dan cek bahwa setiap order memiliki satu nilai yang sesuai. Backfill juga harus memperhatikan writer yang masuk selama proses; fallback atau dual-write diperlukan agar nilai baru tidak langsung basi.",
+          "Constraint CHECK yang ditambahkan NOT VALID dapat melewati scan awal untuk baris lama, tetapi PostgreSQL tetap menerapkannya pada INSERT atau UPDATE baru. VALIDATE CONSTRAINT kemudian memeriksa baris lama. Jika validasi lolos, tim masih perlu menentukan kapan aman melakukan SET NOT NULL, siapa pemilik data, dan apakah lock serta durasi operasi sesuai anggaran. NOT VALID adalah tahapan enforcement, bukan stempel bahwa data lama sudah benar dan bukan concurrency guard untuk aturan lintas baris."
+        ]
+      },
+      {
+        "title": "Contract setelah pembaca dan penulis benar-benar pindah",
+        "paragraphs": [
+          "Fase contract menghapus fallback, memindahkan source of truth ke kolom baru, lalu pada rilis terpisah memensiunkan kolom lama. Urutan ini penting: jika kolom lama dihapus ketika satu job masih menulisnya, kompatibilitas pecah; jika kolom baru langsung wajib sebelum backfill selesai, deploy gagal. Catat metrik pembacaan kolom lama, versi aplikasi, dan hasil rekonsiliasi sebagai kriteria cutover. Penghapusan adalah perubahan destruktif yang perlu backup atau prosedur restore, bukan sekadar cleanup kosmetik.",
+          "Dataset B hanya meniru tiga order Commerce dalam TEMP table. Skrip bekerja pada pg_temp.lesson_evo_order_v1, mengisi shipping_address, menambahkan CHECK non-kosong secara NOT VALID, memvalidasinya, lalu menetapkan NOT NULL. Semua baris diketahui lengkap, sehingga hasil akhir siap pada fixture. Contoh ini tidak memindahkan data School Finance, tidak membuat guard untuk penulis concurrent, dan tidak menyatakan bahwa backfill atau ALTER tertentu akan bebas downtime pada tabel nyata."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset B — Commerce order address: tiga order TEMP dengan legacy_address lengkap. Kolom shipping_address ditambahkan, di-backfill, divalidasi melalui CHECK, lalu dibuat NOT NULL; tabel permanen dan writer produksi tidak disentuh.",
+      "setupSql": "CREATE TEMP TABLE lesson_evo_order_v1 (\n  order_id BIGINT PRIMARY KEY,\n  legacy_address TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_evo_order_v1 VALUES\n (2001,'Jl. Melati 1'),\n (2002,'Jl. Kenanga 2'),\n (2003,'Jl. Mawar 3');",
+      "sql": "ALTER TABLE pg_temp.lesson_evo_order_v1 ADD COLUMN shipping_address TEXT;\nUPDATE pg_temp.lesson_evo_order_v1\nSET shipping_address = btrim(legacy_address);\nALTER TABLE pg_temp.lesson_evo_order_v1\n  ADD CONSTRAINT lesson_evo_address_nonempty\n  CHECK (shipping_address IS NOT NULL AND length(btrim(shipping_address)) > 0) NOT VALID;\nALTER TABLE pg_temp.lesson_evo_order_v1\n  VALIDATE CONSTRAINT lesson_evo_address_nonempty;\nALTER TABLE pg_temp.lesson_evo_order_v1\n  ALTER COLUMN shipping_address SET NOT NULL;\nSELECT order_id, legacy_address, shipping_address,\n       CASE WHEN shipping_address = legacy_address THEN 'ready' ELSE 'review' END AS migration_state\nFROM pg_temp.lesson_evo_order_v1\nORDER BY order_id;",
+      "columns": [
+        "order_id",
+        "legacy_address",
+        "shipping_address",
+        "migration_state"
+      ],
+      "rows": [
+        ["2001", "Jl. Melati 1", "Jl. Melati 1", "ready"],
+        ["2002", "Jl. Kenanga 2", "Jl. Kenanga 2", "ready"],
+        ["2003", "Jl. Mawar 3", "Jl. Mawar 3", "ready"]
+      ],
+      "ordered": true,
+      "explanation": "Backfill menghasilkan satu alamat baru untuk setiap order. Constraint non-kosong divalidasi setelah data diisi, kemudian kolom baru dibuat NOT NULL. Nilai ready hanya berarti fixture ini memenuhi pemeriksaan lokal; tidak membuktikan semua sumber produksi lengkap atau bahwa fase contract aman dilakukan saat traffic berjalan."
+    },
+    "checks": [
+      {
+        "id": "l3m04l02-check-1",
+        "question": "Apa tujuan utama memulai shipping_address sebagai nullable pada fase expand?",
+        "options": [
+          "Memberi waktu bagi aplikasi lama dan baru untuk membaca atau menulis kontrak transisi sebelum backfill selesai.",
+          "Membuat NULL menjadi alamat bisnis yang sah selamanya.",
+          "Menghindari kebutuhan memeriksa baris lama setelah migration selesai."
+        ],
+        "answer": 0,
+        "explanation": "Nullable adalah keadaan sementara yang memungkinkan struktur baru hadir sebelum semua data dan writer siap. Fase berikutnya tetap harus memeriksa dan memperketat kontrak.",
+        "feedback": [
+          "Benar: expand menyediakan ruang kompatibilitas, sementara migrate mengisi dan memeriksa nilai baru.",
+          "NULL hanya aman bila domain memang mengizinkannya; di sini target akhirnya wajib terisi.",
+          "Backfill dan rekonsiliasi tetap diperlukan karena nullable tidak membuktikan kualitas data lama."
+        ]
+      },
+      {
+        "id": "l3m04l02-check-2",
+        "question": "Apa arti praktis ADD CONSTRAINT ... NOT VALID untuk CHECK pada tabel yang sudah berisi baris?",
+        "options": [
+          "Constraint diabaikan untuk semua INSERT dan UPDATE sampai operator mengingatnya.",
+          "Semua baris lama otomatis diperbaiki agar memenuhi CHECK.",
+          "Scan baris lama ditunda, tetapi baris baru atau yang diubah harus memenuhi constraint dan baris lama masih harus divalidasi kemudian."
+        ],
+        "answer": 2,
+        "explanation": "NOT VALID memisahkan pemasangan enforcement untuk perubahan berikutnya dari pemeriksaan data historis. VALIDATE CONSTRAINT tetap diperlukan untuk menyatakan semua baris memenuhi aturan.",
+        "feedback": [
+          "Constraint tetap menolak perubahan baru yang melanggarnya; NOT VALID bukan mode tanpa enforcement.",
+          "PostgreSQL tidak mengisi atau memperbaiki nilai lama secara otomatis.",
+          "Benar: scan historis ditunda, lalu VALIDATE memeriksa baris lama tanpa mengklaim data langsung bersih."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi hasil Dataset B setelah expand–migrate–contract, lalu tentukan kapan shipping_address boleh menjadi NOT NULL dan kapan kolom lama boleh dipensiunkan.",
+      "setup": "Dataset B memiliki tiga legacy_address lengkap. Rancang fase yang dapat dilalui versi aplikasi lama dan baru: tambah kolom, backfill, validasi, cutover pembaca/penulis, kemudian contract. Lesson player hanya menampilkan SQL referensi dan tidak menjalankan backfill.",
+      "starterSql": "SELECT order_id, legacy_address\nFROM pg_temp.lesson_evo_order_v1\nORDER BY order_id;",
+      "variants": [
+        {
+          "id": "l3m04l02-variant-1",
+          "question": "Setelah backfill Dataset B dan VALIDATE CONSTRAINT berhasil, apa hasil yang tepat untuk tiga order?",
+          "options": [
+            "Tiga baris ready dengan shipping_address terisi dan legacy_address masih tersedia selama transisi.",
+            "Dua baris ready karena order terakhir harus menunggu aplikasi baru.",
+            "Nol baris karena NOT VALID selalu menghapus data lama."
+          ],
+          "answer": 0,
+          "explanation": "Semua tiga fixture memiliki alamat non-kosong yang sama setelah btrim, sehingga memenuhi CHECK dan siap sebagai data target.",
+          "feedback": [
+            "Benar: tiga baris terisi, valid, dan kolom lama tetap menjadi compatibility surface sampai contract.",
+            "Tidak ada alasan fixture ketiga berbeda; setiap nilai memenuhi aturan yang sama.",
+            "NOT VALID tidak menghapus baris dan tidak berarti hasil query kosong."
+          ]
+        },
+        {
+          "id": "l3m04l02-variant-2",
+          "question": "Mengapa pembaca baru sering memakai COALESCE(shipping_address, legacy_address) selama fase transisi?",
+          "options": [
+            "Agar NULL pada target dapat disembunyikan selamanya tanpa backfill.",
+            "Agar row yang belum di-backfill tetap dapat dibaca sambil migrasi berjalan, dengan syarat fallback dipantau dan dihentikan setelah cutover.",
+            "Agar database otomatis melakukan dual-write setiap kali SELECT dijalankan."
+          ],
+          "answer": 1,
+          "explanation": "Fallback menjaga kompatibilitas pembacaan sementara, tetapi tidak mengisi target atau menyelesaikan konflik dua sumber.",
+          "feedback": [
+            "Fallback adalah jembatan, bukan alasan mengabaikan baris yang belum bermigrasi.",
+            "Benar: pembaca baru tetap berfungsi sementara backfill selesai, lalu metric fallback harus turun ke nol sebelum contract.",
+            "SELECT tidak menulis data dan tidak membuat dual-write."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l3m04l02-edge-1",
+          "question": "Jika satu row memiliki legacy_address kosong dan shipping_address NULL saat VALIDATE CONSTRAINT, apa hasil yang harus diantisipasi?",
+          "options": [
+            "VALIDATE selalu berhasil karena constraint NOT VALID tidak pernah dapat gagal.",
+            "Row otomatis mendapat string kosong dari DEFAULT yang tidak pernah didefinisikan.",
+            "VALIDATE gagal karena row lama melanggar CHECK; data harus diperbaiki atau dikecualikan dengan keputusan domain sebelum SET NOT NULL."
+          ],
+          "answer": 2,
+          "explanation": "NOT VALID menunda pemeriksaan, bukan menghapusnya. Null atau string kosong tetap menjadi pelanggaran ketika constraint divalidasi.",
+          "feedback": [
+            "NOT VALID hanya menunda scan historis; VALIDATE dapat gagal dan harus diperlakukan sebagai gate.",
+            "Tanpa DEFAULT PostgreSQL tidak mengarang alamat; NULL tetap NULL.",
+            "Benar: hentikan contract, remediasi sumber, dan ulangi validasi dengan bukti yang jelas."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l3m04l02-edge-2",
+          "question": "Mengapa DROP legacy_address tidak boleh menjadi bagian otomatis dari skrip backfill pertama?",
+          "options": [
+            "Karena kolom lama mungkin masih dibaca atau ditulis oleh versi aplikasi dan dapat menjadi bukti rollback.",
+            "Karena kolom TEXT tidak pernah boleh dihapus dari PostgreSQL.",
+            "Karena kolom baru tidak akan bisa menyimpan string alamat setelah kolom lama dihapus."
+          ],
+          "answer": 0,
+          "explanation": "Contract adalah langkah setelah seluruh dependency lama dipindahkan dan diverifikasi. Menghapus kolom lebih awal memperbesar blast radius dan menghilangkan opsi pemulihan.",
+          "feedback": [
+            "Benar: compatibility readers/writers dan rollback evidence harus aman sebelum destructive cleanup.",
+            "Kolom TEXT dapat dihapus bila dependensi dan rencana pemulihannya dipahami; larangan ini bukan aturan tipe.",
+            "Kolom baru tetap dapat menyimpan nilai; risikonya adalah dependensi lama dan kehilangan data."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Pisahkan tiga fase: tambah struktur yang kompatibel, isi serta ukur data, lalu hapus compatibility surface setelah cutover.",
+        "Gunakan kolom nullable untuk expand, backfill dari sumber yang disepakati, dan cari NULL atau string kosong sebelum enforcement.",
+        "NOT VALID menunda scan historis tetapi tidak menggantikan VALIDATE; contract harus menunggu semua reader dan writer terverifikasi."
+      ],
+      "solutionSql": "ALTER TABLE pg_temp.lesson_evo_order_v1 ADD COLUMN shipping_address TEXT;\nUPDATE pg_temp.lesson_evo_order_v1\nSET shipping_address = btrim(legacy_address);\nALTER TABLE pg_temp.lesson_evo_order_v1\n  ADD CONSTRAINT lesson_evo_address_nonempty\n  CHECK (shipping_address IS NOT NULL AND length(btrim(shipping_address)) > 0) NOT VALID;\nALTER TABLE pg_temp.lesson_evo_order_v1\n  VALIDATE CONSTRAINT lesson_evo_address_nonempty;\nALTER TABLE pg_temp.lesson_evo_order_v1\n  ALTER COLUMN shipping_address SET NOT NULL;\nSELECT order_id, legacy_address, shipping_address,\n       CASE WHEN shipping_address = legacy_address THEN 'ready' ELSE 'review' END AS migration_state\nFROM pg_temp.lesson_evo_order_v1\nORDER BY order_id;",
+      "solutionExplanation": "Referensi menjalankan expand dengan kolom nullable, melakukan backfill terukur, menambahkan CHECK NOT VALID, memvalidasinya, lalu menetapkan NOT NULL pada fixture yang lengkap. Kolom legacy_address tetap ada karena contract memerlukan bukti bahwa reader dan writer lama sudah pindah. NOT VALID dan backfill tidak membuktikan lock-free, zero-downtime, atau concurrency-safe pada produksi; itu harus dinilai dengan runbook dan observability nyata.",
+      "critical": true
+    },
+    "reflection": "Jelaskan urutan expand–migrate–contract untuk menambah kolom wajib pada tabel berisi data. Sebutkan fallback, source of truth, pemeriksaan backfill, kriteria cutover, serta alasan NOT VALID dan SET NOT NULL tetap bukan bukti migrasi produksi tanpa downtime atau guard concurrency."
+  },
+  {
+    "id": "l3m04l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "data-quality",
+      "reconciliation",
+      "backfill",
+      "constraints",
+      "school-finance"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/sql-altertable.html",
+      "https://www.postgresql.org/docs/17/ddl-constraints.html",
+      "https://www.postgresql.org/docs/17/queries-with.html"
+    ],
+    "hook": "Tim memindahkan alamat siswa dari format lama ke kolom baru. Jumlah row terlihat sama, tetapi satu alamat hilang dan checksum berubah jika NULL diganti string kosong. Bagaimana membuktikan backfill mempertahankan identitas, jumlah, relasi, dan makna nilai sebelum constraint baru diaktifkan?",
+    "objectives": [
+      "Membuat kontrak rekonsiliasi yang membandingkan jumlah row, nilai dikenal, checksum deterministik, dan baris yang belum terisi.",
+      "Membedakan NULL sebagai fakta yang belum diketahui dari string kosong atau nilai default yang dibuat-buat.",
+      "Menghentikan validasi ketika bukti data belum cukup dan menjelaskan SQLSTATE kegagalan constraint secara tepat."
+    ],
+    "sections": [
+      {
+        "title": "Rekonsiliasi dimulai dari grain dan source of truth",
+        "paragraphs": [
+          "Sebelum backfill, tentukan satu baris mewakili apa dan kolom mana yang menjadi sumber kebenaran. Dataset C memakai satu row per student_id pada mini fixture School Finance. address_text adalah sumber lama, sedangkan address_line adalah target sementara. Membandingkan hanya jumlah total dapat melewatkan satu row hilang yang diganti row lain; karena itu identitas, jumlah row, nilai yang diketahui, dan relasi ke student_id perlu diperiksa bersama.",
+          "Rekonsiliasi bukan sekadar mencari checksum yang sama. Checksum membantu mendeteksi perubahan urutan atau isi bila serialisasi deterministik, tetapi tidak menjelaskan row mana yang berbeda dan tidak membuktikan aturan bisnis. Serialisasi fixture ini memakai student_id, tanda sama dengan, separator garis vertikal, dan sentinel <NULL>; format itu ambigu bila nilai asli memuat delimiter, tanda sama dengan, atau teks sentinel. Audit nyata memerlukan encoding kanonik yang tidak ambigu, misalnya length-prefix atau format terstruktur dengan escaping dan NULL eksplisit. Gunakan checksum bersama COUNT, pasangan identity/value, dan daftar mismatch yang dapat ditindaklanjuti; hash saja tidak membuktikan kesetaraan."
+        ]
+      },
+      {
+        "title": "NULL, nilai default, dan hubungan tidak boleh ditebak",
+        "paragraphs": [
+          "Pada fixture ini, student_id 3 memiliki address_text NULL. Setelah menyalin baris yang tersedia, address_line student 3 tetap NULL. Itu berarti alamat belum diketahui, bukan alamat kosong dan bukan bukti bahwa siswa tidak memiliki alamat. Mengubah NULL menjadi '', unknown, atau alamat sekolah agar CHECK lolos dapat membuat laporan terlihat lengkap sambil merusak arti data. Kategori missing harus dilaporkan dan memiliki pemilik remediation.",
+          "Relasi juga harus direkonsiliasi: setiap student_id target harus berasal dari sumber yang sah, tidak ada ID duplikat, dan tidak ada target yang tidak punya pasangan. Foreign key lokal dapat menolak target yang tidak dikenal, tetapi tidak membuktikan bahwa alamat itu benar milik orang tersebut atau bahwa sumber lengkap. Rekonsiliasi yang baik memisahkan missing, unexpected, dan changed sehingga operator tidak menutup gap dengan UPDATE massal yang tidak dapat diaudit."
+        ]
+      },
+      {
+        "title": "Constraint adalah gate, bukan pengganti bukti",
+        "paragraphs": [
+          "Jika laporan menemukan satu target NULL, jangan langsung menjalankan SET NOT NULL. CHECK address_line IS NOT NULL yang ditambahkan NOT VALID masih menolak perubahan baru, tetapi VALIDATE akan gagal dengan SQLSTATE 23514 ketika baris lama melanggar. Kegagalan ini adalah sinyal keselamatan: hentikan contract, perbaiki atau karantina data yang diketahui, ulangi rekonsiliasi, dan simpan alasan pengecualian. Jangan menangkap error lalu menganggap migrasi sukses.",
+          "Worked example memakai Dataset C yang sepenuhnya TEMP dan hanya menampilkan ringkasan rekonsiliasi. Reference solution sengaja mencoba validasi constraint yang belum dapat dipenuhi agar learner membaca SQLSTATE 23514. Ini bukan simulasi migrasi sumber School Finance, bukan pembuktian checksum aman terhadap collision, dan bukan bukti bahwa snapshot tetap benar ketika penulis concurrent mengubah data. Bukti runtime, lock, backup, dan cutover memerlukan runbook terpisah."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset C — School Finance student address: tiga row TEMP, dua alamat diketahui dan satu NULL. Patch hanya memiliki student 1 dan 2; student 3 sengaja dibiarkan missing agar rekonsiliasi menolak constraint wajib. Tidak ada INSERT, UPDATE, atau migrasi pada tabel school.*.",
+      "setupSql": "CREATE TEMP TABLE lesson_evo_student_address_v1 (\n  student_id BIGINT PRIMARY KEY,\n  full_name TEXT NOT NULL,\n  address_text TEXT NULL\n);\nINSERT INTO pg_temp.lesson_evo_student_address_v1 VALUES\n (1,'Alya','Jl. Melati 1'),\n (2,'Bima','Jl. Kenanga 2'),\n (3,'Citra',NULL);\nCREATE TEMP TABLE lesson_evo_student_address_before AS\nSELECT student_id, full_name, address_text\nFROM pg_temp.lesson_evo_student_address_v1;\nCREATE TEMP TABLE lesson_evo_address_patch (\n  student_id BIGINT PRIMARY KEY REFERENCES pg_temp.lesson_evo_student_address_v1(student_id),\n  address_text TEXT NULL\n);\nINSERT INTO pg_temp.lesson_evo_address_patch VALUES\n (1,'Jl. Melati 1'),\n (2,'Jl. Kenanga 2');",
+      "sql": "ALTER TABLE pg_temp.lesson_evo_student_address_v1 ADD COLUMN address_line TEXT;\nUPDATE pg_temp.lesson_evo_student_address_v1 s\nSET address_line = p.address_text\nFROM pg_temp.lesson_evo_address_patch p\nWHERE p.student_id = s.student_id;\nWITH before_data AS (\n  SELECT student_id, address_text FROM pg_temp.lesson_evo_student_address_before\n), after_data AS (\n  SELECT student_id, address_line FROM pg_temp.lesson_evo_student_address_v1\n), pairs AS (\n  SELECT b.student_id AS before_id, b.address_text,\n         a.student_id AS after_id, a.address_line\n  FROM before_data b\n  FULL OUTER JOIN after_data a USING (student_id)\n)\nSELECT (SELECT COUNT(*)::text FROM before_data) AS before_rows,\n       (SELECT COUNT(*)::text FROM after_data) AS after_rows,\n       (SELECT md5(string_agg(COALESCE(student_id::text,'<NULL>') || '=' || COALESCE(address_text,'<NULL>'),'|' ORDER BY student_id)) FROM before_data) AS before_checksum,\n       (SELECT md5(string_agg(COALESCE(student_id::text,'<NULL>') || '=' || COALESCE(address_line,'<NULL>'),'|' ORDER BY student_id)) FROM after_data) AS after_checksum,\n       COUNT(*) FILTER (WHERE after_id IS NOT NULL AND address_line IS NULL)::text AS missing_after,\n       COUNT(*) FILTER (WHERE after_id IS NULL)::text AS missing_rows_after,\n       COUNT(*) FILTER (WHERE before_id IS NULL)::text AS unexpected_rows_after,\n       COUNT(*) FILTER (WHERE before_id IS NOT NULL AND after_id IS NOT NULL AND address_text IS DISTINCT FROM address_line)::text AS changed_values\nFROM pairs;",
+      "columns": [
+        "before_rows",
+        "after_rows",
+        "before_checksum",
+        "after_checksum",
+        "missing_after",
+        "missing_rows_after",
+        "unexpected_rows_after",
+        "changed_values"
+      ],
+      "rows": [
+        ["3", "3", "ef5d63a64a7cf559a2f7e1675e1f5744", "ef5d63a64a7cf559a2f7e1675e1f5744", "1", "0", "0", "0"]
+      ],
+      "ordered": true,
+      "explanation": "Jumlah row dan checksum berisi identitas student_id sama karena backfill menyalin dua nilai yang tersedia tanpa mengubah NULL. Pasangan row tidak memiliki missing atau unexpected identity dan changed_values = 0, tetapi missing_after = 1 adalah temuan penting: student 3 belum dapat memenuhi constraint alamat wajib. Output ini adalah ringkasan agregat, bukan daftar mismatch per row yang dapat langsung ditindaklanjuti; hitungan FULL JOIN authoritative untuk fixture ini. Serialisasi checksum fixture memiliki batas delimiter/sentinel, sehingga audit nyata memerlukan encoding kanonik tidak ambigu dan perbandingan pasangan, bukan hash saja."
+    },
+    "checks": [
+      {
+        "id": "l3m04l03-check-1",
+        "question": "Mengapa COUNT(*) dan checksum yang sama belum cukup untuk menyatakan backfill berhasil?",
+        "options": [
+          "Karena keduanya tidak pernah boleh dipakai dalam rekonsiliasi.",
+          "Karena checksum selalu menghasilkan nilai berbeda walaupun data identik.",
+          "Karena row dapat tertukar, nilai NULL dapat disamarkan, atau relasi dapat berubah meskipun agregat global tampak sama."
+        ],
+        "answer": 2,
+        "explanation": "Agregat global adalah bukti ringkas. Ia perlu dilengkapi identitas, hitungan non-NULL, mismatch detail, dan aturan relasi agar perubahan yang saling menutupi dapat ditemukan.",
+        "feedback": [
+          "COUNT dan checksum berguna sebagai sinyal, tetapi harus dipasangkan dengan pemeriksaan yang menjawab kontrak.",
+          "Serialisasi deterministik memberi checksum sama untuk input sama; justru kesamaan itu perlu dibaca bersama metrik lain.",
+          "Benar: agregat dapat sama saat baris berbeda atau NULL berubah makna, sehingga grain dan mismatch tetap diperiksa."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l3m04l03-check-2",
+        "question": "Apa arti missing_after = 1 pada Dataset C?",
+        "options": [
+          "Satu student_id tidak memiliki alamat target yang diketahui dan harus diremediasi sebelum constraint wajib.",
+          "Satu alamat otomatis bernilai nol karena COUNT tidak menemukan string.",
+          "Satu student_id boleh dihapus agar jumlah row menjadi dua."
+        ],
+        "answer": 0,
+        "explanation": "COUNT(address_line) mengabaikan NULL, sehingga selisih dengan COUNT(*) menunjukkan satu target belum terisi. Tidak ada dasar untuk mengubahnya menjadi nol atau menghapus siswa.",
+        "feedback": [
+          "Benar: gap harus ditelusuri, dipatch dari sumber berwenang, atau dikarantina sesuai aturan bisnis.",
+          "NULL bukan angka nol dan agregat tidak menetapkan nilai pengganti.",
+          "Menghapus identitas menyembunyikan masalah dan merusak relasi siswa yang sah."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi hasil rekonsiliasi Dataset C dan putuskan apakah constraint address_line IS NOT NULL boleh divalidasi.",
+      "setup": "Dataset C menyalin alamat student 1 dan 2. Student 3 memiliki NULL pada sumber dan tidak ada patch. Bandingkan jumlah row, checksum yang menyertakan identity, missing_after, missing_rows_after, unexpected_rows_after, dan changed_values. Reference SQL sengaja menunjukkan gate constraint yang gagal; player tidak menjalankan SQL.",
+      "starterSql": "SELECT student_id, full_name, address_text, address_line\nFROM pg_temp.lesson_evo_student_address_v1\nORDER BY student_id;",
+      "variants": [
+        {
+          "id": "l3m04l03-variant-1",
+          "question": "Angka mana yang tepat untuk Dataset C sebelum constraint wajib divalidasi?",
+          "options": [
+            "before_rows 3, after_rows 3, before_checksum = after_checksum, missing_after 1, missing_rows_after 0, unexpected_rows_after 0, changed_values 0.",
+            "before_rows 2, after_rows 3, before_checksum != after_checksum, missing_after 0, missing_rows_after 0, unexpected_rows_after 1, changed_values 0.",
+            "before_rows 3, after_rows 2, before_checksum != after_checksum, missing_after 0, missing_rows_after 1, unexpected_rows_after 0, changed_values 1."
+          ],
+          "answer": 0,
+          "explanation": "Tiga identity siswa tetap ada, dua alamat diketahui berhasil disalin, dan satu alamat target tetap NULL karena tidak ada patch.",
+          "feedback": [
+            "Benar: rekonsiliasi menunjukkan jumlah row tidak berubah tetapi satu nilai tetap missing.",
+            "Sumber memiliki tiga identity dan checksum; NULL tetap membuat target missing.",
+            "Backfill tidak menghapus row ketiga atau mengubah NULL menjadi nilai yang diketahui."
+          ]
+        },
+        {
+          "id": "l3m04l03-variant-2",
+          "question": "Apa keputusan yang tepat ketika checksum before dan after sama tetapi missing_after masih 1?",
+          "options": [
+            "Anggap migrasi complete karena checksum sama selalu mengalahkan metrik missing.",
+            "Ubah NULL menjadi string kosong agar constraint bisa divalidasi.",
+            "Tahan enforcement, telusuri student 3, dan cari sumber berwenang atau keputusan eksplisit untuk data yang belum diketahui."
+          ],
+          "answer": 2,
+          "explanation": "Checksum sama hanya menunjukkan serialisasi nilai yang tersedia tidak berubah; ia tidak membuat NULL menjadi alamat yang diketahui.",
+          "feedback": [
+            "Checksum bukan pengganti semua aturan; missing_after adalah kegagalan kontrak yang harus ditangani.",
+            "String kosong mengubah makna dan hanya menyamarkan gap kualitas data.",
+            "Benar: remediasi atau karantina harus terjadi sebelum constraint dan cutover."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l3m04l03-edge-1",
+          "question": "Apa SQLSTATE yang diharapkan ketika CHECK address_line IS NOT NULL ditambahkan NOT VALID lalu divalidasi sementara student 3 masih NULL?",
+          "options": [
+            "23514, karena CHECK constraint menemukan row lama yang melanggar saat VALIDATE.",
+            "23503, karena semua NULL selalu berarti foreign key hilang.",
+            "23505, karena checksum yang sama dianggap duplicate key."
+          ],
+          "answer": 0,
+          "explanation": "PostgreSQL menggunakan SQLSTATE 23514 untuk pelanggaran check constraint. NOT VALID memasang enforcement untuk perubahan baru, sedangkan VALIDATE memeriksa row lama dan gagal pada NULL.",
+          "feedback": [
+            "Benar: 23514 menandai check_violation pada validasi constraint yang tidak dipenuhi.",
+            "23503 adalah foreign_key_violation dan tidak menjelaskan CHECK address_line.",
+            "23505 adalah unique_violation; checksum bukan unique constraint pada fixture."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l3m04l03-edge-2",
+          "question": "Jika patch memuat student_id 99 yang tidak ada pada sumber TEMP, apa yang seharusnya terjadi?",
+          "options": [
+            "Masukkan alamat ke student 3 karena itu row yang masih missing.",
+            "INSERT ke patch ditolak dengan SQLSTATE 23503 oleh foreign key; perbaiki sumber atau karantina patch, bukan menebak pasangan.",
+            "Hapus student_id 99 dari laporan tanpa mencatatnya karena bukan siswa aktif."
+          ],
+          "answer": 1,
+          "explanation": "Patch memiliki foreign key ke lesson_evo_student_address_v1, sehingga INSERT student_id 99 ditolak dengan SQLSTATE 23503 sebelum baris itu mencapai rekonsiliasi. Jika staging sengaja tanpa FK, target unexpected dapat dilaporkan; fixture ini memilih enforcement lebih awal.",
+          "feedback": [
+            "ID berbeda tidak boleh dipasangkan berdasarkan urutan atau status missing.",
+            "Benar: FK pada patch menolak student_id 99 dengan SQLSTATE 23503 sebelum anti-join atau summary dijalankan.",
+            "Menghilangkan baris tanpa jejak merusak audit dan dapat menyembunyikan sumber data yang salah."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Tentukan grain satu row per student_id, lalu bandingkan COUNT(*), COUNT(address), dan identitas sebelum melihat checksum.",
+        "Pertahankan NULL sebagai unknown; bedakan missing, unexpected, changed, dan nilai kosong sebelum memilih perbaikan.",
+        "VALIDATE CHECK yang masih menemukan NULL harus menjadi gate gagal dengan SQLSTATE 23514, bukan error yang ditelan."
+      ],
+      "solutionSql": "ALTER TABLE pg_temp.lesson_evo_student_address_v1 ADD COLUMN address_line TEXT;\nUPDATE pg_temp.lesson_evo_student_address_v1 s\nSET address_line = p.address_text\nFROM pg_temp.lesson_evo_address_patch p\nWHERE p.student_id = s.student_id;\nALTER TABLE pg_temp.lesson_evo_student_address_v1\n  ADD CONSTRAINT lesson_evo_address_required\n  CHECK (address_line IS NOT NULL) NOT VALID;\nALTER TABLE pg_temp.lesson_evo_student_address_v1\n  VALIDATE CONSTRAINT lesson_evo_address_required;",
+      "solutionError": "23514",
+      "solutionExplanation": "Reference solution memasang CHECK secara NOT VALID agar perubahan baru tidak menambah NULL, lalu mencoba VALIDATE. Validasi sengaja gagal dengan SQLSTATE 23514 karena student 3 masih memiliki address_line NULL. Kegagalan ini adalah expected safety gate: perbaiki atau karantina data, ulangi rekonsiliasi, dan jangan menyatakan contract selesai. Fixture dan error sepenuhnya berada di TEMP table.",
+      "critical": true
+    },
+    "reflection": "Jelaskan kontrak rekonsiliasi yang diperlukan setelah backfill alamat: grain, jumlah row, known versus NULL, checksum, mismatch identity, dan constraint. Mengapa SQLSTATE 23514 pada validasi Dataset C merupakan hasil yang benar, bukan kegagalan yang boleh ditelan?"
+  }
+]
