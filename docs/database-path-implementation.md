@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L3 and L4M01–L4M02: 51 published / 69 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L3 and L4M01–L4M03: 54 published / 66 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -186,3 +186,11 @@ Added three bilingual isolation/MVCC lessons using explicitly authored determini
 Totals: 17 authored modules, 51 published / 69 draft lessons; 54 combined lessons plus three labs (57 activity milestones). Existing E2E expectations only change the count and next draft route to l4m03l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
 
 Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L4M03**.
+
+## L4M03 continuation — 25 October 2026
+
+Added three bilingual concurrency lessons. L4M03L01 predicts conditional debit under explicit RC: A affects1 row and leaves30000, B affects0 rather than succeeding. The reference demonstrates the SQL pattern on a fresh TEMP account. L4M03L02 uses an authored two-doctor RR write-skew schedule and a Serializable illustration with one40001; victim selection is not promised. Row-lock references explain future-row limits. L4M03L03 separates deadlock40P01, lock timeout55P03 and unknown statement/COMMIT outcomes, with ascending account locks and bounded whole-transaction retry. Alternative accounts9/10 belong only to an authored scenario, not live fixture observations. All schedules, null fields and error codes remain authored input/results rather than engine observations; no new simulator or user SQL execution was added.
+
+Totals: 18 authored modules, 54 published / 66 draft lessons; 57 combined lessons plus three labs (60 activity milestones). Existing E2E expectations only change the count and next draft route to l4m04l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
+
+Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L4M04**.

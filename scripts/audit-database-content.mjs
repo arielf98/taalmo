@@ -19,6 +19,7 @@ export const authored = [
   "l3-evolution",
   "l4-acid",
   "l4-isolation",
+  "l4-concurrency",
 ].flatMap((file) => read(`src/content/database/${file}.json`));
 const modules = blueprint.levels.flatMap((level) => level.modules);
 const lessons = modules.flatMap((module) => module.lessons);

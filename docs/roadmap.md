@@ -13,13 +13,13 @@
 
 ## Database Engineering — database curriculum
 
-The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L3 and L4M01–L4M02 provide 51 published bilingual lessons; 69 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
+The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L3 and L4M01–L4M03 provide 54 published bilingual lessons; 66 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
 
-## Recommended next milestone: L4M03 authoring
+## Recommended next milestone: L4M04 authoring
 
-L4M02 follows L4M01. L4 is still incomplete, so its stage assessment remains unavailable. Published earlier levels retain their existing prerequisite/mastery gates; trace predictions do not grant actual concurrent SQL execution evidence.
+L4M03 follows L4M02. L4 remains incomplete; its level assessment stays unavailable. Earlier completed levels keep their existing gates, and authored traces do not create a new simulator or production-safety credential.
 
-Continue with L4M03 — Concurrency Anomalies: conditional atomic updates and zero-row outcomes, cross-row write skew, deadlocks/timeouts and bounded whole-transaction retry. Clearly declare isolation assumptions and the difference between a possible authored victim choice and PostgreSQL scheduling guarantees. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
+Continue with L4M04 — Payments dan Idempotency: scoped business keys and payload conflicts, ledger versus mutable balance, and local exactly-once effects under duplicate delivery. Distinguish local atomic effects from external exactly-once delivery and signature verification. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
 
 ## Later learning improvements
 

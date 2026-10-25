@@ -138,5 +138,16 @@
   "serializable": "SERIALIZABLE",
   "select-for-update": "SELECT FOR UPDATE",
   "nowait": "NOWAIT",
-  "skip-locked": "SKIP LOCKED"
+  "skip-locked": "SKIP LOCKED",
+  "concurrency": "konkurensi",
+  "lost-update": "lost update",
+  "atomic-update": "UPDATE atomik",
+  "conditional-update": "UPDATE bersyarat",
+  "write-skew": "write skew",
+  "phantom": "phantom",
+  "invariant": "invariant",
+  "deadlock": "deadlock",
+  "lock-timeout": "batas waktu lock",
+  "retry": "coba ulang",
+  "lock-ordering": "urutan lock"
 }

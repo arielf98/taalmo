@@ -12,6 +12,7 @@ import typesConstraints from "./l3-types-constraints.json";
 import evolution from "./l3-evolution.json";
 import acid from "./l4-acid.json";
 import isolation from "./l4-isolation.json";
+import concurrency from "./l4-concurrency.json";
 import type { AuthoredLesson, ConceptCheck } from "./types";
 import { pathHref } from "../lessons";
 export const databasePathHref = pathHref;
@@ -30,6 +31,7 @@ const authored = [
   ...evolution,
   ...acid,
   ...isolation,
+  ...concurrency,
 ] as AuthoredLesson[];
 const byId = new Map(authored.map((lesson) => [lesson.id, lesson]));
 export const databaseLevels = blueprint.levels.map((level) => ({

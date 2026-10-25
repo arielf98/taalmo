@@ -1,0 +1,635 @@
+[
+  {
+    "id": "l4m03l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "concurrency",
+      "lost-update",
+      "atomic-update",
+      "conditional-update",
+      "payment-ledger"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/transaction-iso.html",
+      "https://www.postgresql.org/docs/17/sql-update.html",
+      "https://www.postgresql.org/docs/17/errcodes-appendix.html"
+    ],
+    "hook": "Session A dan B sama-sama membaca saldo 100000 lalu hendak mendebit 70000. Mengapa dua read-modify-write dapat berakhir pada saldo 30000 dengan satu debit hilang, dan bagaimana UPDATE ... WHERE balance >= amount memberi sinyal bahwa hanya satu debit yang berhasil?",
+    "objectives": [
+      "Menjelaskan lost update sebagai race pada pola read-modify-write yang memisahkan pemeriksaan dan penulisan.",
+      "Menerapkan UPDATE balance = balance - amount WHERE balance >= amount sebagai operasi kondisional atomik pada satu baris.",
+      "Memeriksa row count atau RETURNING dan membedakan nol baris ter-update dari debit sukses."
+    ],
+    "sections": [
+      {
+        "title": "Read-modify-write dapat menghilangkan debit",
+        "paragraphs": [
+          "Pola rentan biasanya berbunyi SELECT balance, hitung balance baru di aplikasi, lalu UPDATE balance = nilai_baru. Dalam trace Dataset A, saldo awal 100000 dibaca oleh A dan B sebelum salah satu menulis. Keduanya menghitung 30000 setelah debit 70000. Jika A menulis 30000 lalu B menulis nilai 30000 yang dihitung dari bacaan lamanya, hasil akhir tetap 30000. Ledger terlihat seolah satu debit terjadi walaupun dua request mungkin sudah mengakui pembayaran. Write terakhir menimpa hasil sebelumnya; ia tidak menambahkan dua debit.",
+          "Masalahnya bukan hanya urutan UPDATE, melainkan keputusan yang dibuat di luar kondisi versi baris yang sedang ditulis. Aplikasi tidak membawa fakta bahwa saldo yang dibacanya telah berubah ketika B lebih dulu commit. Menambah SELECT kedua tanpa mekanisme versi, lock, atau predikat pada UPDATE hanya memperpanjang jendela race. Primary key membantu memilih rekening yang tepat, tetapi tidak membuat dua keputusan dari snapshot lama menjadi satu operasi atomik."
+        ]
+      },
+      {
+        "title": "Predikat dan ekspresi harus berada pada UPDATE",
+        "paragraphs": [
+          "Bentuk yang lebih aman untuk debit satu rekening adalah `UPDATE ... SET balance = balance - :amount WHERE account_id = :id AND balance >= :amount RETURNING account_id, balance`. Ekspresi membaca balance versi yang dipakai statement dan mengurangi langsung di database. Predikat balance >= amount menjadi bagian dari usaha mengubah baris. Pada Read Committed, bila updater lain selesai lebih dulu, PostgreSQL dapat menunggu lalu mengevaluasi ulang WHERE terhadap versi baris yang baru; bila saldo tidak lagi cukup, baris tidak cocok dan tidak diperbarui.",
+          "Keberhasilan harus ditentukan dari jumlah baris yang diperbarui atau ada tidaknya baris RETURNING, bukan dari tidak adanya exception. UPDATE yang cocok dengan nol baris adalah completion normal, bukan error SQL. Nol berarti debit tidak dilakukan—mungkin saldo kurang, rekening tidak ada, atau predicate lain tidak cocok. Handler harus menerjemahkan hasil itu menjadi keputusan bisnis yang jelas dan tidak mengirim notifikasi payment succeeded hanya karena statement selesai tanpa error."
+        ]
+      },
+      {
+        "title": "Atomic satu baris bukan seluruh workflow",
+        "paragraphs": [
+          "Conditional UPDATE menyelesaikan kompetisi pada balance satu rekening, tetapi tidak otomatis menyelesaikan aturan lintas tabel. Jika debit juga harus membuat payment, ledger entry, dan outbox event, semua perubahan internal perlu berada dalam transaction boundary yang sama. Jika provider eksternal sudah menerima uang sebelum UPDATE berhasil, database tidak dapat membatalkan provider. Identitas payment dan idempotency key masih diperlukan agar retry tidak menggandakan efek.",
+          "Trace authored pada lesson ini sengaja menyimpan input A/B dan expected keputusan sebagai tabel biasa, bukan menjalankan dua session. Ia menunjukkan bahwa A sukses satu baris lalu B mendapat nol baris pada saldo tersisa 30000, bukan bukti lock timing tertentu. Dalam production, cek row count, commit transaction, dan tangani timeout atau serialization failure sesuai error code. Jangan menyimpulkan bahwa satu UPDATE aman untuk invariant yang melibatkan beberapa rekening atau kuota agregat."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset A — authored two-session lost-update trace pada asumsi READ COMMITTED (default), dengan urutan authored A lalu B. Saldo awal account 1 = 100000. A dan B masing-masing meminta debit 70000 setelah membaca saldo lama; hasil atomic conditional UPDATE yang diharapkan: A memperbarui satu baris, B nol baris, saldo akhir 30000. Trace ini adalah input/penalaran expected, bukan hasil dua koneksi PostgreSQL yang dijalankan.",
+      "setupSql": "CREATE TEMP TABLE lesson_atomic_accounts (\n  account_id BIGINT PRIMARY KEY,\n  balance NUMERIC(12,2) NOT NULL CHECK (balance >= 0)\n);\nINSERT INTO pg_temp.lesson_atomic_accounts VALUES (1, 100000.00);\nCREATE TEMP TABLE lesson_atomic_debit_trace (\n  trace_step INTEGER PRIMARY KEY,\n  session_label TEXT NOT NULL,\n  operation TEXT NOT NULL,\n  observed_before TEXT NULL,\n  updated_rows INTEGER NOT NULL,\n  balance_after TEXT NULL,\n  note TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_atomic_debit_trace VALUES\n  (1, 'A', 'conditional debit 70000', '100000.00', 1, '30000.00', 'predicate balance >= amount matched'),\n  (2, 'B', 'conditional debit 70000', '30000.00', 0, NULL, 'predicate failed after A result');",
+      "sql": "SELECT trace_step, session_label, operation, observed_before, updated_rows, balance_after, note\nFROM pg_temp.lesson_atomic_debit_trace\nORDER BY trace_step;",
+      "columns": [
+        "trace_step",
+        "session_label",
+        "operation",
+        "observed_before",
+        "updated_rows",
+        "balance_after",
+        "note"
+      ],
+      "rows": [
+        [
+          "1",
+          "A",
+          "conditional debit 70000",
+          "100000.00",
+          "1",
+          "30000.00",
+          "predicate balance >= amount matched"
+        ],
+        [
+          "2",
+          "B",
+          "conditional debit 70000",
+          "30000.00",
+          "0",
+          null,
+          "predicate failed after A result"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Hasil authored yang diharapkan pada asumsi READ COMMITTED (default): satu debit sukses dan attempt kedua menerima updated_rows = 0 karena 30000 lebih kecil dari permintaan 70000. NULL pada balance_after B berarti tidak ada row yang berubah, bukan saldo nol atau error engine. Pada Repeatable Read atau Serializable, konflik concurrent dapat menghasilkan serialization failure sehingga recovery-nya berbeda. Read-modify-write naif dapat membuat kedua client menghitung 30000 dan saling menimpa; tabel ini tidak mengamati schedule itu saat runtime."
+    },
+    "checks": [
+      {
+        "id": "l4m03l01-check-1",
+        "question": "Mengapa pola SELECT balance lalu UPDATE dengan nilai yang dihitung di aplikasi rentan pada dua debit bersamaan?",
+        "options": [
+          "Kedua session dapat menghitung nilai baru dari saldo lama dan penulisan terakhir menimpa debit sebelumnya.",
+          "Primary key account_id selalu menghapus semua UPDATE kedua.",
+          "PostgreSQL mengubah semua angka debit menjadi NULL saat ada dua session."
+        ],
+        "answer": 0,
+        "explanation": "Read-modify-write memisahkan pemeriksaan saldo dari penulisan sehingga keputusan A dan B dapat memakai versi lama yang sama.",
+        "feedback": [
+          "Benar: kedua request dapat menghitung 30000 dari 100000, lalu satu hasil menutupi debit lain.",
+          "PK memilih baris, tetapi tidak mencegah dua session mengubah baris yang sama secara berurutan.",
+          "NULL bukan efek otomatis lost update; masalahnya adalah nilai lama yang ditulis ulang."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l4m03l01-check-2",
+        "question": "Apa arti updated_rows = 0 pada conditional UPDATE debit?",
+        "options": [
+          "Statement selalu gagal dan transaction otomatis rusak.",
+          "Tidak ada baris yang memenuhi predicate saat UPDATE; debit tidak boleh dianggap sukses.",
+          "Debit tetap dilakukan tetapi RETURNING sengaja menyembunyikan saldo"
+        ],
+        "answer": 1,
+        "explanation": "UPDATE yang tidak menemukan target adalah completion normal; caller harus memeriksa row count atau RETURNING.",
+        "feedback": [
+          "Nol baris bukan otomatis error SQL atau transaction abort.",
+          "Benar: saldo kurang atau target hilang berarti operasi bisnis tidak berhasil.",
+          "Tidak ada perubahan tersembunyi; tidak ada row yang di-return karena tidak ada row yang di-update."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Bandingkan lost update dengan conditional UPDATE dan tentukan keputusan payment dari row count.",
+      "setup": "Gunakan Dataset A pada worked example dengan asumsi READ COMMITTED (default). A dan B meminta debit 70000 dari saldo awal 100000. Trace A/B adalah authored input; player tidak menjalankan dua session dan tidak mengamati timing lock.",
+      "starterSql": "UPDATE pg_temp.lesson_atomic_debit_trace\nSET note = 'inspect row count before reporting success'\nWHERE session_label = 'B' AND updated_rows = 0\nRETURNING session_label, updated_rows, balance_after;",
+      "variants": [
+        {
+          "id": "l4m03l01-variant-1",
+          "question": "Saldo awal 150000 dan dua request masing-masing debit 70000 memakai conditional UPDATE. Apa hasil authored yang diharapkan?",
+          "options": [
+            "Keduanya sukses dan saldo akhir 10000.",
+            "Satu sukses, satu mendapat nol baris, saldo akhir 80000.",
+            "Keduanya mendapat nol baris karena request bersamaan selalu ditolak."
+          ],
+          "answer": 0,
+          "explanation": "Setelah satu debit, saldo 80000 masih memenuhi 80000 >= 70000, sehingga kedua conditional debit dapat sukses secara berurutan dan saldo akhir 10000.",
+          "feedback": [
+            "Jika hanya satu berhasil, itu mengabaikan bahwa 80000 masih memenuhi predicate debit kedua.",
+            "Benar: kedua conditional UPDATE dapat sukses secara berurutan dan menyisakan 10000.",
+            "Concurrency tidak otomatis menolak setiap request bersamaan; predicate menentukan hasilnya."
+          ]
+        },
+        {
+          "id": "l4m03l01-variant-2",
+          "question": "Saldo awal 120000 dan dua request masing-masing debit 70000. Apa keputusan yang harus dilaporkan?",
+          "options": [
+            "Satu debit sukses, satu nol baris, saldo akhir 50000.",
+            "Dua debit sukses karena masing-masing membaca 120000.",
+            "Satu debit sukses dan saldo menjadi NULL karena debit kedua menunggu."
+          ],
+          "answer": 0,
+          "explanation": "Setelah satu debit, saldo 50000 tidak memenuhi balance >= 70000, sehingga request kedua harus mendapat nol baris.",
+          "feedback": [
+            "Benar: predicate dievaluasi terhadap saldo yang sudah berkurang.",
+            "Itu adalah kesalahan read-modify-write; pembacaan lama bukan izin untuk menulis hasil lama.",
+            "Menunggu tidak mengubah saldo menjadi NULL; row count tetap sinyal keputusan."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l4m03l01-edge-1",
+          "question": "Apakah updated_rows = 0 selalu berarti saldo kurang?",
+          "options": [
+            "Ya, karena hanya balance >= amount yang dapat membuat nol baris.",
+            "Tidak; account_id dapat tidak ada atau predicate lain dapat tidak cocok, sehingga caller perlu membedakan alasan sesuai kontrak.",
+            "Ya, karena PostgreSQL menyembunyikan semua foreign key error sebagai nol baris"
+          ],
+          "answer": 1,
+          "explanation": "Row count menunjukkan tidak ada target yang di-update, bukan satu penyebab bisnis tertentu.",
+          "feedback": [
+            "Predikat dapat mencakup keberadaan akun, status, tenant, atau versi selain saldo.",
+            "Benar: bedakan insufficient funds dari missing account atau validasi lain di boundary aplikasi.",
+            "Foreign key error adalah exception berbeda, bukan hasil nol baris UPDATE."
+          ]
+        },
+        {
+          "id": "l4m03l01-edge-2",
+          "question": "Conditional UPDATE berhasil, tetapi insert payment dan outbox dilakukan di transaction terpisah lalu gagal. Apa batas jaminannya?",
+          "options": [
+            "Balance pasti otomatis rollback karena UPDATE bersifat atomik.",
+            "Satu UPDATE atomik hanya melindungi perubahan baris itu; workflow multi-tabel membutuhkan transaction boundary dan kompensasi yang tepat.",
+            "Row count 1 membuktikan provider eksternal sudah menerima payment"
+          ],
+          "answer": 1,
+          "explanation": "Atomicity statement atau satu row tidak menjangkau perubahan lain yang berada di luar transaction.",
+          "feedback": [
+            "Rollback hanya berlaku pada transaction yang masih dapat membatalkan UPDATE.",
+            "Benar: payment, ledger, outbox, dan external effect perlu boundary atau mekanisme terpisah.",
+            "Row count adalah hasil database lokal, bukan acknowledgment provider."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Tuliskan saldo sebelum A dan B: pembacaan lama tidak boleh menjadi nilai baru yang ditulis ulang.",
+        "Letakkan balance >= amount di WHERE dan pengurangan balance - amount di SET statement yang sama.",
+        "Periksa jumlah baris atau RETURNING; nol baris adalah keputusan bisnis gagal, bukan sukses diam-diam."
+      ],
+      "solutionSql": "BEGIN;\nUPDATE pg_temp.lesson_atomic_accounts\nSET balance = balance - 70000.00\nWHERE account_id = 1 AND balance >= 70000.00\nRETURNING account_id, balance;\nCOMMIT;",
+      "solutionExplanation": "Reference SQL menunjukkan bentuk satu debit kondisional: predicate dan ekspresi pengurangan berada di UPDATE yang sama, lalu RETURNING memberi bukti row yang benar-benar berubah. Pada Dataset A, satu attempt dapat mengembalikan satu row dan attempt berikutnya nol row setelah saldo menjadi 30000. Tabel lesson_atomic_accounts tersedia pada fixture reference; trace worked tetap authored dan tidak menjalankan dua session atau membuktikan lock timing.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa read-modify-write dapat menghilangkan salah satu debit, bagaimana conditional UPDATE mengubah keputusan menjadi atomik pada satu row, dan mengapa row count nol harus diperiksa sebelum payment dilaporkan berhasil."
+  },
+  {
+    "id": "l4m03l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "write-skew",
+      "phantom",
+      "serializable",
+      "invariant",
+      "payment-ledger"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/transaction-iso.html",
+      "https://www.postgresql.org/docs/17/applevel-consistency.html",
+      "https://www.postgresql.org/docs/17/errcodes-appendix.html"
+    ],
+    "hook": "Jadwal klinik memiliki dua dokter piket. A membaca dua dokter lalu mematikan status D1; B membaca snapshot yang sama lalu mematikan D2. Mengapa masing-masing update row berbeda tetap dapat menghasilkan nol dokter piket, dan mengapa Serializable dapat membatalkan salah satu transaction dengan 40001?",
+    "objectives": [
+      "Menjelaskan write skew sebagai pelanggaran invariant lintas baris ketika transaksi menulis row yang berbeda.",
+      "Membedakan phantom atau perubahan himpunan predicate dari konflik pada satu row.",
+      "Memilih explicit lock atau Serializable serta merencanakan retry seluruh transaction setelah SQLSTATE 40001."
+    ],
+    "sections": [
+      {
+        "title": "Invariant minimal satu dokter melibatkan himpunan baris",
+        "paragraphs": [
+          "Aturan “selalu ada minimal satu dokter on call” tidak dimiliki oleh satu row. Ia adalah predicate atas himpunan `lesson_on_call_doctors WHERE on_call`. Dengan dua dokter aktif, A dan B sama-sama dapat membaca COUNT(*) = 2 pada snapshot mereka. A mematikan D1 dan B mematikan D2. Karena row yang ditulis berbeda, tidak ada konflik write-write pada row yang sama; pada Repeatable Read kedua transaction dapat menyelesaikan update dan commit, tetapi state akhir mempunyai count nol. Inilah write skew: keputusan masing-masing tampak benar bila berdiri sendiri, tetapi gabungannya melanggar invariant.",
+          "CHECK (on_call IN (true, false)) atau NOT NULL hanya menjaga bentuk setiap row. Foreign key juga tidak menghitung dokter aktif. Bahkan UPDATE ... WHERE on_call AND (SELECT COUNT(*) ...) dapat tetap rentan bila dua transaction membaca count yang sama tanpa koordinasi atas seluruh predicate. Guard harus mengunci objek yang mewakili invariant, mengambil lock pada semua candidate row dalam urutan konsisten, atau meminta Serializable mendeteksi dependency read-write."
+        ]
+      },
+      {
+        "title": "Phantom adalah perubahan pada hasil predicate",
+        "paragraphs": [
+          "Phantom terjadi ketika query predicate dijalankan ulang dan himpunan baris yang cocok berubah karena insert, delete, atau update dari transaction lain. Misalnya A membaca tidak ada dokter on call untuk shift malam lalu hendak membuat assignment; B menyisipkan assignment yang juga cocok sebelum A membaca ulang. Pada Repeatable Read, snapshot A tetap melihat dunia awal, tetapi aturan bisnis belum otomatis menjadi serial. Pada Read Committed, statement berikutnya dapat melihat himpunan committed yang lebih baru. Snapshot visibility menjawab apa yang terlihat, bukan apakah keputusan lintas row aman.",
+          "PostgreSQL Serializable memantau dependency predicate untuk menolak commit yang tidak punya urutan serial. Dalam trace authored, A dan B sama-sama membaca dua dokter lalu menulis row berlawanan; expected outcome adalah satu commit dan satu serialization failure SQLSTATE 40001. Itu adalah expected design reasoning, bukan hasil eksekusi dua koneksi. Ketika 40001 terjadi, seluruh transaction harus dibatalkan dan diulang dari awal agar snapshot, count, dan keputusan diperbarui; jangan melanjutkan statement pada transaction yang sudah aborted."
+        ]
+      },
+      {
+        "title": "Lock guard atau Serializable harus menutup seluruh keputusan",
+        "paragraphs": [
+          "Salah satu pendekatan eksplisit adalah membuat guard row untuk satu shift, mengunci guard itu, lalu membaca dan memperbarui dokter dalam transaction yang sama. Pendekatan lain mengunci semua row candidate dengan `SELECT ... FOR UPDATE ORDER BY doctor_id`, kemudian menghitung ulang dan hanya mematikan dokter bila count aktif lebih dari satu. Semua writer harus mengikuti protokol yang sama; lock pada satu dokter saja tidak menghalangi transaction lain mematikan dokter yang berbeda.",
+          "Serializable dapat menjadi pilihan ketika predicate dan writer path luas atau sulit dipetakan ke lock manual. Ia tidak menjamin setiap transaction sukses dan tidak menghilangkan retry. Retry harus mengulang seluruh unit kerja dengan transaction baru, bukan hanya UPDATE terakhir. Jika policy juga mengizinkan insert assignment baru, desain harus memperhitungkan phantom dan semua tabel yang berpartisipasi. Lesson ini tidak menjalankan schedule, tidak mengklaim bukti MVCC, dan tidak mengubah School Finance."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset B — authored write-skew trace untuk aturan minimal satu dokter piket pada shift malam. Initial rows: D1 dan D2 on_call = true. A membaca count 2 lalu menulis D1=false; B membaca count 2 lalu menulis D2=false. Trace RR memprediksi dua commit dan count 0; trace Serializable memprediksi satu commit dan satu 40001. Baris B adalah victim ilustratif yang dipilih untuk worked output, bukan jaminan pemilihan victim PostgreSQL. Tidak ada dua-session runtime execution.",
+      "setupSql": "CREATE TEMP TABLE lesson_on_call_doctors (\n  doctor_id INTEGER PRIMARY KEY,\n  doctor_name TEXT NOT NULL,\n  shift_code TEXT NOT NULL,\n  on_call BOOLEAN NOT NULL\n);\nINSERT INTO pg_temp.lesson_on_call_doctors VALUES\n  (1, 'Dr A', 'NIGHT', true),\n  (2, 'Dr B', 'NIGHT', true);\nCREATE TEMP TABLE lesson_write_skew_trace (\n  isolation_level TEXT NOT NULL,\n  session_label TEXT NOT NULL,\n  step_no INTEGER NOT NULL,\n  action TEXT NOT NULL,\n  visible_on_call TEXT NULL,\n  expected_result TEXT NOT NULL,\n  PRIMARY KEY (isolation_level, session_label, step_no)\n);\nINSERT INTO pg_temp.lesson_write_skew_trace VALUES\n  ('REPEATABLE READ','A',1,'read count then set D1 off','D1,D2','commit'),\n  ('REPEATABLE READ','B',1,'read count then set D2 off','D1,D2','commit'),\n  ('SERIALIZABLE','A',1,'read count then set D1 off','D1,D2','one transaction commits'),\n  ('SERIALIZABLE','B',1,'read count then set D2 off','D1,D2','40001 serialization_failure');",
+      "sql": "SELECT isolation_level, session_label, step_no, action, visible_on_call, expected_result\nFROM pg_temp.lesson_write_skew_trace\nORDER BY CASE isolation_level WHEN 'REPEATABLE READ' THEN 1 ELSE 2 END, session_label;",
+      "columns": [
+        "isolation_level",
+        "session_label",
+        "step_no",
+        "action",
+        "visible_on_call",
+        "expected_result"
+      ],
+      "rows": [
+        [
+          "REPEATABLE READ",
+          "A",
+          "1",
+          "read count then set D1 off",
+          "D1,D2",
+          "commit"
+        ],
+        [
+          "REPEATABLE READ",
+          "B",
+          "1",
+          "read count then set D2 off",
+          "D1,D2",
+          "commit"
+        ],
+        [
+          "SERIALIZABLE",
+          "A",
+          "1",
+          "read count then set D1 off",
+          "D1,D2",
+          "one transaction commits"
+        ],
+        [
+          "SERIALIZABLE",
+          "B",
+          "1",
+          "read count then set D2 off",
+          "D1,D2",
+          "40001 serialization_failure"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Trace authored membuat invariant dan opposite-row writes eksplisit. Pada Repeatable Read, kedua session dapat membaca snapshot yang sama dan memperbarui row berbeda, sehingga schedule memprediksi dua commit dan nol dokter piket. Pada Serializable, dependency yang sama diperkirakan membuat satu transaction abort dengan 40001; baris B ditampilkan sebagai pilihan victim ilustratif, bukan janji victim PostgreSQL. Tabel ini adalah input pembelajaran, bukan output concurrency PostgreSQL yang diamati."
+    },
+    "checks": [
+      {
+        "id": "l4m03l02-check-1",
+        "question": "Mengapa A mematikan D1 dan B mematikan D2 dapat sama-sama commit pada Repeatable Read?",
+        "options": [
+          "Mereka menulis row berbeda walaupun keputusan masing-masing membaca count aktif yang sama.",
+          "Repeatable Read selalu menonaktifkan semua foreign key.",
+          "Snapshot otomatis menggabungkan hasil dua update menjadi satu dokter aktif"
+        ],
+        "answer": 0,
+        "explanation": "Write skew terjadi karena invariant lintas row tidak terlihat sebagai konflik write-write pada satu row.",
+        "feedback": [
+          "Benar: opposite-row writes dapat merusak invariant global.",
+          "Isolation level tidak mematikan FK; FK juga bukan penjaga count dokter aktif.",
+          "Snapshot tidak menggabungkan hasil dan tidak menciptakan row baru."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l4m03l02-check-2",
+        "question": "Apa recovery yang benar ketika transaction Serializable menerima SQLSTATE 40001?",
+        "options": [
+          "Abaikan error lalu lanjutkan UPDATE terakhir dalam transaction yang sama.",
+          "ROLLBACK dan retry seluruh unit kerja dengan transaction baru.",
+          "COMMIT paksa agar hasil snapshot lama tetap dipakai"
+        ],
+        "answer": 1,
+        "explanation": "Serialization failure berarti transaction saat ini tidak dapat dipakai; retry harus membuat snapshot dan keputusan baru.",
+        "feedback": [
+          "Transaction yang aborted tidak dapat dipakai untuk melanjutkan operasi normal.",
+          "Benar: rollback, ulangi read dan write, lalu commit bila percobaan baru berhasil.",
+          "COMMIT tidak mengubah serialization failure menjadi commit yang valid."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi apakah invariant minimal satu dokter piket bertahan pada Repeatable Read dan Serializable, lalu pilih perbaikan yang mencakup seluruh predicate.",
+      "setup": "Gunakan Dataset B: D1 dan D2 aktif pada NIGHT. A dan B sama-sama membaca count 2 lalu mematikan dokter yang berbeda. Trace adalah authored schedule; tidak ada lock atau SQLSTATE yang diamati oleh player.",
+      "starterSql": "SELECT isolation_level, session_label, expected_result\nFROM pg_temp.lesson_write_skew_trace\nWHERE isolation_level IN ('REPEATABLE READ', 'SERIALIZABLE')\nORDER BY isolation_level, session_label;",
+      "variants": [
+        {
+          "id": "l4m03l02-variant-1",
+          "question": "Jika awalnya ada tiga dokter on call dan A mematikan D1 sementara B mematikan D2, apakah aturan minimal satu dokter pasti rusak?",
+          "options": [
+            "Tidak pada schedule ini: setelah dua update, D3 masih on call; tetapi pola tetap perlu guard untuk schedule lain.",
+            "Ya, setiap dua update berbeda selalu menghasilkan count nol.",
+            "Ya, karena Serializable selalu menolak semua update berbeda"
+          ],
+          "answer": 0,
+          "explanation": "Invariant dapat tetap benar pada input tertentu, tetapi correctness tidak boleh bergantung pada jumlah kecil yang kebetulan aman.",
+          "feedback": [
+            "Benar: D3 menjaga count satu pada trace ini, tetapi writer path tetap perlu aturan yang umum.",
+            "Dua update dari tiga tidak mematikan dokter ketiga.",
+            "Serializable hanya menolak dependency yang tidak serial, bukan semua update berbeda."
+          ]
+        },
+        {
+          "id": "l4m03l02-variant-2",
+          "question": "Jika policy minimal satu dokter dijaga dengan guard row shift yang selalu dikunci lebih dulu, apa manfaatnya?",
+          "options": [
+            "Semua writer untuk shift yang sama terserialisasi sebelum membaca dan memperbarui dokter.",
+            "Guard row otomatis membuat dokter yang hilang menjadi aktif tanpa UPDATE.",
+            "Guard row membuat phantom pada semua tabel menjadi mustahil tanpa protokol writer"
+          ],
+          "answer": 0,
+          "explanation": "Satu objek lock yang dipatuhi semua writer dapat menjadi titik koordinasi untuk keputusan lintas row pada shift.",
+          "feedback": [
+            "Benar: writer kedua menunggu dan harus menghitung ulang state setelah lock diperoleh.",
+            "Lock tidak melakukan perubahan bisnis secara otomatis.",
+            "Guard hanya melindungi writer yang mengikuti protokol dan scope yang sama."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l4m03l02-edge-1",
+          "question": "A membaca tidak ada row untuk predicate `shift_code = 'NIGHT' AND on_call = true`, lalu B INSERT row yang cocok. Apa jenis perubahan yang perlu dipikirkan?",
+          "options": [
+            "Phantom: himpunan row yang cocok berubah, bukan sekadar nilai satu row yang dibaca ulang.",
+            "Lost update pada row yang sama pasti terjadi.",
+            "Tidak ada perubahan karena INSERT tidak pernah terlihat pada database"
+          ],
+          "answer": 0,
+          "explanation": "Predicate query dapat melihat himpunan yang berbeda antar statement atau dependency serializable.",
+          "feedback": [
+            "Benar: insert baru yang memenuhi predicate adalah contoh phantom.",
+            "Tidak ada row yang sama untuk ditimpa pada skenario ini.",
+            "INSERT yang commit dapat terlihat sesuai snapshot dan isolation level."
+          ]
+        },
+        {
+          "id": "l4m03l02-edge-2",
+          "question": "Apakah trace authored ini membuktikan session B pasti menjadi pihak yang menerima 40001?",
+          "options": [
+            "Ya, karena B selalu menulis dokter dengan ID lebih besar.",
+            "Tidak; satu transaction diperkirakan abort, tetapi victim yang dipilih bukan kontrak lesson.",
+            "Ya, karena PostgreSQL selalu membatalkan transaction yang mulai kedua"
+          ],
+          "answer": 1,
+          "explanation": "Trace mengajarkan kelas konflik dan recovery, bukan deterministic victim selection.",
+          "feedback": [
+            "Doctor ID tidak menentukan victim serialization failure.",
+            "Benar: aplikasi harus menangani 40001 pada setiap transaction yang dapat konflik.",
+            "Urutan mulai tidak cukup untuk menjamin transaction kedua selalu kalah."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Tulis invariant sebagai COUNT(on_call) >= 1 dan tandai row mana yang ditulis A serta B.",
+        "Opposite-row writes dapat lolos Repeatable Read; Serializable mendeteksi dependency, bukan sekadar mengunci row yang sama.",
+        "Pada 40001, rollback dan ulangi seluruh read-count-decision-update sebagai transaction baru; jangan retry UPDATE terakhir saja."
+      ],
+      "solutionSql": "BEGIN ISOLATION LEVEL SERIALIZABLE;\nSELECT doctor_id\nFROM pg_temp.lesson_on_call_doctors\nWHERE shift_code = 'NIGHT' AND on_call\nORDER BY doctor_id\nFOR UPDATE;\nUPDATE pg_temp.lesson_on_call_doctors\nSET on_call = false\nWHERE doctor_id = 1\n  AND on_call = true\n  AND (SELECT COUNT(*) FROM pg_temp.lesson_on_call_doctors WHERE shift_code = 'NIGHT' AND on_call) > 1\nRETURNING doctor_id, on_call;\nCOMMIT;",
+      "solutionExplanation": "Reference pattern menutup keputusan dengan Serializable dan explicit row lock yang diambil dalam urutan stabil sebelum count serta update. Jika konflik predicate tetap menghasilkan 40001, caller harus rollback dan mengulang seluruh transaction. SQL ini adalah pola desain satu writer pada TEMP fixture, bukan eksekusi dua session atau bukti deterministic victim.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa dua dokter dapat sama-sama dimatikan pada Repeatable Read walaupun masing-masing membaca count yang valid. Bedakan write skew dari phantom, lalu jelaskan mengapa Serializable 40001 harus diikuti retry seluruh transaction."
+  },
+  {
+    "id": "l4m03l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "deadlock",
+      "lock-timeout",
+      "retry",
+      "lock-ordering",
+      "payment-ledger"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/explicit-locking.html",
+      "https://www.postgresql.org/docs/17/runtime-config-client.html",
+      "https://www.postgresql.org/docs/17/errcodes-appendix.html"
+    ],
+    "hook": "Session A mengunci rekening 1 lalu meminta rekening 2, sedangkan B mengunci rekening 2 lalu meminta rekening 1. Kapan PostgreSQL memutus deadlock dengan 40P01, kapan lock_timeout menghasilkan 55P03, dan mengapa timeout setelah COMMIT bukan izin untuk retry buta?",
+    "objectives": [
+      "Mengenali siklus tunggu deadlock dan mencegahnya dengan urutan lock yang konsisten.",
+      "Membedakan deadlock 40P01 dari lock timeout 55P03 serta memilih retry bounded yang sesuai.",
+      "Menangani commit atau koneksi yang outcome-nya tidak diketahui sebagai rekonsiliasi, bukan retry otomatis tanpa idempotency."
+    ],
+    "sections": [
+      {
+        "title": "Deadlock adalah siklus tunggu antartransaction",
+        "paragraphs": [
+          "Deadlock terjadi ketika A memegang lock rekening 1 dan menunggu rekening 2, sementara B memegang rekening 2 dan menunggu rekening 1. Tidak ada transaction yang dapat maju dengan menunggu lebih lama karena masing-masing memerlukan lock milik yang lain. PostgreSQL mendeteksi siklus dan membatalkan salah satu transaction; victim tidak boleh dipilih sebagai aturan bisnis yang bergantung pada urutan request. Error yang dilaporkan untuk deadlock adalah SQLSTATE 40P01 (`deadlock_detected`), dan transaction yang dibatalkan harus diakhiri sebelum retry.",
+          "Pertahanan utama adalah membuat semua jalur yang mengunci lebih dari satu objek memakai total order yang sama, misalnya account_id ascending. Transfer 1→2 dan 2→1 sama-sama mengunci rekening dengan ID kecil lebih dulu, lalu rekening besar. Arah uang boleh berbeda, tetapi urutan memperoleh lock harus sama. Order yang konsisten mengurangi cycle; ia tidak menyelesaikan lock yang hilang, transaksi terlalu panjang, atau writer path lain yang tidak mengikuti protokol."
+        ]
+      },
+      {
+        "title": "Timeout bukan bukti deadlock",
+        "paragraphs": [
+          "`lock_timeout` membatasi berapa lama satu lock acquisition boleh menunggu. Jika batas terlampaui, statement gagal dengan lock_not_available, lazimnya SQLSTATE 55P03. Waiter dapat timeout karena transaction pemegang lock lambat, bukan karena ada cycle. Deadlock detector memiliki jalur berbeda: ia mencari siklus dan membatalkan satu transaction dengan 40P01. Jangan menyamakan semua “terlalu lama” sebagai deadlock, dan jangan mengubah batas waktu menjadi jaminan fairness.",
+          "Setelah 55P03 atau 40P01, statement dalam transaction dapat membuat transaction berada dalam failed state; rollback seluruh unit biasanya menjadi boundary retry yang paling mudah dipahami. Retry perlu bounded dengan backoff dan jitter agar banyak waiter tidak menyerbu ulang bersamaan. Jika operasi memiliki side effect di luar database, ulangi hanya setelah memastikan idempotency atau rekonsiliasi. Timeout juga perlu dibedakan dari statement_timeout dan cancellation; SQLSTATE membantu memilih jalur recovery, bukan teks error lokal."
+        ]
+      },
+      {
+        "title": "Commit yang tidak diketahui bukan deadlock",
+        "paragraphs": [
+          "Koneksi dapat terputus ketika client menunggu hasil COMMIT. Server mungkin sudah commit, sedang menyelesaikan commit, atau belum menerima request; dari sisi client outcome belum diketahui. PostgreSQL memiliki SQLSTATE `40003` untuk statement_completion_unknown dan koneksi dapat gagal dengan error kelas connection exception. Situasi ini berbeda dari 40P01 dan 55P03: retry buta dapat menggandakan payment atau transfer. Rekonsiliasi harus mencari business key, idempotency key, atau status ledger sebelum mengulang.",
+          "Worked trace memakai input A/B yang sudah diberi label “authored”; ia bukan log lock manager dan tidak membuktikan victim, durasi timeout, atau outcome commit. Reference SQL hanya menunjukkan lock ordering dan SET LOCAL lock_timeout pada transaction baru. Di produksi, simpan telemetry error code, pastikan rollback atau koneksi dibuang setelah error, batasi jumlah retry, dan sediakan jalur manual ketika outcome commit tidak dapat dipastikan."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset C — authored two-session lock trace untuk transfer antar account 1 dan 2. A mengunci 1 lalu meminta 2; B mengunci 2 lalu meminta 1. Trace alternatif menunjukkan B menunggu lebih lama dari lock_timeout tanpa cycle resolution. Baris C pada account 9/10 adalah skenario authored alternatif, bukan observasi setup account 1/2. Semua hasil adalah expected teaching rows, bukan observasi runtime.",
+      "setupSql": "CREATE TEMP TABLE lesson_lock_accounts (\n  account_id BIGINT PRIMARY KEY,\n  balance NUMERIC(12,2) NOT NULL\n);\nINSERT INTO pg_temp.lesson_lock_accounts VALUES (1, 100000.00), (2, 50000.00);\nCREATE TEMP TABLE lesson_lock_trace (\n  trace_step INTEGER PRIMARY KEY,\n  session_label TEXT NOT NULL,\n  held_locks TEXT NOT NULL,\n  requested_lock TEXT NULL,\n  expected_error TEXT NULL,\n  recovery TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_lock_trace VALUES\n  (1, 'A', 'account 1', 'account 2', NULL, 'wait'),\n  (2, 'B', 'account 2', 'account 1', '40P01', 'rollback whole transaction then retry ordered'),\n  (3, 'A', 'account 1', 'account 2', NULL, 'continues after B aborts'),\n  (4, 'C', 'account 9', 'account 10', '55P03', 'rollback and bounded retry if operation is safe');",
+      "sql": "SELECT trace_step, session_label, held_locks, requested_lock, expected_error, recovery\nFROM pg_temp.lesson_lock_trace\nORDER BY trace_step;",
+      "columns": [
+        "trace_step",
+        "session_label",
+        "held_locks",
+        "requested_lock",
+        "expected_error",
+        "recovery"
+      ],
+      "rows": [
+        [
+          "1",
+          "A",
+          "account 1",
+          "account 2",
+          null,
+          "wait"
+        ],
+        [
+          "2",
+          "B",
+          "account 2",
+          "account 1",
+          "40P01",
+          "rollback whole transaction then retry ordered"
+        ],
+        [
+          "3",
+          "A",
+          "account 1",
+          "account 2",
+          null,
+          "continues after B aborts"
+        ],
+        [
+          "4",
+          "C",
+          "account 9",
+          "account 10",
+          "55P03",
+          "rollback and bounded retry if operation is safe"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Baris authored membandingkan deadlock yang terdeteksi dengan lock wait yang mencapai lock_timeout. 40P01 berarti PostgreSQL memilih satu transaction untuk abort agar cycle terputus; 55P03 berarti acquisition lock ini melewati batas tunggu, tanpa membuktikan cycle. NULL pada expected_error berarti langkah trace sedang menunggu atau melanjutkan, bukan bukti lock berhasil. Ambiguitas commit/network sengaja berada di luar tabel ini dan memerlukan rekonsiliasi. Baris C untuk account 9/10 adalah skenario alternatif authored, bukan observasi atas setup account 1/2."
+    },
+    "checks": [
+      {
+        "id": "l4m03l03-check-1",
+        "question": "Apa penyebab utama deadlock pada trace A/B?",
+        "options": [
+          "A dan B memegang lock berbeda lalu saling menunggu lock yang dipegang pihak lain.",
+          "A dan B memakai account_id sebagai primary key.",
+          "Lock timeout selalu berarti PostgreSQL menemukan cycle"
+        ],
+        "answer": 0,
+        "explanation": "Deadlock adalah cycle pada graph tunggu; konsistensi lock ordering mencegah cycle untuk jalur yang mematuhinya.",
+        "feedback": [
+          "Benar: A menunggu 2 dan B menunggu 1 membentuk siklus.",
+          "PK membantu identifikasi row, tetapi bukan penyebab deadlock.",
+          "Timeout dapat terjadi tanpa cycle; deadlock detector dan lock_timeout berbeda."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l4m03l03-check-2",
+        "question": "Apa sikap yang benar jika client kehilangan koneksi setelah COMMIT dan outcome tidak diketahui?",
+        "options": [
+          "Retry UPDATE segera karena koneksi putus pasti berarti rollback.",
+          "Anggap pasti commit lalu ulangi side effect agar aman.",
+          "Rekonsiliasi dengan business/idempotency key sebelum retry; situasi ini bukan 40P01 atau 55P03."
+        ],
+        "answer": 2,
+        "explanation": "Outcome unknown memerlukan pemeriksaan state atau mekanisme idempotensi, bukan asumsi rollback maupun commit.",
+        "feedback": [
+          "Koneksi putus setelah COMMIT dapat terjadi sesudah server commit.",
+          "Mengulang side effect tanpa pemeriksaan dapat menggandakan transfer atau payment.",
+          "Benar: bedakan statement completion unknown dari deadlock dan lock timeout."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Klasifikasikan trace lock menjadi deadlock, lock timeout, atau outcome commit yang tidak diketahui; pilih recovery penuh yang aman.",
+      "setup": "Gunakan Dataset C. A dan B memperoleh lock dalam urutan berlawanan; C menunggu lock terlalu lama tanpa bukti cycle. Trace authored tidak menjalankan lock manager dan tidak menentukan victim secara runtime.",
+      "starterSql": "SELECT session_label, expected_error, recovery\nFROM pg_temp.lesson_lock_trace\nWHERE expected_error IS NOT NULL\nORDER BY trace_step;",
+      "variants": [
+        {
+          "id": "l4m03l03-variant-1",
+          "question": "Dua transfer selalu mengunci account_id ascending, baik arah transfer 1→2 maupun 2→1. Apa risiko yang berkurang?",
+          "options": [
+            "Cycle deadlock dari dua objek yang sama berkurang karena semua writer mengambil lock dalam order yang sama.",
+            "Semua lock timeout dan network failure mustahil terjadi.",
+            "Serializable 40001 tidak mungkin karena lock ordering menggantikan isolation"
+          ],
+          "answer": 0,
+          "explanation": "Total order mencegah pola A memegang objek pertama sementara B memegang objek kedua pada jalur yang sama.",
+          "feedback": [
+            "Benar: ordering menghilangkan sumber cycle untuk writer yang mematuhinya.",
+            "Wait lama, timeout, dan koneksi gagal tetap mungkin.",
+            "Lock ordering bukan pengganti Serializable atau seluruh retry policy."
+          ]
+        },
+        {
+          "id": "l4m03l03-variant-2",
+          "question": "Jika C mendapat 55P03 setelah lock_timeout, apa yang harus dicatat sebelum retry?",
+          "options": [
+            "Bahwa PostgreSQL pasti mendeteksi deadlock dan C adalah victim.",
+            "Statement lock acquisition timeout; rollback transaction dan retry bounded hanya bila operasi aman/idempotent.",
+            "Bahwa COMMIT pasti sudah terjadi di server"
+          ],
+          "answer": 1,
+          "explanation": "55P03 menunjukkan lock tidak tersedia dalam batas waktu, bukan deadlock atau commit sukses.",
+          "feedback": [
+            "40P01 adalah deadlock_detected; 55P03 tidak membuktikan cycle.",
+            "Benar: pisahkan rollback, bounded retry, dan safety/idempotency.",
+            "Lock timeout terjadi saat memperoleh lock, bukan bukti COMMIT."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l4m03l03-edge-1",
+          "question": "PostgreSQL memilih satu victim pada deadlock. Bolehkah aplikasi bergantung bahwa transaction yang mulai kedua selalu dibatalkan?",
+          "options": [
+            "Ya, urutan mulai menentukan victim secara resmi.",
+            "Tidak; victim selection sulit diprediksi dan bukan kontrak business logic.",
+            "Ya, jika kedua transaction memakai row-level lock"
+          ],
+          "answer": 1,
+          "explanation": "Aplikasi harus menangani 40P01 tanpa mengandalkan siapa yang dibatalkan.",
+          "feedback": [
+            "PostgreSQL tidak menjanjikan victim berdasarkan urutan mulai.",
+            "Benar: desain retry harus berlaku untuk transaction mana pun yang abort.",
+            "Row-level lock juga dapat membentuk deadlock dan tidak menetapkan victim tetap."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l4m03l03-edge-2",
+          "question": "Retry penuh setelah 40P01 atau 55P03 memanggil provider eksternal lagi. Apa guard yang diperlukan?",
+          "options": [
+            "Tidak perlu guard karena database sudah rollback.",
+            "Idempotency key atau rekonsiliasi agar efek provider tidak diduplikasi.",
+            "Menambah jumlah retry tanpa batas agar akhirnya pasti sukses"
+          ],
+          "answer": 1,
+          "explanation": "Rollback database tidak membatalkan side effect eksternal yang sudah terjadi sebelum error.",
+          "feedback": [
+            "Rollback tidak menghapus efek provider eksternal.",
+            "Benar: identitas operasi membantu retry aman atau mengarahkan rekonsiliasi.",
+            "Retry tanpa batas dapat memperparah contention dan menggandakan side effect."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Gambarkan graph tunggu: deadlock memiliki cycle; timeout hanya menyatakan satu acquisition menunggu terlalu lama.",
+        "Kunci objek multi-row dalam order yang sama dan batasi retry dengan backoff, jitter, serta attempt limit.",
+        "40P01/55P03 berbeda dari 40003 atau koneksi putus setelah COMMIT; outcome unknown perlu rekonsiliasi sebelum retry."
+      ],
+      "solutionSql": "BEGIN;\nSET LOCAL lock_timeout = '250ms';\nSELECT account_id\nFROM pg_temp.lesson_lock_accounts\nWHERE account_id IN (1, 2)\nORDER BY account_id\nFOR UPDATE;\nUPDATE pg_temp.lesson_lock_accounts\nSET balance = CASE account_id WHEN 1 THEN balance - 10000.00 WHEN 2 THEN balance + 10000.00 END\nWHERE account_id IN (1, 2);\nCOMMIT;",
+      "solutionExplanation": "Reference pattern memakai lock ordering ascending untuk kedua rekening, sehingga transfer berlawanan arah tidak membentuk cycle pada jalur yang mengikuti protokol. lock_timeout membatasi wait dan dapat menghasilkan 55P03; 40P01 tetap mungkin dari writer lain yang melanggar order. Retry harus rollback seluruh transaction dan bounded. Bila koneksi hilang setelah COMMIT, jangan menganggap rollback atau commit tanpa rekonsiliasi business key.",
+      "critical": true
+    },
+    "reflection": "Jelaskan perbedaan deadlock 40P01, lock timeout 55P03, dan outcome COMMIT yang tidak diketahui. Mengapa lock ordering membantu, mengapa retry harus bounded dan seluruh transaction, serta kapan rekonsiliasi diperlukan?"
+  }
+]

@@ -1,16 +1,8 @@
 # Remaining curriculum authoring
 
-The following 69 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
+The following 66 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L4 — Transactions & Concurrency
-
-### L4M03 — Concurrency Anomalies
-
-Prerequisite: l4m02. Scenario: Payment Ledger.
-
-- [ ] `l4m03l01` — Lost update dan atomic UPDATE
-- [ ] `l4m03l02` — Write skew dan phantom
-- [ ] `l4m03l03` — Deadlock, timeout, dan retry
 
 ### L4M04 — Payments dan Idempotency
 
