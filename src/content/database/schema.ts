@@ -1,11 +1,11 @@
 interface SchemaColumn {
   name: string;
   type: string;
-  key?: "PK" | "FK";
+  key?: "PK" | "FK" | "PK/FK";
   references?: string;
 }
 
-interface SchemaTable {
+export interface SchemaTable {
   name: string;
   columns: SchemaColumn[];
   relationship?: { column: string; description: string };

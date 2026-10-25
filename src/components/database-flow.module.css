@@ -161,6 +161,11 @@
   padding: 4px 0;
 }
 
+.modelPair {
+  grid-template-columns: minmax(270px, 1fr) 84px minmax(270px, 1fr);
+  min-width: 640px;
+}
+
 .entity {
   overflow: hidden;
   border: 1px solid var(--green);

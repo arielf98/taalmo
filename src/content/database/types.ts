@@ -8,6 +8,7 @@ export interface ConceptCheck {
   critical?: boolean;
 }
 export interface WorkedExample {
+  dataset?: string;
   sql: string;
   setupSql?: string;
   columns: string[];

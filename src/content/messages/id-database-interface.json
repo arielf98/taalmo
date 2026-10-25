@@ -1,4 +1,12 @@
 {
+  "domain-modeling": "pemodelan domain",
+  "entities": "entitas",
+  "lifecycle": "siklus hidup",
+  "commerce": "perdagangan",
+  "cardinality": "kardinalitas",
+  "junction-table": "tabel penghubung",
+  "invariants": "invariant",
+  "constraints": "constraint",
   "sql": "SQL",
   "null": "nilai NULL",
   "school-finance": "keuangan sekolah",

@@ -18,6 +18,7 @@ import {
 import { schoolSchema } from "@/content/database/schema";
 import { localizedFlowLabels, useLocale } from "@/lib/locale";
 import { Button } from "./ui/button";
+import { DatabaseSchemaTable } from "./database-schema";
 import styles from "./database-flow.module.css";
 
 const topics: { id: DatabaseFlowTopic; label: string }[] = [
@@ -86,38 +87,7 @@ function DatabaseRelationships() {
           <div className={styles.entities}>
             {schoolSchema.map((table) => (
               <Fragment key={table.name}>
-                <div className={styles.entity}>
-                  <table>
-                    <caption>school.{table.name}</caption>
-                    <thead>
-                      <tr>
-                        <th scope="col">{t("Kunci")}</th>
-                        <th scope="col">{t("Kolom")}</th>
-                        <th scope="col">{t("Tipe data")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {table.columns.map((column) => (
-                        <tr key={column.name}>
-                          <td>
-                            {column.key && (
-                              <span className={styles.key}>{column.key}</span>
-                            )}
-                          </td>
-                          <th scope="row"><code>{column.name}</code></th>
-                          <td><code>{column.type}</code></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {table.columns
-                    .filter((column) => column.references)
-                    .map((column) => (
-                      <p className={styles.reference} key={column.name}>
-                        <code>{column.name}</code> FK → <code>{column.references}</code>
-                      </p>
-                    ))}
-                </div>
+                <DatabaseSchemaTable table={table} prefix="school" />
                 {table.relationship && (
                   <div
                     className={styles.relationship}

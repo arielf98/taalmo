@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L1 plus all L2 modules (L2M01–L2M04): 33 published / 87 draft. The original implementation evidence below is retained as release history. L2M02–L2M04 have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L2 plus L3M01: 36 published / 84 draft. The original implementation evidence below is retained as release history. L2M02–L2M04 and L3M01 have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -126,3 +126,17 @@ The catalog now has eleven authored modules and 33 published / 87 draft lessons.
 The content-audit and trusted-SQL file registries include the new JSON for a future authorized run. Existing E2E expectations now use 11 modules/33 lessons, the next draft route l3m01l01, and an available L2 assessment. No test case or registered browser lesson coverage was added; the earlier 24-record loop remains unchanged. No tests, audits, SQL, lint, typecheck, build, browser or manual checks were run, as required by AGENTS.md. All new result values remain source-reviewed expectations, not executed evidence.
 
 Next canonical milestone: **L3M01 — Domain Modeling** (Commerce), starting with entities, attributes and lifecycle. Read the source curriculum and establish any required fixture before authoring it.
+
+## L3M01 continuation — 25 October 2026
+
+Added three bilingual lessons in `l3-modeling.json` and the registered `en-database-modeling.json` display dictionary, retaining the canonical mixed examples:
+
+- `l3m01l01`: Commerce entities, attributes, current state versus events, transaction price snapshots, and separate order/item/payment/refund identities. An isolated inline TEMP fixture has three orders, three items, two payment attempts and one refund. Order 502 has ordered value 70000, successful receipts 70000, refunds 10000 and net receipts 60000. Failed attempts add no receipts; aggregates are computed per branch before joining to orders.
+- `l3m01l02`: cardinality/optionality, 1:1 versus mandatory existence, and student–guardian N:M. Three copied School Finance students, two fictional guardians and three junction pairs demonstrate shared guardians, composite PK uniqueness, and no-guardian LEFT JOIN behavior. Guardian counts for students 1/2/5 are 2/1/0; the final string aggregate is NULL. TEMP endpoints reference TEMP copies; School Finance is unchanged.
+- `l3m01l03`: eight explicit school payment invariants and their enforcement boundaries. I1–I5 are structurally enforced in the seed. I6–I7 have zero observed violations but missing guards; I8 cannot be counted without callback identity and returns NULL. A proposed TEMP CHECK demonstrates I6 only; its reference INSERT intentionally expects SQLSTATE 23514 rather than claiming seed overpayment rejection.
+
+`DatabaseSchemaTable` now shares the prior School Finance card markup with static L3M01 ERDs. Typed `modeling-schemas.ts` pairs display PK/FK markers (including both composite PK/FK columns), data types, required endpoints, 1/0..N cardinalities, and accompanying prose. Branching entities repeat across relationship pairs for readability. Existing mobile stacking and keyboard-focusable scroll regions are reused. An optional `worked.dataset` labels alternate fixtures while preserving prior lessons' School Finance fallback. SQL, identifiers, fixture values, answer indexes and prior progress/version records are unchanged by locale changes.
+
+Counts: twelve authored modules, 36 published / 84 draft lessons; combined transaction/database availability is 39 lessons plus three labs (42 activity milestones). L3M01 follows L2M04, and L3's stage assessment remains unavailable while later modules are draft. Content/SQL file registries include the new JSON for a future explicitly authorized run. Existing E2E expectations only update the count and next draft route to l3m02l01; no tests or registered browser lesson coverage were added.
+
+Review is source/diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run under AGENTS.md. Numerical, Boolean and rejection outputs are authored expectations rather than runtime evidence. Next: **L3M02 — Normalization dan Trade-off**.

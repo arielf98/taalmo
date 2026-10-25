@@ -17,6 +17,8 @@ import { lessons, labs, milestoneIds } from "@/content/lessons";
 import { Button } from "./ui/button";
 import { Quiz } from "./quiz";
 import { DatabaseFlowExplorer } from "./database-flow";
+import { DatabaseModelDiagram } from "./database-schema";
+import { databaseLessonSchemas } from "@/content/database/modeling-schemas";
 import { databaseLessonFlowTopics } from "@/content/database/flows";
 import { useProgress } from "@/lib/progress";
 import {
@@ -539,6 +541,7 @@ export function DatabaseLessonPlayer({ lesson }: { lesson: DatabaseLesson }) {
     resumeLearning(lesson.id);
   }, [lesson.id, resumeLearning]);
   const content = lesson.content!;
+  const schema = databaseLessonSchemas[lesson.id];
   const key = lessonRecordKey(lesson.id, content.version);
   const record = curriculum.records[key];
   const attempt = record?.attempt ?? 0;
@@ -620,6 +623,7 @@ export function DatabaseLessonPlayer({ lesson }: { lesson: DatabaseLesson }) {
           {databaseLessonFlowTopics[lesson.id] && (
             <DatabaseFlowExplorer topic={databaseLessonFlowTopics[lesson.id]} />
           )}
+          {schema && <DatabaseModelDiagram diagram={schema} />}
           {content.sections.map((section) => (
             <section key={section.title}>
               <h2>{t(section.title)}</h2>
@@ -634,7 +638,8 @@ export function DatabaseLessonPlayer({ lesson }: { lesson: DatabaseLesson }) {
           <h2>{t("Baca input, telusuri hasil")}</h2>
           <p>
             {t(
-              "Dataset School Finance v1: 6 siswa, 10 invoice, 11 pembayaran. Nilai uang dalam rupiah. Hanya pembayaran succeeded dihitung sebagai penerimaan. Tanggal acuan di contoh selalu tetap.",
+              content.worked.dataset ??
+                "Dataset School Finance v1: 6 siswa, 10 invoice, 11 pembayaran. Nilai uang dalam rupiah. Hanya pembayaran succeeded dihitung sebagai penerimaan. Tanggal acuan di contoh selalu tetap.",
             )}
           </p>
           {content.worked.setupSql && (

@@ -1,0 +1,618 @@
+[
+  {
+    "id": "l3m01l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "domain-modeling",
+      "entities",
+      "lifecycle",
+      "commerce"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/ddl-constraints.html"
+    ],
+    "hook": "Satu order mempunyai dua item, dua percobaan payment, dan satu refund sebagian. Jika semuanya disimpan sebagai satu status paid, fakta mana yang hilang dan bagaimana menjaga identitas setiap kejadian?",
+    "objectives": [
+      "Memisahkan identitas entity, atribut state, dan fakta kejadian dalam domain Commerce.",
+      "Menelusuri order, item, payment, dan refund melalui ERD serta tabel hasil.",
+      "Membedakan state saat ini dari histori lifecycle serta batas constraint contoh."
+    ],
+    "sections": [
+      {
+        "title": "Identitas bertahan ketika atribut berubah",
+        "paragraphs": [
+          "Entity adalah sesuatu yang identitasnya perlu dipertahankan ketika atribut berubah. Order 502 tetap order yang sama saat state berubah dari draft menjadi confirmed. Item memiliki identitas order_item_id sendiri karena satu order dapat memuat beberapa baris barang. Payment 701 dan 702 adalah dua percobaan berbeda, walaupun keduanya milik order yang sama. Refund 801 merujuk payment 701 yang uangnya dikembalikan. Nama tabel sebaiknya mengikuti fakta yang perlu dilacak, bukan sekadar bentuk layar checkout saat ini.",
+          "Atribut menjelaskan fakta pada grain entity tersebut. Quantity dan unit_price berada pada item, bukan diulang sebagai kolom item_1 dan item_2 pada order. Unit_price pada contoh adalah harga yang disepakati untuk baris transaksi, sehingga perubahan harga katalog kelak tidak menghitung ulang pesanan lama. SKU hanya kode barang pada mini fixture ini; belum ada tabel katalog produk atau foreign key ke katalog. Jangan menyimpulkan jaminan relasi yang tidak digambarkan dan tidak didefinisikan oleh setup SQL."
+        ]
+      },
+      {
+        "title": "State bukan catatan lengkap kejadian",
+        "paragraphs": [
+          "State confirmed memberitahu kondisi order saat ini, tetapi tidak menjelaskan kapan setiap transisi terjadi, siapa yang mengubahnya, atau mengapa order dibatalkan. Event menyatakan fakta yang telah terjadi, misalnya OrderConfirmed pada suatu waktu. Event dapat disimpan sebagai record beridentitas tersendiri bila kebutuhan audit mengharuskannya; mini fixture ini belum memiliki tabel event. Payment dan refund juga perlu record sendiri karena nominal, target, dan hasil setiap percobaan penting. Mengganti status payment berhasil menjadi refunded akan menghilangkan informasi bila refund hanya sebagian."
+        ]
+      },
+      {
+        "title": "Pisahkan jumlah pesanan dan pergerakan uang",
+        "paragraphs": [
+          "Order 502 bernilai 70000 dari satu BOOK seharga 60000 dan dua PEN seharga 5000 per unit. Payment berhasilnya 70000, sedangkan percobaan failed 10000 tidak menambah penerimaan. Refund berhasil 10000 mengurangi uang bersih menjadi 60000 tanpa mengubah nilai barang yang dipesan. Nilai order, total payment berhasil, dan net_received menjawab pertanyaan berbeda. Preagregasikan tiap cabang sebelum join ke order agar dua item dan dua payment tidak saling menggandakan total. Order 503 tanpa item tetap muncul dengan nilai nol.",
+          "ERD memperbolehkan order mempunyai nol sampai banyak item dan payment pada struktur dasar. Aturan bahwa order confirmed harus mempunyai setidaknya satu item adalah kebijakan saat transisi, belum dipaksakan oleh foreign key. CHECK state membatasi label yang diizinkan, bukan urutan transisi; ia tidak mencegah cancelled kembali ke confirmed. Refund harus menunjuk payment yang ada, tetapi batas kumulatif refund dan syarat payment berhasil memerlukan aturan tambahan. Model awal perlu menyatakan kekurangan ini agar diagram tidak disalahartikan sebagai sistem pembayaran siap produksi."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Mini fixture Commerce: 3 order, 3 item, 2 percobaan payment, dan 1 refund. Tabel TEMP terpisah dari School Finance; nominal dalam rupiah dan status merupakan state snapshot.",
+      "setupSql": "CREATE TEMP TABLE lesson_orders (\n  order_id BIGINT PRIMARY KEY,\n  state TEXT NOT NULL CHECK (state IN ('draft','confirmed','cancelled')),\n  created_at TIMESTAMPTZ NOT NULL\n);\nCREATE TEMP TABLE lesson_order_items (\n  order_item_id BIGINT PRIMARY KEY,\n  order_id BIGINT NOT NULL REFERENCES pg_temp.lesson_orders(order_id),\n  sku TEXT NOT NULL,\n  quantity INTEGER NOT NULL CHECK (quantity > 0),\n  unit_price NUMERIC(12,2) NOT NULL CHECK (unit_price >= 0)\n);\nCREATE TEMP TABLE lesson_payments (\n  payment_id BIGINT PRIMARY KEY,\n  order_id BIGINT NOT NULL REFERENCES pg_temp.lesson_orders(order_id),\n  amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),\n  status TEXT NOT NULL CHECK (status IN ('succeeded','pending','failed')),\n  paid_at TIMESTAMPTZ NULL\n);\nCREATE TEMP TABLE lesson_refunds (\n  refund_id BIGINT PRIMARY KEY,\n  payment_id BIGINT NOT NULL REFERENCES pg_temp.lesson_payments(payment_id),\n  amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),\n  status TEXT NOT NULL CHECK (status IN ('succeeded','pending','failed'))\n);\nINSERT INTO pg_temp.lesson_orders VALUES\n (501,'draft','2026-10-01 03:00:00+00'),\n (502,'confirmed','2026-10-02 03:00:00+00'),\n (503,'cancelled','2026-10-03 03:00:00+00');\nINSERT INTO pg_temp.lesson_order_items VALUES\n (601,501,'NOTE',2,15000), (602,502,'BOOK',1,60000), (603,502,'PEN',2,5000);\nINSERT INTO pg_temp.lesson_payments VALUES\n (701,502,70000,'succeeded','2026-10-05 03:00:00+00'), (702,502,10000,'failed',NULL);\nINSERT INTO pg_temp.lesson_refunds VALUES (801,701,10000,'succeeded');",
+      "sql": "WITH items AS (\n  SELECT order_id, SUM(quantity * unit_price) AS ordered\n  FROM pg_temp.lesson_order_items GROUP BY order_id\n), captured AS (\n  SELECT order_id, SUM(amount) AS paid\n  FROM pg_temp.lesson_payments WHERE status = 'succeeded' GROUP BY order_id\n), refunded AS (\n  SELECT p.order_id, SUM(r.amount) AS refunded\n  FROM pg_temp.lesson_refunds r\n  JOIN pg_temp.lesson_payments p ON p.payment_id = r.payment_id\n  WHERE r.status = 'succeeded' AND p.status = 'succeeded'\n  GROUP BY p.order_id\n)\nSELECT o.order_id, o.state, COALESCE(i.ordered,0.00) AS ordered,\n       COALESCE(c.paid,0.00) AS paid, COALESCE(r.refunded,0.00) AS refunded,\n       COALESCE(c.paid,0.00)-COALESCE(r.refunded,0.00) AS net_received\nFROM pg_temp.lesson_orders o\nLEFT JOIN items i ON i.order_id = o.order_id\nLEFT JOIN captured c ON c.order_id = o.order_id\nLEFT JOIN refunded r ON r.order_id = o.order_id\nORDER BY o.order_id;",
+      "columns": [
+        "order_id",
+        "state",
+        "ordered",
+        "paid",
+        "refunded",
+        "net_received"
+      ],
+      "rows": [
+        [
+          "501",
+          "draft",
+          "30000.00",
+          "0.00",
+          "0.00",
+          "0.00"
+        ],
+        [
+          "502",
+          "confirmed",
+          "70000.00",
+          "70000.00",
+          "10000.00",
+          "60000.00"
+        ],
+        [
+          "503",
+          "cancelled",
+          "0.00",
+          "0.00",
+          "0.00",
+          "0.00"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Tabel merangkum grain satu order tanpa mencampur jumlah barang dan uang bersih. Dua item order 502 bernilai 70000; hanya payment 701 dihitung dan refund 801 mengurangi penerimaan menjadi 60000. State order tetap confirmed: tabel ini bukan histori transisi atau laporan margin."
+    },
+    "checks": [
+      {
+        "id": "l3m01l01-check-1",
+        "question": "Atribut mana yang tepat untuk unit_price yang disepakati pada satu baris barang pesanan?",
+        "options": [
+          "Pada order_item bersama quantity dan identitas baris.",
+          "Hanya pada state payment karena harga adalah uang.",
+          "Pada nama order sebagai teks gabungan semua barang."
+        ],
+        "answer": 0,
+        "explanation": "Harga transaksi melekat pada grain item; satu order dapat memiliki beberapa barang dan harga berbeda.",
+        "feedback": [
+          "Benar: atribut ditempatkan pada entity yang memiliki fakta tersebut.",
+          "Payment menjelaskan penerimaan, bukan harga per unit barang yang dipesan.",
+          "Teks gabungan menyulitkan identitas, kuantitas, dan perhitungan setiap baris."
+        ]
+      },
+      {
+        "id": "l3m01l01-check-2",
+        "question": "Apakah state confirmed dan created_at cukup untuk merekonstruksi seluruh lifecycle order?",
+        "options": [
+          "Ya, setiap label state menyimpan semua transisi sebelumnya.",
+          "Tidak; perlu fakta transisi terpisah bila waktu dan alasan perubahan harus diaudit.",
+          "Ya, foreign key payment otomatis membuat log event."
+        ],
+        "answer": 1,
+        "explanation": "State saat ini dan waktu pembuatan tidak menyimpan riwayat perubahan; fixture tidak memiliki event log.",
+        "feedback": [
+          "Label hanya menyatakan kondisi saat ini, bukan urutan atau waktu kejadian.",
+          "Benar: kebutuhan audit menentukan fakta histori yang perlu disimpan.",
+          "Foreign key memastikan referensi, bukan mencatat kejadian perubahan."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi ringkasan Commerce dan tentukan fakta yang hilang bila entity digabung.",
+      "setup": "Gunakan tabel TEMP pada setup. Ordered adalah quantity × unit_price; hanya payment dan refund succeeded masuk perhitungan uang. Dua percobaan payment bukan dua order.",
+      "starterSql": "SELECT o.order_id, i.quantity * i.unit_price AS line_value, p.amount\nFROM pg_temp.lesson_orders o\nLEFT JOIN pg_temp.lesson_order_items i ON i.order_id = o.order_id\nLEFT JOIN pg_temp.lesson_payments p ON p.order_id = o.order_id;",
+      "variants": [
+        {
+          "id": "l3m01l01-variant-1",
+          "question": "Berapa ordered, paid, dan net_received order 502 pada contoh?",
+          "options": [
+            "70000, 80000, dan 70000.",
+            "140000, 140000, dan 130000.",
+            "70000, 70000, dan 60000."
+          ],
+          "answer": 2,
+          "explanation": "60000 + 2 × 5000 = 70000; failed diabaikan dan refund berhasil 10000 dikurangkan sekali.",
+          "feedback": [
+            "80000 memasukkan percobaan payment failed yang belum menjadi penerimaan.",
+            "Itu menggandakan cabang item dan payment pada join detail.",
+            "Benar: nilai pesanan dan uang bersih dipisahkan sesuai grain."
+          ]
+        },
+        {
+          "id": "l3m01l01-variant-2",
+          "question": "Jika harga katalog BOOK kelak menjadi 65000 tetapi harga transaksi item tetap 60000, bagaimana nilai order 502?",
+          "options": [
+            "Tetap 70000 sesuai harga yang disepakati pada item.",
+            "Otomatis 75000 karena semua histori mengikuti katalog terbaru.",
+            "Menjadi 60000 karena refund mengubah nilai barang."
+          ],
+          "answer": 0,
+          "explanation": "Snapshot harga transaksi mempertahankan fakta pesanan lama; refund memengaruhi penerimaan, bukan unit_price.",
+          "feedback": [
+            "Benar: harga pesanan lama tidak diturunkan ulang dari katalog yang berubah.",
+            "Perubahan katalog tidak boleh diam-diam mengubah kesepakatan transaksi lama.",
+            "Refund tidak mengedit quantity atau harga transaksi item pada model ini."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l3m01l01-edge-1",
+          "question": "Order 503 tidak mempunyai item atau payment. Apa hasil ringkasannya pada query?",
+          "options": [
+            "Order hilang karena relasi selalu wajib memiliki anak.",
+            "Satu baris cancelled dengan ordered, paid, refunded, dan net_received nol.",
+            "Satu payment baru dibuat otomatis oleh COALESCE."
+          ],
+          "answer": 1,
+          "explanation": "LEFT JOIN mempertahankan order dan COALESCE hanya mengisi nilai tampilan, bukan membuat record.",
+          "feedback": [
+            "Foreign key anak tidak mewajibkan setiap induk mempunyai anak.",
+            "Benar: ketiadaan record anak mempunyai perilaku hasil yang eksplisit.",
+            "COALESCE tidak menjalankan INSERT atau menciptakan identitas payment."
+          ]
+        },
+        {
+          "id": "l3m01l01-edge-2",
+          "question": "Apakah foreign key refund ke payment sudah menjamin total refund tidak melebihi payment berhasil?",
+          "options": [
+            "Ya, foreign key menghitung semua nominal anak.",
+            "Ya, CHECK amount > 0 sekaligus membatasi jumlah kumulatif.",
+            "Belum; perlu validasi status serta batas agregat yang dijaga pada transaksi."
+          ],
+          "answer": 2,
+          "explanation": "FK hanya memastikan target payment ada; constraint contoh tidak membandingkan total lintas record.",
+          "feedback": [
+            "Foreign key tidak menghitung jumlah uang yang sudah dikembalikan.",
+            "Positif adalah syarat per baris, bukan batas jumlah beberapa refund.",
+            "Benar: model menyatakan kebutuhan guard yang belum diterapkan."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Tentukan identitas order, item, payment, dan refund sebelum memilih status.",
+        "Hitung item, payment succeeded, dan refund succeeded pada cabang masing-masing.",
+        "LEFT JOIN hasil agregat ke order; net_received = paid - refunded, bukan nilai barang dikurangi semua percobaan payment."
+      ],
+      "solutionSql": "WITH items AS (\n  SELECT order_id, SUM(quantity * unit_price) AS ordered\n  FROM pg_temp.lesson_order_items GROUP BY order_id\n), captured AS (\n  SELECT order_id, SUM(amount) AS paid\n  FROM pg_temp.lesson_payments WHERE status = 'succeeded' GROUP BY order_id\n), refunded AS (\n  SELECT p.order_id, SUM(r.amount) AS refunded\n  FROM pg_temp.lesson_refunds r\n  JOIN pg_temp.lesson_payments p ON p.payment_id = r.payment_id\n  WHERE r.status = 'succeeded' AND p.status = 'succeeded'\n  GROUP BY p.order_id\n)\nSELECT o.order_id, o.state, COALESCE(i.ordered,0.00) AS ordered,\n       COALESCE(c.paid,0.00) AS paid, COALESCE(r.refunded,0.00) AS refunded,\n       COALESCE(c.paid,0.00)-COALESCE(r.refunded,0.00) AS net_received\nFROM pg_temp.lesson_orders o\nLEFT JOIN items i ON i.order_id = o.order_id\nLEFT JOIN captured c ON c.order_id = o.order_id\nLEFT JOIN refunded r ON r.order_id = o.order_id\nORDER BY o.order_id;",
+      "solutionExplanation": "Tiga CTE mengembalikan grain satu order sebelum join. Payment failed tidak ikut dan refund tetap merujuk payment asal, sehingga order 502 mempunyai uang bersih 60000. Query ini membaca state snapshot; histori lifecycle, validasi transisi, dan batas refund lintas baris tetap kebutuhan yang belum diterapkan.",
+      "critical": true
+    },
+    "reflection": "Jelaskan perbedaan entity, atribut, dan event untuk order 502. Mengapa refund tidak cukup diwakili perubahan status payment, dan aturan lifecycle apa yang belum dijamin oleh ERD serta constraint contoh?"
+  },
+  {
+    "id": "l3m01l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "domain-modeling",
+      "cardinality",
+      "junction-table",
+      "school-finance"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/ddl-constraints.html"
+    ],
+    "hook": "Alya mempunyai dua wali, sedangkan satu wali juga mendampingi Bima. Apakah satu kolom guardian_id pada siswa cukup, dan bagaimana menyimpan relasi tanpa menduplikasi identitas wali?",
+    "objectives": [
+      "Membaca kardinalitas minimum dan maksimum dari kedua sisi relasi.",
+      "Mengubah N:M siswa–wali menjadi dua relasi 1:N melalui junction table.",
+      "Menentukan efek NOT NULL, UNIQUE, composite PK, dan LEFT JOIN terhadap optionality."
+    ],
+    "sections": [
+      {
+        "title": "Tanya minimum dan maksimum pada kedua sisi",
+        "paragraphs": [
+          "Kardinalitas menjawab berapa record dapat berhubungan, sedangkan optionality menjawab apakah hubungan boleh tidak ada. Satu siswa dapat memiliki nol, satu, atau banyak wali pada kebijakan contoh ini. Satu wali juga dapat mendampingi nol, satu, atau banyak siswa. Kedua arah harus ditanyakan secara terpisah; fakta bahwa siswa dapat memiliki banyak wali tidak otomatis menjawab apakah wali dapat mendampingi saudara kandung. Kebutuhan bisnis menentukan minimum dan maksimum, bukan kebiasaan menaruh foreign key di tabel yang paling mudah diedit.",
+          "Relasi satu-ke-satu berarti setiap sisi mempunyai paling banyak satu pasangan, tetapi tidak selalu wajib mempunyai pasangan. Contoh profil tambahan siswa dapat dimodelkan dengan student_id NOT NULL UNIQUE pada profil: setiap profil wajib menunjuk satu siswa dan setiap siswa paling banyak satu profil. Siswa tanpa profil tetap mungkin karena foreign key pada anak tidak menciptakan anak untuk setiap induk. Untuk relasi satu-ke-banyak, foreign key pada anak tidak diberi UNIQUE jika satu induk boleh mempunyai beberapa anak."
+        ]
+      },
+      {
+        "title": "Junction menyimpan fakta hubungan",
+        "paragraphs": [
+          "Hubungan siswa–wali adalah many-to-many atau N:M. Junction lesson_student_guardians menyimpan satu baris untuk satu pasangan siswa dan wali. Composite primary key (student_id, guardian_id) mencegah pasangan yang sama dicatat dua kali, tetapi tetap mengizinkan siswa yang sama dengan wali berbeda dan wali yang sama dengan siswa berbeda. Kedua kolom juga foreign key sehingga setiap hubungan wajib mempunyai kedua endpoint yang sah. PK/FK pada diagram menandai peran rangkap tersebut; kolom relationship menjelaskan peran wali dalam hubungan, bukan atribut siswa atau wali secara umum.",
+          "Memasang UNIQUE pada student_id saja akan membatasi satu wali per siswa. Memasang UNIQUE pada guardian_id saja akan membatasi wali ke satu siswa sehingga saudara kandung tidak dapat berbagi wali. Menyimpan daftar ID sebagai string juga menghilangkan pemeriksaan foreign key per pasangan. Kebijakan contoh hanya mengizinkan satu record per pasangan, dengan satu label relationship saat ini. Jika satu pasangan perlu beberapa peran sekaligus atau histori waktu berlaku, grain hubungan perlu diubah secara sadar; jangan memasukkan banyak fakta tersembunyi dalam label yang sama."
+        ]
+      },
+      {
+        "title": "Hubungan opsional tidak berarti endpoint NULL",
+        "paragraphs": [
+          "Elina pada contoh belum mempunyai relasi wali. Ketidakhadiran hubungan direpresentasikan oleh nol baris junction, bukan satu baris dengan guardian_id NULL. Pada baris junction yang ada, kedua endpoint tetap wajib terisi. LEFT JOIN dari siswa mempertahankan Elina; COUNT(sg.guardian_id) menghasilkan nol karena hanya menghitung pasangan nyata. COUNT(*) justru menghitung satu baris luar pengganti dan memberi satu. String_agg pada hasil tanpa wali bernilai NULL, yang berarti daftar belum ada, bukan nama wali kosong yang diciptakan.",
+          "Menghapus satu baris junction hanya memutus satu hubungan; itu berbeda dari menghapus identitas wali yang mungkin masih mendampingi siswa lain. Setup memakai foreign key dengan perilaku default tanpa CASCADE, sehingga penghapusan endpoint yang masih dirujuk ditolak. Bila aturan sekolah mewajibkan minimal satu wali sebelum siswa aktif, foreign key dan composite PK ini belum cukup untuk menjamin minimum tersebut. Perlu kebijakan transisi dan koordinasi transaksi yang sesuai. Contoh ini adalah ekstensi TEMP terisolasi dari subset School Finance, bukan perubahan tabel sumber."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Ekstensi siswa–wali terisolasi: siswa 1, 2, dan 5 dari School Finance, dua wali fiktif, dan tiga pasangan. Semua tabel lesson_* berada di pg_temp; tabel school tidak diubah.",
+      "setupSql": "CREATE TEMP TABLE lesson_students (\n  student_id BIGINT PRIMARY KEY,\n  full_name TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_students\nSELECT student_id, full_name FROM school.students WHERE student_id IN (1,2,5);\nCREATE TEMP TABLE lesson_guardians (\n  guardian_id BIGINT PRIMARY KEY,\n  full_name TEXT NOT NULL\n);\nCREATE TEMP TABLE lesson_student_guardians (\n  student_id BIGINT NOT NULL REFERENCES pg_temp.lesson_students(student_id),\n  guardian_id BIGINT NOT NULL REFERENCES pg_temp.lesson_guardians(guardian_id),\n  relationship TEXT NOT NULL,\n  PRIMARY KEY (student_id, guardian_id)\n);\nINSERT INTO pg_temp.lesson_guardians VALUES (11,'Guardian A'),(12,'Guardian B');\nINSERT INTO pg_temp.lesson_student_guardians VALUES\n (1,11,'guardian'),(1,12,'guardian'),(2,11,'guardian');",
+      "sql": "SELECT s.student_id, s.full_name, COUNT(sg.guardian_id) AS guardian_count,\n       string_agg(g.full_name, ', ' ORDER BY g.guardian_id) AS guardians\nFROM pg_temp.lesson_students s\nLEFT JOIN pg_temp.lesson_student_guardians sg ON sg.student_id = s.student_id\nLEFT JOIN pg_temp.lesson_guardians g ON g.guardian_id = sg.guardian_id\nGROUP BY s.student_id, s.full_name\nORDER BY s.student_id;",
+      "columns": [
+        "student_id",
+        "full_name",
+        "guardian_count",
+        "guardians"
+      ],
+      "rows": [
+        [
+          "1",
+          "Alya Putri",
+          "2",
+          "Guardian A, Guardian B"
+        ],
+        [
+          "2",
+          "Bima Pratama",
+          "1",
+          "Guardian A"
+        ],
+        [
+          "5",
+          "Elina Zahra",
+          "0",
+          null
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Alya mempunyai dua pasangan; Bima berbagi Guardian A dengan Alya; Elina tidak mempunyai pasangan tetapi tetap tampil. COUNT kolom junction membedakan nol wali dari baris pengganti LEFT JOIN. Urutan daftar wali mengikuti guardian_id, bukan urutan penyisipan."
+    },
+    "checks": [
+      {
+        "id": "l3m01l02-check-1",
+        "question": "Constraint mana mencegah pasangan siswa–wali duplikat sambil tetap mengizinkan N:M?",
+        "options": [
+          "UNIQUE(student_id) saja.",
+          "PRIMARY KEY(student_id, guardian_id) dan dua foreign key.",
+          "UNIQUE(guardian_id) saja."
+        ],
+        "answer": 1,
+        "explanation": "Keunikan berlaku pada pasangan, bukan masing-masing endpoint; foreign key memastikan identitas keduanya ada.",
+        "feedback": [
+          "Itu membatasi satu baris hubungan per siswa sehingga menghilangkan banyak wali.",
+          "Benar: dua relasi 1:N menghasilkan N:M tanpa pasangan berulang.",
+          "Itu menghalangi satu wali mendampingi beberapa siswa."
+        ]
+      },
+      {
+        "id": "l3m01l02-check-2",
+        "question": "Apa arti student_id NOT NULL UNIQUE yang juga FK ke students pada tabel profil tambahan?",
+        "options": [
+          "Setiap siswa wajib mempunyai tepat satu profil.",
+          "Satu profil boleh dimiliki banyak siswa sekaligus.",
+          "Setiap profil menunjuk satu siswa; tiap siswa paling banyak satu profil, tetapi boleh belum ada."
+        ],
+        "answer": 2,
+        "explanation": "Dengan FK ke siswa, NOT NULL mewajibkan endpoint profil dan UNIQUE membatasi maksimum; minimum pada induk tetap nol.",
+        "feedback": [
+          "Constraint pada anak tidak memaksa keberadaan anak untuk setiap siswa.",
+          "Satu nilai student_id pada satu profil tidak mewakili banyak siswa.",
+          "Benar: batas maksimum dan kewajiban keberadaan adalah hal berbeda."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Telusuri junction siswa–wali dan periksa dampak pilihan kunci serta join.",
+      "setup": "Pasangan awal: (1,11), (1,12), dan (2,11). Siswa 5 belum mempunyai wali. Setiap pasangan adalah satu hubungan saat ini; label peran dan histori tidak menambah grain tersembunyi.",
+      "starterSql": "SELECT s.student_id, COUNT(*) AS guardian_count\nFROM pg_temp.lesson_students s\nLEFT JOIN pg_temp.lesson_student_guardians sg ON sg.student_id = s.student_id\nGROUP BY s.student_id ORDER BY s.student_id;",
+      "variants": [
+        {
+          "id": "l3m01l02-variant-1",
+          "question": "Berapa guardian_count yang benar untuk siswa 1, 2, dan 5?",
+          "options": [
+            "2, 1, dan 0.",
+            "2, 1, dan 1.",
+            "1, 1, dan 0 karena wali harus unik secara global."
+          ],
+          "answer": 0,
+          "explanation": "Hitung endpoint junction yang benar-benar cocok; siswa tanpa hubungan menghasilkan nol.",
+          "feedback": [
+            "Benar: dua wali Alya tidak menghalangi Guardian A mendampingi Bima.",
+            "Nilai satu untuk siswa 5 berasal dari COUNT(*) atas baris luar pengganti.",
+            "Identitas wali unik, tetapi hubungan wali ke siswa dapat banyak."
+          ]
+        },
+        {
+          "id": "l3m01l02-variant-2",
+          "question": "Apa akibat menambahkan UNIQUE(guardian_id) pada junction dengan pasangan awal tersebut?",
+          "options": [
+            "Semua pasangan tetap sah karena composite PK sudah ada.",
+            "Constraint menolak berbagi Guardian A oleh siswa 1 dan 2.",
+            "Wali baru otomatis dibuat untuk Bima."
+          ],
+          "answer": 1,
+          "explanation": "Guardian 11 muncul pada dua pasangan berbeda; UNIQUE tunggal melarang pola N:M itu.",
+          "feedback": [
+            "Composite PK tidak membatalkan constraint UNIQUE tambahan yang lebih ketat.",
+            "Benar: constraint tersebut mengubah batas maksimum relasi.",
+            "UNIQUE menolak konflik, bukan menyalin atau membuat identitas orang."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l3m01l02-edge-1",
+          "question": "Bagaimana merepresentasikan siswa 5 yang belum mempunyai wali pada kebijakan contoh?",
+          "options": [
+            "Satu pasangan (5,NULL) pada junction.",
+            "Hapus siswa 5 dari tabel siswa.",
+            "Siswa tetap ada dan tidak memiliki baris junction."
+          ],
+          "answer": 2,
+          "explanation": "Hubungan boleh tidak ada, tetapi record hubungan yang ada harus memiliki dua endpoint non-NULL.",
+          "feedback": [
+            "PK gabungan mewajibkan kedua kolom; NULL bukan identitas wali sementara.",
+            "Ketiadaan wali tidak menghapus identitas siswa pada kebijakan ini.",
+            "Benar: optionality diwakili ketiadaan hubungan, bukan endpoint palsu."
+          ]
+        },
+        {
+          "id": "l3m01l02-edge-2",
+          "question": "Jika hubungan (1,11) diputus, apakah identitas Guardian A harus ikut dihapus?",
+          "options": [
+            "Tidak; hubungan (2,11) masih memerlukan identitas wali tersebut.",
+            "Ya, setiap penghapusan junction harus menghapus endpoint.",
+            "Ya, lalu foreign key membuat ulang wali secara otomatis."
+          ],
+          "answer": 0,
+          "explanation": "Satu hubungan berbeda dari entity bersama; penghapusan parent yang masih dirujuk ditolak oleh FK default.",
+          "feedback": [
+            "Benar: mengakhiri hubungan tidak menghapus hubungan orang lain.",
+            "Menghapus junction hanya menghapus fakta pasangan, bukan otomatis identitas endpoint.",
+            "Foreign key tidak menciptakan ulang record yang dihapus."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Baca dua arah: banyak wali per siswa dan banyak siswa per wali.",
+        "Gunakan composite PK pasangan dan FK untuk masing-masing endpoint.",
+        "LEFT JOIN dari siswa dan COUNT(sg.guardian_id) menjaga siswa tanpa wali dengan count nol."
+      ],
+      "solutionSql": "SELECT s.student_id, s.full_name, COUNT(sg.guardian_id) AS guardian_count,\n       string_agg(g.full_name, ', ' ORDER BY g.guardian_id) AS guardians\nFROM pg_temp.lesson_students s\nLEFT JOIN pg_temp.lesson_student_guardians sg ON sg.student_id = s.student_id\nLEFT JOIN pg_temp.lesson_guardians g ON g.guardian_id = sg.guardian_id\nGROUP BY s.student_id, s.full_name\nORDER BY s.student_id;",
+      "solutionExplanation": "Tabel siswa, wali, dan junction memisahkan identitas dari hubungan. Composite PK menjaga satu record per pasangan; LEFT JOIN dan COUNT endpoint memberi 2, 1, 0. Model ini belum memaksa minimal satu wali dan tidak menyimpan histori peran; keduanya memerlukan kebutuhan domain tambahan.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa relasi siswa–wali adalah N:M dan mengapa PK gabungan tidak sama dengan dua UNIQUE terpisah. Bagaimana optionality nol wali berbeda dari guardian_id NULL, dan kapan kebutuhan histori mengubah grain junction?"
+  },
+  {
+    "id": "l3m01l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "domain-modeling",
+      "invariants",
+      "constraints",
+      "school-finance"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/ddl-constraints.html"
+    ],
+    "hook": "Seed terlihat bersih: tidak ada invoice negatif atau overpayment. Apakah itu membuktikan database akan menolak semua data salah besok? Tuliskan aturan domain dan lokasi penjagaannya sebelum memilih bentuk tabel.",
+    "objectives": [
+      "Menyatakan delapan invariant pembayaran sekolah beserta batas penjagaannya.",
+      "Membedakan tidak ditemukannya pelanggaran dari adanya constraint yang menjamin aturan.",
+      "Memilah aturan per baris, keunikan, referensi, dan aturan agregat/transaksi."
+    ],
+    "sections": [
+      {
+        "title": "Tulis delapan aturan yang dapat dilanggar",
+        "paragraphs": [
+          "Invariant adalah pernyataan yang harus tetap benar pada setiap state sah. Tulis fakta yang dilarang dan kapan aturan diperiksa, bukan hanya nama kolom yang diinginkan. Untuk latihan ini, delapan aturan berikut memakai School Finance sebagai kontrak bisnis. Sebagian sudah memiliki constraint pada seed; sebagian masih kebutuhan desain. Mencampur dua kategori itu membuat diagram tampak lebih aman daripada kenyataannya. Data contoh yang kebetulan bersih tidak menjadi bukti bahwa semua jalur penulisan data dilindungi.",
+          "I1: nilai invoice wajib terisi dan tidak negatif. Seed memakai NOT NULL dan CHECK amount >= 0, sehingga invoice nol tetap sah. I2: satu siswa hanya boleh mempunyai satu invoice untuk period_month yang sama. UNIQUE(student_id, period_month), bersama kedua kolom non-NULL, menjaga pasangan tersebut; dua siswa berbeda boleh mempunyai invoice pada bulan yang sama. Aturan menyatakan grain satu invoice per siswa per bulan, bukan keunikan bulan secara global.",
+          "I3: setiap payment wajib menunjuk invoice yang ada. NOT NULL dan foreign key pada invoice_id menjamin endpoint, bukan memastikan tagihan sudah lunas. I4: nominal payment wajib terisi dan lebih besar dari nol. CHECK amount > 0 hanya memeriksa satu nominal; dua payment positif tetap dapat membuat total berlebih. I5: status payment wajib salah satu succeeded, pending, atau failed. CHECK dan NOT NULL membatasi label, bukan membuktikan bahwa provider benar-benar menerima uang.",
+          "I6: payment succeeded harus mempunyai paid_at yang diketahui. Ini kebutuhan bisnis tambahan; seed masih mengizinkan paid_at NULL pada semua status. Usulan CHECK(status <> 'succeeded' OR paid_at IS NOT NULL) dapat menjaga aturan per baris bila status wajib terisi. I7: pada kebijakan tanpa overpayment, jumlah payment succeeded per invoice tidak boleh melebihi amount invoice. Seed belum menjamin batas agregat tersebut. Pemeriksaan dan pencatatan perlu dikoordinasikan secara atomik agar dua request tidak memakai sisa yang sama.",
+          "I8: satu callback pembayaran dengan identitas bisnis yang sama hanya boleh memberi satu efek pencatatan. Payment_id unik saja tidak cukup karena retry dapat diberi ID baru. Seed belum memiliki identitas callback stabil sehingga pelanggaran I8 tidak dapat dihitung dari kolom yang tersedia. Desain memerlukan key bisnis pada scope yang tepat, constraint keunikan, dan efek yang dicatat pada transaksi yang konsisten. Jangan menafsirkan ketiadaan kolom pengenal sebagai bukti tidak ada duplikasi callback."
+        ]
+      },
+      {
+        "title": "Observed bukan enforced",
+        "paragraphs": [
+          "Tabel hasil memisahkan observed_violations dari seed_guard. Nilai nol untuk I6 dan I7 hanya berarti tidak ada pelanggaran pada snapshot ini; keduanya masih dapat dilanggar oleh penulisan baru. I8 memakai NULL karena bukti identitas callback tidak tersedia, bukan nol yang menyatakan audit berhasil. I1 sampai I5 memiliki penjagaan struktur pada seed. Bahkan constraint yang ada hanya menjamin aturan yang ditulis, bukan seluruh kebenaran bisnis atau izin pengguna yang mengirim perubahan."
+        ]
+      },
+      {
+        "title": "Usulan constraint bukan migrasi yang sudah diterapkan",
+        "paragraphs": [
+          "Setup membuat tabel TEMP kecil untuk mendemonstrasikan usulan I6, bukan mengganti school.payments. Tabel usulan ini sengaja hanya memuat kolom yang diperlukan aturan timestamp; ia bukan skema payment lengkap. INSERT succeeded dengan paid_at NULL pada reference solution diharapkan ditolak oleh CHECK dengan SQLSTATE 23514. Halaman hanya meminta prediksi atas SQL tersebut. Penolakan yang dimaksud berasal dari aturan timestamp pada tabel TEMP, bukan bukti bahwa seed menolak overpayment atau menjamin idempotensi. Perubahan produksi kelak perlu menilai data lama, semua jalur penulisan, serta strategi migrasi tersendiri."
+        ]
+      }
+    ],
+    "worked": {
+      "setupSql": "CREATE TEMP TABLE lesson_payment_invariant (\n  payment_id BIGINT PRIMARY KEY,\n  amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),\n  status TEXT NOT NULL CHECK (status IN ('succeeded','pending','failed')),\n  paid_at TIMESTAMPTZ NULL,\n  CHECK (status <> 'succeeded' OR paid_at IS NOT NULL)\n);",
+      "sql": "WITH receipts AS (\n  SELECT invoice_id, SUM(amount) AS paid\n  FROM school.payments WHERE status = 'succeeded' GROUP BY invoice_id\n), rules AS (\n  SELECT 1 AS n, 'I1' AS rule_id, COUNT(*) AS observed_violations, 'present' AS seed_guard\n  FROM school.invoices WHERE amount IS NULL OR amount < 0\n  UNION ALL\n  SELECT 2, 'I2', COUNT(*), 'present' FROM (\n    SELECT student_id, period_month FROM school.invoices\n    GROUP BY student_id, period_month HAVING COUNT(*) > 1\n  ) duplicates\n  UNION ALL\n  SELECT 3, 'I3', COUNT(*), 'present'\n  FROM school.payments p LEFT JOIN school.invoices i ON i.invoice_id = p.invoice_id\n  WHERE i.invoice_id IS NULL\n  UNION ALL\n  SELECT 4, 'I4', COUNT(*), 'present'\n  FROM school.payments WHERE amount IS NULL OR amount <= 0\n  UNION ALL\n  SELECT 5, 'I5', COUNT(*), 'present'\n  FROM school.payments WHERE status IS NULL OR status NOT IN ('succeeded','pending','failed')\n  UNION ALL\n  SELECT 6, 'I6', COUNT(*), 'missing_row_check'\n  FROM school.payments WHERE status = 'succeeded' AND paid_at IS NULL\n  UNION ALL\n  SELECT 7, 'I7', COUNT(*), 'needs_atomic_guard'\n  FROM school.invoices i JOIN receipts r ON r.invoice_id = i.invoice_id\n  WHERE r.paid > i.amount\n  UNION ALL\n  SELECT 8, 'I8', NULL::bigint, 'missing_business_key'\n)\nSELECT rule_id, observed_violations, seed_guard FROM rules ORDER BY n;",
+      "columns": [
+        "rule_id",
+        "observed_violations",
+        "seed_guard"
+      ],
+      "rows": [
+        [
+          "I1",
+          "0",
+          "present"
+        ],
+        [
+          "I2",
+          "0",
+          "present"
+        ],
+        [
+          "I3",
+          "0",
+          "present"
+        ],
+        [
+          "I4",
+          "0",
+          "present"
+        ],
+        [
+          "I5",
+          "0",
+          "present"
+        ],
+        [
+          "I6",
+          "0",
+          "missing_row_check"
+        ],
+        [
+          "I7",
+          "0",
+          "needs_atomic_guard"
+        ],
+        [
+          "I8",
+          null,
+          "missing_business_key"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "I1–I5 mempunyai constraint seed. I6–I7 tidak dilanggar pada data yang tersedia, tetapi guard yang dibutuhkan belum ada. I8 tidak dapat diaudit tanpa identitas bisnis callback, sehingga observed_violations NULL. Label seed_guard merujuk skema school, bukan tabel TEMP usulan yang dibuat oleh setup."
+    },
+    "checks": [
+      {
+        "id": "l3m01l03-check-1",
+        "question": "Audit I6 dan I7 menghasilkan nol pelanggaran. Kesimpulan mana yang tepat?",
+        "options": [
+          "Semua request mendatang pasti ditolak bila salah.",
+          "Tidak perlu menuliskan invariant karena seed sudah bersih.",
+          "Snapshot memenuhi aturan yang diperiksa, tetapi seed belum memiliki guard untuk kedua kebutuhan itu."
+        ],
+        "answer": 2,
+        "explanation": "Kualitas data saat ini tidak membuktikan batas penjagaan pada penulisan berikutnya.",
+        "feedback": [
+          "Audit membaca data; ia tidak memasang constraint atau transaksi penjagaan.",
+          "Seed bersih tidak menggantikan kontrak bisnis dan lokasi penegakannya.",
+          "Benar: bukti observed dan jaminan enforced harus dipisahkan."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l3m01l03-check-2",
+        "question": "Apakah CHECK(amount > 0) pada payment cukup menjaga I7 tanpa overpayment?",
+        "options": [
+          "Tidak; ia tidak menjumlahkan payment lain atau mengoordinasikan dua request.",
+          "Ya, semua nilai positif otomatis lebih kecil daripada sisa invoice.",
+          "Ya, foreign key menambahkan batas nominal kumulatif."
+        ],
+        "answer": 0,
+        "explanation": "Aturan agregat lintas baris memerlukan penjagaan yang konsisten pada boundary transaksi, bukan CHECK nominal positif.",
+        "feedback": [
+          "Benar: nominal per baris dan total per invoice adalah dua aturan berbeda.",
+          "Dua nominal positif dapat melampaui sisa ketika digabung.",
+          "Foreign key memeriksa target referensi, bukan jumlah penerimaan."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Petakan invariant ke penjagaannya dan prediksi penolakan pada tabel TEMP usulan.",
+      "setup": "I1–I5 sudah dijaga seed. I6, I7, dan I8 adalah kebutuhan yang belum lengkap. Tabel TEMP menambahkan CHECK timestamp untuk mendemonstrasikan I6 saja; seed dan seluruh guard lintas baris tidak diubah.",
+      "starterSql": "INSERT INTO pg_temp.lesson_payment_invariant\n  (payment_id, amount, status, paid_at)\nVALUES (901,100000,'succeeded',NULL);",
+      "variants": [
+        {
+          "id": "l3m01l03-variant-1",
+          "question": "Apa hasil INSERT succeeded dengan paid_at NULL ke tabel TEMP pada setup?",
+          "options": [
+            "Diterima karena paid_at ditulis NULL pada tipe kolom.",
+            "Ditolak CHECK timestamp dengan SQLSTATE 23514.",
+            "Otomatis mendapat timestamp waktu sekarang."
+          ],
+          "answer": 1,
+          "explanation": "NULL diizinkan secara umum untuk pending/failed, tetapi CHECK usulan melarangnya ketika status succeeded.",
+          "feedback": [
+            "Kelonggaran kolom tetap dibatasi CHECK yang menghubungkan status dan timestamp.",
+            "Benar: pelanggaran yang diprediksi adalah I6 pada tabel TEMP.",
+            "Tidak ada default atau trigger yang mengisi waktu secara otomatis."
+          ]
+        },
+        {
+          "id": "l3m01l03-variant-2",
+          "question": "Bagaimana menjelaskan I8 bila seed tidak memiliki key callback bisnis?",
+          "options": [
+            "Nol pelanggaran karena payment_id berbeda.",
+            "Terjamin karena invoice_id adalah foreign key.",
+            "Belum dapat dihitung dari kolom tersedia; identitas stabil dan desain idempotensi masih dibutuhkan."
+          ],
+          "answer": 2,
+          "explanation": "Identitas record internal berbeda dari identitas kejadian bisnis yang dapat dikirim ulang.",
+          "feedback": [
+            "Retry dapat memakai payment_id baru sambil mengulang efek bisnis yang sama.",
+            "Foreign key tidak mengenali dua callback sebagai kejadian bisnis yang sama.",
+            "Benar: NULL pada audit menandai bukti yang tidak tersedia, bukan kelulusan aturan."
+          ],
+          "critical": true
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l3m01l03-edge-1",
+          "question": "Invoice 102 tersisa 300000; dua request masing-masing ingin mencatat 200000 dan membaca sisa awal yang sama. Apa risiko I7?",
+          "options": [
+            "Keduanya dapat lolos pemeriksaan terpisah dan total tambahan menjadi 400000 tanpa koordinasi atomik.",
+            "Tidak ada risiko karena kedua nominal positif.",
+            "Primary key berbeda menjamin sisa tidak terlampaui."
+          ],
+          "answer": 0,
+          "explanation": "Masing-masing melihat kapasitas cukup tetapi jumlah dua pencatatan melampaui sisa; perlu koordinasi saat memeriksa dan mencatat.",
+          "feedback": [
+            "Benar: snapshot check terpisah tidak menjaga invariant lintas request.",
+            "Syarat positif tidak membatasi total dua request terhadap sisa.",
+            "Identitas record unik tidak mengunci atau memeriksa saldo agregat."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l3m01l03-edge-2",
+          "question": "Payment pending tanpa paid_at dimasukkan ke tabel TEMP usulan I6 dengan amount positif dan ID baru. Apakah CHECK timestamp menolaknya?",
+          "options": [
+            "Ya, semua status wajib mempunyai timestamp berhasil.",
+            "Tidak; syarat timestamp hanya berlaku saat status succeeded.",
+            "Ya, karena seed tidak mempunyai semua guard lintas baris."
+          ],
+          "answer": 1,
+          "explanation": "CHECK berbentuk status <> 'succeeded' OR paid_at IS NOT NULL; pending memenuhi bagian pertama.",
+          "feedback": [
+            "Pending belum menyatakan keberhasilan sehingga waktu berhasil boleh belum ada.",
+            "Benar: aturan per baris mengikuti makna status, bukan mewajibkan waktu buatan.",
+            "Ketiadaan guard lain tidak mengubah ekspresi CHECK timestamp ini."
+          ]
+        }
+      ],
+      "hints": [
+        "Tuliskan invariant sebagai pernyataan benar/salah, lalu tentukan scope satu baris atau banyak record.",
+        "Pisahkan hasil audit nol dari constraint yang benar-benar ada pada seed.",
+        "Untuk I6 usulan, status succeeded membuat paid_at IS NOT NULL wajib TRUE; I7 dan I8 tetap memerlukan desain lintas record."
+      ],
+      "solutionSql": "INSERT INTO pg_temp.lesson_payment_invariant\n  (payment_id, amount, status, paid_at)\nVALUES (901,100000,'succeeded',NULL);",
+      "solutionError": "23514",
+      "solutionExplanation": "INSERT referensi sengaja diharapkan gagal pada CHECK usulan I6 dengan SQLSTATE 23514: status succeeded tetapi paid_at NULL. Pending tanpa timestamp boleh masuk bila constraint lain dipenuhi. Ini tidak memasang aturan baru pada school.payments, tidak menguji overpayment, dan tidak menyediakan idempotensi; lokasi penjagaan setiap invariant tetap harus dinyatakan.",
+      "critical": true
+    },
+    "reflection": "Tuliskan kembali delapan invariant beserta apakah seed sudah menjaganya. Mengapa observed_violations nol dan payment_id unik belum cukup untuk I7/I8, serta apa tepatnya yang ditolak oleh CHECK tabel TEMP?"
+  }
+]
