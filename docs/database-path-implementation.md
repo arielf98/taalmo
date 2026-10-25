@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L3: 45 published / 75 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L3 and L4M01: 48 published / 72 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -170,3 +170,11 @@ Added three bilingual evolution lessons. L3M04L01 maps open/paid/void to issued/
 Totals: 15 authored modules, 45 published / 75 draft lessons; 48 combined lessons plus three labs (51 activity milestones). Existing E2E expectations only change the count and next draft route to l4m01l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
 
 Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L4M01**.
+
+## L4M01 continuation — 25 October 2026
+
+Added three bilingual ACID lessons in l4-acid.json with en-database-acid.json. L4M01L01 follows the canonical two-account transfer using two UPDATEs in one transaction and one final SELECT: balances70000/80000, total150000. TEMP fixtures are not durability or concurrency proof. L4M01L02 classifies complete versus missing transfer legs with count, distinct-account, debit/credit-sign and net-zero conditions; transfer7001 is valid under the stated minimal model and7002 violates it. L4M01L03 places an optional fee after SAVEPOINT, rolls it back, commits the earlier capture and emits two surviving entries1/2. External side effects and uncertain COMMIT outcomes remain outside simple rollback claims. Review corrected a double-correct single-choice distractor, replaced the exact full English setup key and removed unpublished obsolete draft strings. No new component, simulator, structural diagram or persistence format was introduced.
+
+Totals: 16 authored modules, 48 published / 72 draft lessons; 51 combined lessons plus three labs (54 activity milestones). Existing E2E expectations only change the count and next draft route to l4m02l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
+
+Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L4M02**.

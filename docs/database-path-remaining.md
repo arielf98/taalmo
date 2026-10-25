@@ -1,6 +1,6 @@
 # Remaining curriculum authoring
 
-The following 75 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
+The following 72 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L3 — Data Modeling & Schema Evolution
 
@@ -8,13 +8,6 @@ The following 75 canonical lessons remain draft. Each checkbox requires the comp
 
 ## L4 — Transactions & Concurrency
 
-### L4M01 — ACID dan Transaction Boundary
-
-Prerequisite: l3m04. Scenario: Payment Ledger.
-
-- [ ] `l4m01l01` — Atomicity dan durability
-- [ ] `l4m01l02` — Consistency dan invariants
-- [ ] `l4m01l03` — Transaction boundary dan error
 
 ### L4M02 — Isolation dan MVCC
 

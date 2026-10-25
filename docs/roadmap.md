@@ -13,13 +13,13 @@
 
 ## Database Engineering — database curriculum
 
-The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L3 provide 45 published bilingual lessons; 75 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
+The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L3 and L4M01 provide 48 published bilingual lessons; 72 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
 
-## Recommended next milestone: L4M01 authoring
+## Recommended next milestone: L4M02 authoring
 
-All L3 modules are now published. The existing all-modules condition exposes the L3 level assessment, while official passing still requires every module checkpoint, at least85% and all critical questions correct. No progress/version migration was added.
+L0–L3 are fully authored. L4M01 follows L3M04, while later L4 modules remain draft and no L4 stage assessment is exposed yet. Existing completion, critical-question and versioned-progress rules are unchanged.
 
-Continue with L4M01 — ACID dan Transaction Boundary: atomicity/durability, consistency/invariants and transaction boundaries/errors. Use isolated transfer/ledger examples, distinguish TEMP experiments from durability proof, and do not claim database rollback reverses external provider effects. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
+Continue with L4M02 — Isolation dan MVCC: READ COMMITTED/REPEATABLE READ/SERIALIZABLE, row-version visibility and row-lock behavior. Distinguish authored two-session predictions from observed concurrency or a live SQL runner, and keep retry/error semantics explicit. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
 
 ## Later learning improvements
 

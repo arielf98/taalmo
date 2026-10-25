@@ -1,0 +1,468 @@
+[
+  {
+    "id": "l4m01l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": ["acid", "atomicity", "durability", "payment-ledger"],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/tutorial-transactions.html",
+      "https://www.postgresql.org/docs/17/sql-rollback.html"
+    ],
+    "hook": "Transfer Payment Ledger harus mengurangi saldo rekening 1 dan menambah saldo rekening 2. Jika UPDATE kedua gagal, bagaimana memastikan tidak ada transfer parsial?",
+    "objectives": [
+      "Menjelaskan atomicity sebagai satu unit perubahan yang seluruhnya commit atau seluruhnya rollback.",
+      "Membedakan durability database setelah commit dari efek eksternal yang tidak ikut di-rollback.",
+      "Membaca hasil transfer dan total saldo untuk membedakan commit lengkap dari rollback."
+    ],
+    "sections": [
+      {
+        "title": "Atomicity mengikat dua UPDATE",
+        "paragraphs": [
+          "Transfer sederhana memiliki dua UPDATE: saldo rekening 1 berkurang 30000 dan saldo rekening 2 bertambah 30000. Jika keduanya berada di antara BEGIN dan COMMIT, operasi dilihat sebagai satu unit all-or-nothing. Setelah commit, pembaca tidak boleh melihat hasil bisnis yang hanya mengurangi satu rekening. Jika operasi dibatalkan, kedua perubahan database dibuang, termasuk UPDATE yang lebih dulu berhasil.",
+          "Atomicity tidak berarti database menebak aturan bisnis atau mengoordinasikan provider eksternal. Ia hanya mengikat statement yang benar-benar berada dalam transaction scope yang sama. Dua UPDATE yang dijalankan sebagai statement terpisah dapat meninggalkan debit tanpa credit bila proses berhenti di antaranya. Karena itu boundary harus dipilih sebelum statement pertama, dan error handling harus memutuskan COMMIT atau ROLLBACK secara eksplisit."
+        ]
+      },
+      {
+        "title": "Durability adalah janji setelah commit",
+        "paragraphs": [
+          "Durability menjawab apakah perubahan yang sudah diakui COMMIT tetap tercatat ketika database mengalami crash. Dokumentasi PostgreSQL menjelaskan bahwa transaction yang dilaporkan selesai dicatat ke penyimpanan permanen sesuai konfigurasi durability. Itu bukan sinonim HTTP 200, dan bukan bukti bahwa semua sistem di luar database telah menerima transfer. Durability juga tidak menggantikan backup, replikasi, atau prosedur recovery.",
+          "Fixture lesson memakai TEMP table agar aman dan terisolasi. Hasil SELECT hanya menunjukkan saldo setelah script berhasil; ia bukan crash test dan tidak membuktikan fsync, storage, atau recovery server. Jangan mengklaim bukti durability perangkat keras dari contoh ini. Di produksi, catat asumsi konfigurasi dan bukti operasional secara terpisah dari atomicity dua UPDATE."
+        ]
+      },
+      {
+        "title": "Membaca transfer yang sudah commit",
+        "paragraphs": [
+          "Worked script memulai saldo rekening 1 sebesar 100000 dan rekening 2 sebesar 50000. Dua UPDATE memindahkan 30000: hasilnya masing-masing 70000 dan 80000, dengan total 150000 tetap. SELECT terakhir menghasilkan satu result table setelah COMMIT, sehingga learner dapat menelusuri seluruh state yang dipertahankan, bukan menebak dari satu baris debit.",
+          "Jika UPDATE debit berhasil tetapi UPDATE credit gagal, ROLLBACK menghapus debit yang masih uncommitted dan saldo kembali 100000 serta 50000. Jika client timeout setelah COMMIT, outcome belum tentu diketahui oleh client; rekonsiliasi diperlukan sebelum retry. Contoh ini tidak menjanjikan concurrency safety, provider effect, atau durability crash di luar database."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Mini fixture Payment Ledger: dua rekening TEMP di pg_temp dengan saldo awal 100000 dan 50000. Worked script memindahkan 30000 dalam satu transaction dan menampilkan saldo akhir.",
+      "setupSql": "CREATE TEMP TABLE lesson_acid_accounts (account_id BIGINT PRIMARY KEY, balance NUMERIC(12,2) NOT NULL CHECK (balance >= 0));\nINSERT INTO pg_temp.lesson_acid_accounts VALUES (1,100000.00), (2,50000.00);",
+      "sql": "BEGIN;\nUPDATE pg_temp.lesson_acid_accounts SET balance = balance - 30000.00 WHERE account_id = 1;\nUPDATE pg_temp.lesson_acid_accounts SET balance = balance + 30000.00 WHERE account_id = 2;\nCOMMIT;\nSELECT account_id, balance, SUM(balance) OVER () AS total_balance FROM pg_temp.lesson_acid_accounts ORDER BY account_id;",
+      "columns": ["account_id", "balance", "total_balance"],
+      "rows": [
+        ["1", "70000.00", "150000.00"],
+        ["2", "80000.00", "150000.00"]
+      ],
+      "ordered": true,
+      "explanation": "Debit 30000 pada rekening 1 dan credit 30000 pada rekening 2 sama-sama commit, sehingga total 150000 tetap. Jika transaction di-rollback setelah debit, kedua saldo kembali ke nilai awal. Karena tabelnya TEMP, contoh ini aman untuk latihan tetapi bukan bukti durability setelah crash."
+    },
+    "checks": [
+      {
+        "id": "l4m01l01-check-1",
+        "question": "Apa arti atomicity untuk transfer dua rekening ini?",
+        "options": [
+          "UPDATE debit dan UPDATE credit harus seluruhnya commit atau seluruhnya rollback.",
+          "UPDATE debit boleh commit lebih dulu karena credit dapat dibuat dari laporan.",
+          "Rollback hanya menghapus credit, sedangkan saldo debit dipertahankan untuk audit."
+        ],
+        "answer": 0,
+        "explanation": "Unit transfer harus mempunyai hasil all-or-nothing pada dua perubahan saldo yang berada dalam transaction scope yang sama.",
+        "feedback": [
+          "Benar: atomicity mencegah hanya satu rekening yang berubah.",
+          "Statement terpisah dapat meninggalkan debit tanpa credit; laporan tidak memperbaiki transfer parsial.",
+          "Rollback membatalkan kedua UPDATE yang belum commit, bukan memilih saldo berdasarkan urutan statement."
+        ]
+      },
+      {
+        "id": "l4m01l01-check-2",
+        "question": "Apa yang tidak dapat disimpulkan dari worked SELECT pada TEMP accounts?",
+        "options": [
+          "Dua UPDATE berada dalam satu boundary dan hasil saldo menunjukkan total 150000.",
+          "TEMP accounts pasti tetap tersedia setelah database crash atau restart session.",
+          "Query ini membuktikan dua request concurrent selalu aman tanpa koordinasi tambahan."
+        ],
+        "answer": 1,
+        "explanation": "TEMP table dan SELECT hasil tidak membuktikan durability crash; durability perlu konfigurasi dan bukti operasional database.",
+        "feedback": [
+          "Benar bahwa dua UPDATE berada dalam boundary script, tetapi itu bukan bukti recovery perangkat keras.",
+          "Benar: TEMP table bukan bukti data bertahan melewati crash atau restart session.",
+          "Salah: contoh satu session tidak membuktikan safety ketika request concurrent menulis bersama."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi saldo akhir setelah dua UPDATE transfer commit atau rollback.",
+      "setup": "Gunakan TEMP accounts pada worked example: rekening 1 mulai 100000 dan rekening 2 mulai 50000. Transfer memindahkan 30000 dalam satu transaction. Aktivitas hanya memprediksi hasil, bukan menjalankan SQL learner.",
+      "starterSql": "SELECT account_id, balance\nFROM pg_temp.lesson_acid_accounts\nORDER BY account_id;",
+      "variants": [
+        {
+          "id": "l4m01l01-variant-1",
+          "question": "Transfer 1101 memindahkan 25000 dari rekening 1 ke rekening 2. Berapa saldo akhir dan totalnya?",
+          "options": ["75000 dan 75000; total 150000", "100000 dan 50000; total 150000", "75000 dan 75000; total 100000"],
+          "answer": 0,
+          "explanation": "Debit dan credit sama-sama 25000, sehingga saldo menjadi 75000 dan 75000 dengan total tetap 150000.",
+          "feedback": [
+            "Benar: dua UPDATE berhasil sebagai satu operasi dan total saldo terjaga.",
+            "Saldo awal bukan saldo akhir setelah transfer yang commit.",
+            "Transfer tidak menghapus 50000 dari total; hanya memindahkan kepemilikan saldo."
+          ]
+        },
+        {
+          "id": "l4m01l01-variant-2",
+          "question": "UPDATE debit transfer 1102 berhasil, tetapi UPDATE credit gagal dan transaction di-ROLLBACK. Apa saldo akhir?",
+          "options": ["70000 dan 80000 karena debit sudah berhasil", "100000 dan 50000 karena debit uncommitted ikut dibatalkan", "70000 dan 50000 karena hanya credit yang rollback"],
+          "answer": 1,
+          "explanation": "ROLLBACK penuh membuang debit yang belum commit, sehingga kedua rekening kembali ke saldo awal.",
+          "feedback": [
+            "Debit belum durable karena transaction belum commit.",
+            "Benar: rollback mengembalikan kedua saldo ke 100000 dan 50000.",
+            "Atomicity tidak memilih credit saja; perubahan debit juga dibatalkan."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l4m01l01-edge-1",
+          "question": "Jika provider eksternal sudah memindahkan uang tetapi transaction database di-ROLLBACK, apa yang dapat dijamin contoh ini?",
+          "options": ["Rollback database otomatis membatalkan provider.", "Hanya perubahan database yang dibatalkan; provider perlu rekonsiliasi atau kompensasi.", "TEMP account membuktikan provider dan database selalu atomik."],
+          "answer": 1,
+          "explanation": "Atomicity hanya mencakup statement database dalam boundary; external effect memerlukan mekanisme lain.",
+          "feedback": [
+            "Rollback database tidak memiliki kuasa membatalkan provider eksternal.",
+            "Benar: external effect memerlukan rekonsiliasi, idempotensi, atau kompensasi yang dapat diaudit.",
+            "TEMP account hanya fixture database, bukan jembatan atomik ke provider."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l4m01l01-edge-2",
+          "question": "Client timeout setelah mengirim COMMIT transfer. Apa asumsi yang benar?",
+          "options": ["Pasti rollback sehingga transfer boleh diulang tanpa pemeriksaan.", "Pasti commit sehingga UPDATE dapat diulang sekali lagi.", "Outcome database belum diketahui oleh client; rekonsiliasi sebelum retry."],
+          "answer": 2,
+          "explanation": "Koneksi dapat putus setelah server memproses COMMIT. Retry buta dapat menggandakan transfer atau menghasilkan saldo salah.",
+          "feedback": [
+            "Timeout tidak membuktikan rollback.",
+            "Mengulang UPDATE tanpa tahu state akhir dapat menggandakan transfer.",
+            "Benar: periksa state dengan identitas bisnis dan terapkan retry yang idempotent."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Tuliskan saldo awal kedua rekening dan jumlah transfer sebelum membaca UPDATE.",
+        "Ikuti urutan statement: debit, credit, lalu COMMIT atau ROLLBACK.",
+        "Pisahkan atomicity database dari provider eksternal dan durability crash; contoh TEMP tidak membuktikan keduanya."
+      ],
+      "solutionSql": "BEGIN;\nUPDATE pg_temp.lesson_acid_accounts SET balance = balance - 30000.00 WHERE account_id = 1;\nUPDATE pg_temp.lesson_acid_accounts SET balance = balance + 30000.00 WHERE account_id = 2;\nCOMMIT;\nSELECT account_id, balance, SUM(balance) OVER () AS total_balance FROM pg_temp.lesson_acid_accounts ORDER BY account_id;",
+      "solutionExplanation": "Reference script menempatkan dua UPDATE dalam satu transaction. Setelah COMMIT, rekening 1 menjadi 70000, rekening 2 menjadi 80000, dan total 150000. Jika terjadi error sebelum COMMIT lalu ROLLBACK, kedua perubahan hilang. Script ini tidak mensimulasikan concurrency, provider effect, atau crash recovery durability.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa dua UPDATE saldo harus berada dalam transaction boundary yang sama. Prediksi state setelah rollback dan setelah timeout COMMIT, lalu jelaskan mengapa TEMP fixture tidak membuktikan durability crash atau concurrency safety."
+  },
+  {
+    "id": "l4m01l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": ["acid", "consistency", "invariants", "payment-ledger"],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/ddl-constraints.html",
+      "https://www.postgresql.org/docs/17/tutorial-transactions.html"
+    ],
+    "hook": "Transfer 7002 hanya memiliki debit -10000 tanpa pasangan credit. Barisnya valid secara tipe, tetapi saldo ledger tidak seimbang. Invariant apa yang harus dipertahankan oleh transaction?",
+    "objectives": [
+      "Membedakan consistency sebagai pemeliharaan invariant dari anggapan bahwa engine memahami semua aturan bisnis.",
+      "Memisahkan constraint satu baris, referensi, dan invariant agregat lintas baris.",
+      "Mengevaluasi hasil ledger untuk menemukan transfer seimbang dan transfer yang melanggar invariant."
+    ],
+    "sections": [
+      {
+        "title": "Consistency berarti state tetap sah",
+        "paragraphs": [
+          "Consistency dalam ACID berarti setiap transaksi yang berhasil membawa database dari satu state valid ke state valid lain menurut aturan yang dipilih. Aturan itu bukan daftar ajaib yang otomatis diketahui PostgreSQL. NOT NULL, CHECK, UNIQUE, dan foreign key dapat menjaga bagian tertentu, sedangkan aplikasi dan transaction protocol harus menjaga aturan yang melibatkan banyak baris, saldo, atau urutan kejadian.",
+          "Data contoh yang bersih hanya membuktikan snapshot itu bersih. Jika satu transfer mempunyai debit -30000 dan credit +20000, kedua baris dapat lolos constraint nominal, tetapi jumlah bersih -10000 melanggar invariant transfer seimbang. Menamai invariant secara eksplisit membuat review dapat bertanya: state apa yang dilarang, kapan diperiksa, dan apakah semua jalur penulis memakai boundary yang sama?"
+        ]
+      },
+      {
+        "title": "Constraint berbeda scope",
+        "paragraphs": [
+          "Constraint per baris cocok untuk amount <> 0, side yang dikenal, atau hubungan entry ke payment yang ada. Constraint tersebut tidak otomatis menjumlahkan semua entry untuk transfer atau membandingkan dua saldo setelah transfer. Foreign key menjawab apakah target ada, bukan apakah total uang konsisten. CHECK juga tidak boleh diperlakukan sebagai pengganti koordinasi lintas request hanya karena ekspresinya terlihat deklaratif.",
+          "Invariant agregat perlu dijaga saat membaca kapasitas dan saat mencatat efek, dalam transaction scope yang dirancang konsisten. Detail isolasi dan lock akan dipelajari kemudian; pada lesson ini fokusnya mengenali boundary kebutuhan. Audit setelah kejadian berguna untuk menemukan pelanggaran, tetapi audit tidak mengubah transaksi yang sudah salah menjadi atomik dan tidak mencegah request berikutnya."
+        ]
+      },
+      {
+        "title": "Transfer harus seimbang",
+        "paragraphs": [
+          "Ledger double-entry memakai pasangan debit dan credit dengan jumlah bersih nol untuk satu transfer. Pada fixture, transfer 7001 mempunyai -30000 dan +30000 sehingga net_delta 0 dan entry_count 2. Transfer 7002 hanya mempunyai debit -10000; laporan menandainya violation. Hasil ini adalah pembacaan terhadap fixture TEMP, bukan bukti bahwa tabel permanen memiliki trigger atau guard yang sama.",
+          "Classifier worked mempersempit kontrak: valid berarti tepat dua entry, satu debit negatif dan satu credit positif, account berbeda, serta net_delta nol. Itu belum membuktikan identitas payment, otorisasi, atau seluruh aturan bisnis. Consistency adalah kumpulan invariant yang perlu dipetakan ke penjagaannya; satu invariant yang lolos bukan sertifikat bahwa provider dan efek eksternal juga benar."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Mini fixture transfer Payment Ledger: dua transfer dan tiga baris candidate ledger pada TEMP table pg_temp. Classifier hanya menyatakan valid bila ada tepat dua entry, satu debit negatif, satu credit positif, account berbeda, dan net_delta nol.",
+      "setupSql": "CREATE TEMP TABLE lesson_consistency_entries (entry_id BIGINT PRIMARY KEY, transfer_id BIGINT NOT NULL, account_id BIGINT NOT NULL, amount NUMERIC(12,2) NOT NULL CHECK (amount <> 0), side TEXT NOT NULL CHECK (side IN ('debit','credit')));\nINSERT INTO pg_temp.lesson_consistency_entries VALUES (8101,7001,1,-30000.00,'debit'), (8102,7001,2,30000.00,'credit'), (8103,7002,1,-10000.00,'debit');",
+      "sql": "SELECT transfer_id, SUM(amount) AS net_delta, COUNT(*) AS entry_count, CASE WHEN COUNT(*) = 2 AND COUNT(DISTINCT account_id) = 2 AND COUNT(*) FILTER (WHERE side = 'debit' AND amount < 0) = 1 AND COUNT(*) FILTER (WHERE side = 'credit' AND amount > 0) = 1 AND SUM(amount) = 0.00 THEN 'valid' ELSE 'violation' END AS invariant_state FROM pg_temp.lesson_consistency_entries GROUP BY transfer_id ORDER BY transfer_id;",
+      "columns": ["transfer_id", "net_delta", "entry_count", "invariant_state"],
+      "rows": [
+        ["7001", "0.00", "2", "valid"],
+        ["7002", "-10000.00", "1", "violation"]
+      ],
+      "ordered": true,
+      "explanation": "Transfer 7001 mempunyai dua account berbeda, satu debit negatif, satu credit positif, dan net_delta nol sehingga memenuhi kontrak classifier. Transfer 7002 hanya mempunyai debit sehingga gagal. Query memperketat pembacaan empat syarat itu, tetapi tetap tidak memasang guard untuk penulisan berikutnya atau membuktikan account authorization."
+    },
+    "checks": [
+      {
+        "id": "l4m01l02-check-1",
+        "question": "Mengapa CHECK(amount <> 0) pada setiap entry belum cukup untuk memastikan transfer seimbang?",
+        "options": [
+          "CHECK per baris tidak memastikan pasangan debit-credit dan jumlah bersih lintas entry.",
+          "CHECK hanya gagal jika entry amount bernilai NULL, bukan jika transfer tidak seimbang.",
+          "Foreign key pada account_id otomatis membuat credit untuk setiap debit."
+        ],
+        "answer": 0,
+        "explanation": "Transfer seimbang adalah invariant lintas baris yang memerlukan agregasi, sisi, dan account yang berbeda, bukan hanya nominal nonzero.",
+        "feedback": [
+          "Benar: aturan transfer membutuhkan pemeriksaan pasangan dan agregat pada boundary yang sesuai.",
+          "CHECK amount <> 0 dapat menerima satu debit yang tidak mempunyai credit.",
+          "Foreign key memeriksa target referensi dan tidak membuat entry pasangan."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l4m01l02-check-2",
+        "question": "Apa kesimpulan paling tepat dari transfer 7002 yang net_delta-nya -10000?",
+        "options": [
+          "Transfer pasti aman karena debit adalah satu-satunya sisi yang wajib.",
+          "Snapshot menunjukkan invariant pasangan tidak terpenuhi; perlu perbaikan guard atau rekonsiliasi.",
+          "Query harus mengubah amount menjadi nol agar hasil terlihat valid."
+        ],
+        "answer": 1,
+        "explanation": "Pembacaan mendeteksi pelanggaran, tetapi tidak boleh memalsukan data untuk membuat laporan lolos.",
+        "feedback": [
+          "Double-entry memerlukan kedua sisi sesuai kontrak yang dipilih.",
+          "Benar: state violation adalah sinyal untuk diagnosis/reconciliation, bukan pembenaran perubahan laporan.",
+          "Query laporan tidak boleh mengubah fakta ledger untuk menyembunyikan invariant yang rusak."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Petakan invariant transfer ke hasil laporan dan tentukan mana yang masih membutuhkan penjagaan transaksi.",
+      "setup": "Gunakan TEMP table ledger. Dalam classifier latihan, transfer valid bila mempunyai tepat dua entry pada dua account berbeda, satu debit negatif, satu credit positif, dan jumlah bersih nol. Laporan hanya membaca; ia tidak memperbaiki baris.",
+      "starterSql": "SELECT transfer_id, SUM(amount) AS net_delta, COUNT(*) AS entry_count\nFROM pg_temp.lesson_consistency_entries\nGROUP BY transfer_id\nORDER BY transfer_id;",
+      "variants": [
+        {
+          "id": "l4m01l02-variant-1",
+          "question": "Transfer 7101 mempunyai account berbeda dengan -25000 debit dan +25000 credit. Menurut classifier fixture, apa state-nya?",
+          "options": ["valid", "violation karena semua transfer harus net positif", "unknown karena SUM tidak boleh dipakai pada ledger"],
+          "answer": 0,
+          "explanation": "Dua account berbeda, sisi dan tanda sesuai, serta net_delta nol memenuhi classifier pada contoh.",
+          "feedback": [
+            "Benar: jumlah debit dan credit saling menutup serta count tepat dua.",
+            "Transfer seimbang memang memiliki net nol; net positif bukan syarat fixture.",
+            "SUM tepat digunakan untuk memeriksa agregat yang dinyatakan oleh invariant."
+          ]
+        },
+        {
+          "id": "l4m01l02-variant-2",
+          "question": "Transfer 7102 mempunyai -25000 debit, +20000 credit, dan +5000 credit. Apakah net_delta nol saja cukup?",
+          "options": ["Ya, jumlah nol selalu membuktikan semua invariant.", "Tidak; classifier juga memeriksa tepat dua entry, tanda, sisi, dan account berbeda.", "Ya, karena CHECK amount <> 0 menghapus kebutuhan count."],
+          "answer": 1,
+          "explanation": "Net nol adalah satu pemeriksaan; classifier juga perlu memeriksa count, tanda, side, dan distinct account, tetapi tetap bukan otorisasi bisnis.",
+          "feedback": [
+            "Net nol tidak memberi informasi bahwa pasangan atau akun yang tepat dipakai.",
+            "Benar: invariant dapat mempunyai beberapa syarat yang perlu dipetakan.",
+            "CHECK satu baris tidak menggantikan pemeriksaan agregat dan relasi."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l4m01l02-edge-1",
+          "question": "Request transfer gagal setelah validasi tetapi sebelum entry ditulis. State internal paling aman?",
+          "options": ["Satu debit tetap disimpan agar audit memiliki jejak parsial.", "Tidak ada efek transfer yang commit; retry harus menilai business key.", "Credit dibuat sendiri agar net_delta kembali nol."],
+          "answer": 1,
+          "explanation": "Atomicity menghapus efek internal yang belum menjadi operasi sukses; jejak kegagalan dapat dicatat melalui mekanisme audit yang terpisah.",
+          "feedback": [
+            "Debit parsial merusak invariant dan tidak boleh dianggap audit yang cukup.",
+            "Benar: operasi database gagal tidak meninggalkan efek bisnis parsial, lalu retry harus idempotent.",
+            "Menambah credit palsu menyembunyikan kegagalan, bukan memperbaikinya."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l4m01l02-edge-2",
+          "question": "Transfer seimbang dan commit, tetapi notifikasi eksternal gagal. Apa yang tetap benar?",
+          "options": ["Database harus di-rollback lewat notifikasi secara otomatis.", "Ledger internal dapat tetap konsisten; pengiriman eksternal perlu retry atau rekonsiliasi terpisah.", "Buat debit kedua agar kegagalan notifikasi terlihat di saldo."],
+          "answer": 1,
+          "explanation": "Consistency database dan delivery eksternal adalah boundary berbeda; retry atau rekonsiliasi harus dipisahkan dari commit internal.",
+          "feedback": [
+            "Database tidak dapat menghapus notifikasi yang gagal atau menjadikan jaringan bagian dari commit.",
+            "Benar: internal invariant tetap dipertahankan, sementara side effect eksternal diproses terpisah.",
+            "Baris saldo tambahan akan merusak ledger dan tidak memperbaiki delivery."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Tulis invariant dalam bentuk terukur: count entry, sisi debit/credit, dan SUM harus selaras.",
+        "Pisahkan aturan satu baris dari aturan yang membutuhkan agregasi beberapa entry.",
+        "Audit menemukan violation; transaction protocol dan seluruh writer path yang mencegahnya harus dirancang terpisah."
+      ],
+      "solutionSql": "SELECT transfer_id, SUM(amount) AS net_delta, COUNT(*) AS entry_count, CASE WHEN COUNT(*) = 2 AND COUNT(DISTINCT account_id) = 2 AND COUNT(*) FILTER (WHERE side = 'debit' AND amount < 0) = 1 AND COUNT(*) FILTER (WHERE side = 'credit' AND amount > 0) = 1 AND SUM(amount) = 0.00 THEN 'valid' ELSE 'violation' END AS invariant_state FROM pg_temp.lesson_consistency_entries GROUP BY transfer_id ORDER BY transfer_id;",
+      "solutionExplanation": "Query menghitung net_delta, jumlah entry, account berbeda, serta tanda dan side entry per transfer. Valid hanya bila seluruh classifier fixture terpenuhi. Ini tetap laporan pembacaan: tidak memasang guard, tidak membuktikan otorisasi, dan tidak menjamin semua jalur penulisan terlindungi.",
+      "critical": true
+    },
+    "reflection": "Tuliskan satu invariant per baris dan satu invariant lintas baris pada Payment Ledger. Jelaskan mengapa CHECK, foreign key, dan audit tidak otomatis menjaga total transfer ketika dua request menulis bersama, serta di mana transaction boundary harus berada."
+  },
+  {
+    "id": "l4m01l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": ["acid", "transaction-boundary", "error-recovery", "payment-ledger"],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/sql-savepoint.html",
+      "https://www.postgresql.org/docs/17/sql-rollback-to.html",
+      "https://www.postgresql.org/docs/17/sql-rollback.html"
+    ],
+    "hook": "Client sudah menulis ledger payment, lalu statement berikutnya error karena constraint. Mengapa statement ketiga ikut ditolak, dan kapan SAVEPOINT dapat menyelamatkan pekerjaan yang memang ingin dipertahankan?",
+    "objectives": [
+      "Menentukan transaction boundary yang mengikat satu operasi bisnis tanpa memperpanjangnya dengan pekerjaan eksternal.",
+      "Menjelaskan state aborted setelah error serta perbedaan ROLLBACK penuh dan ROLLBACK TO SAVEPOINT.",
+      "Menyusun pemulihan yang aman tanpa mengklaim bahwa client selalu mengetahui outcome COMMIT."
+    ],
+    "sections": [
+      {
+        "title": "Boundary memilih apa yang atomik",
+        "paragraphs": [
+          "Transaction boundary dimulai ketika operasi bisnis membutuhkan lebih dari satu statement dan berakhir pada COMMIT atau ROLLBACK. Dalam Payment Ledger, membuat payment, entry debit-credit, dan outbox event biasanya satu unit. Panggilan jaringan ke provider atau menunggu manusia tidak seharusnya dibiarkan di dalam transaction panjang. Scope yang terlalu lebar menahan lock lebih lama, memperbesar contention, dan membuat retry semakin mahal.",
+          "Statement di luar explicit BEGIN–COMMIT pada PostgreSQL berjalan sebagai single-statement transaction. Itu tidak berarti dua statement terpisah otomatis atomik bersama-sama. Pilih boundary berdasarkan fakta yang harus berubah bersama, bukan berdasarkan panjang handler HTTP. Saat commit timeout, client dapat kehilangan pengetahuan tentang hasil akhir sehingga perlu rekonsiliasi sebelum mengulang operasi."
+        ]
+      },
+      {
+        "title": "Error membuat transaction tidak dapat dilanjutkan",
+        "paragraphs": [
+          "Jika statement dalam transaction block mendapat error, PostgreSQL menandai transaction tersebut aborted. Statement berikutnya tidak boleh dianggap berjalan normal; client harus ROLLBACK seluruh transaction atau kembali ke SAVEPOINT yang dibuat sebelumnya. ROLLBACK penuh membuang semua perubahan sejak BEGIN. ROLLBACK TO SAVEPOINT membuang perubahan setelah marker dan mempertahankan perubahan sebelumnya, lalu transaction dapat melanjutkan.",
+          "SAVEPOINT bukan retry lintas request dan bukan pengganti desain invariant. Ia berguna untuk langkah opsional yang boleh dibatalkan setelah langkah utama sukses secara lokal. Setelah kembali ke savepoint, validasi dan error handling tetap harus jelas; jangan menelan error lalu COMMIT state yang tidak memenuhi kontrak. Jika tidak ada savepoint sebelum error, pilihan aman biasanya rollback penuh dan ulangi seluruh operasi dengan business key."
+        ]
+      },
+      {
+        "title": "Membaca hasil rollback lokal",
+        "paragraphs": [
+          "Worked script memulai transaction, menulis capture entry 2, membuat savepoint, lalu menulis optional fee entry 3. ROLLBACK TO SAVEPOINT menghapus entry 3 tetapi mempertahankan entry 2. Setelah COMMIT, SELECT hanya melihat entry awal dan capture. Script ini sengaja tidak menjalankan statement invalid; ia menunjukkan bentuk hasil yang diharapkan setelah langkah opsional dibatalkan.",
+          "Pada error nyata, SQLSTATE dan constraint memberi petunjuk diagnosis, tetapi aplikasi harus memulihkan transaction state sebelum menjalankan query lain. COMMIT yang berhasil menutup boundary database; pengiriman outbox, provider, dan rekonsiliasi commit timeout tetap berada di tahap lain. Lesson ini membahas pemulihan state, bukan simulasi server concurrency atau bukti durability perangkat keras."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Mini fixture transaction boundary: satu ledger entry awal di pg_temp. Script worked memakai BEGIN, SAVEPOINT, ROLLBACK TO SAVEPOINT, COMMIT, lalu satu SELECT hasil akhir.",
+      "setupSql": "CREATE TEMP TABLE lesson_boundary_ledger (entry_id BIGINT PRIMARY KEY, payment_id BIGINT NOT NULL, amount NUMERIC(12,2) NOT NULL CHECK (amount > 0), note TEXT NOT NULL);\nINSERT INTO pg_temp.lesson_boundary_ledger VALUES (1,101,50000.00,'initial');",
+      "sql": "BEGIN;\nINSERT INTO pg_temp.lesson_boundary_ledger VALUES (2,101,30000.00,'capture');\nSAVEPOINT optional_fee;\nINSERT INTO pg_temp.lesson_boundary_ledger VALUES (3,101,2500.00,'optional-fee');\nROLLBACK TO SAVEPOINT optional_fee;\nCOMMIT;\nSELECT entry_id, payment_id, amount, note FROM pg_temp.lesson_boundary_ledger ORDER BY entry_id;",
+      "columns": ["entry_id", "payment_id", "amount", "note"],
+      "rows": [
+        ["1", "101", "50000.00", "initial"],
+        ["2", "101", "30000.00", "capture"]
+      ],
+      "ordered": true,
+      "explanation": "Entry 2 ditulis sebelum savepoint sehingga tetap ikut commit. Entry 3 ditulis setelah savepoint lalu dibuang oleh ROLLBACK TO SAVEPOINT. Script menghasilkan satu result table dari SELECT terakhir; ia tidak membuktikan error recovery pada server production atau durability crash."
+    },
+    "checks": [
+      {
+        "id": "l4m01l03-check-1",
+        "question": "Setelah statement dalam transaction block gagal karena constraint, apa yang harus dilakukan sebelum statement database berikutnya?",
+        "options": [
+          "Lanjutkan INSERT berikutnya karena hanya statement yang gagal.",
+          "ROLLBACK penuh atau ROLLBACK TO SAVEPOINT yang sudah dibuat, lalu lanjutkan dari state yang dipahami.",
+          "COMMIT segera agar statement yang berhasil sebelum error selalu tersimpan."
+        ],
+        "answer": 1,
+        "explanation": "Transaction yang aborted perlu dipulihkan sebelum statement berikutnya dapat diproses.",
+        "feedback": [
+          "Transaction block aborted tidak menerima statement normal sampai dipulihkan.",
+          "Benar: pilih rollback penuh atau marker savepoint sesuai unit perubahan yang aman.",
+          "COMMIT bukan cara memaksa transaction aborted menjadi sukses dan dapat menyesatkan caller."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l4m01l03-check-2",
+        "question": "Apa yang dipertahankan oleh ROLLBACK TO SAVEPOINT optional_fee pada worked script?",
+        "options": [
+          "Semua perubahan setelah BEGIN, termasuk optional fee.",
+          "Perubahan sebelum savepoint, yaitu entry capture, sementara perubahan setelahnya dibuang.",
+          "Tidak ada perubahan karena savepoint selalu sama dengan ROLLBACK penuh."
+        ],
+        "answer": 1,
+        "explanation": "Rollback to savepoint membuang command setelah marker dan mempertahankan state transaction sebelum marker.",
+        "feedback": [
+          "Entry fee justru berada setelah savepoint dan dibatalkan.",
+          "Benar: entry capture berada sebelum marker sehingga tetap tersedia untuk COMMIT.",
+          "ROLLBACK TO berbeda dari rollback penuh; transaction masih dapat melanjutkan."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Tentukan boundary pemulihan dan prediksi baris yang bertahan setelah langkah optional dibatalkan.",
+      "setup": "Mulai dari TEMP ledger dengan entry 1. Operasi utama menulis entry 2; langkah optional menulis entry 3 setelah SAVEPOINT. Aktivitas meminta prediksi state akhir, bukan eksekusi SQL learner.",
+      "starterSql": "BEGIN;\nINSERT INTO pg_temp.lesson_boundary_ledger VALUES (2,101,30000.00,'capture');\nSAVEPOINT optional_fee;\nINSERT INTO pg_temp.lesson_boundary_ledger VALUES (3,101,2500.00,'optional-fee');\nROLLBACK TO SAVEPOINT optional_fee;\nCOMMIT;",
+      "variants": [
+        {
+          "id": "l4m01l03-variant-1",
+          "question": "Jika langkah optional dibatalkan dengan ROLLBACK TO SAVEPOINT, berapa entry payment 101 yang terlihat setelah COMMIT pada fixture?",
+          "options": ["2 entry: initial dan capture", "3 entry karena rollback tidak menghapus INSERT", "0 entry karena savepoint selalu membatalkan BEGIN"],
+          "answer": 0,
+          "explanation": "Entry awal dan entry utama berada sebelum/di luar perubahan optional yang dibatalkan; entry optional hilang.",
+          "feedback": [
+            "Benar: entry 1 dan 2 bertahan, entry 3 dibuang.",
+            "Rollback to savepoint memang membatalkan INSERT setelah marker.",
+            "Savepoint bukan rollback penuh ke sebelum BEGIN."
+          ]
+        },
+        {
+          "id": "l4m01l03-variant-2",
+          "question": "Jika error terjadi tanpa SAVEPOINT setelah entry capture, apa hasil aman bila operasi tidak dapat diperbaiki di transaction itu?",
+          "options": ["COMMIT entry capture lalu lanjutkan statement lain", "ROLLBACK penuh dan ulangi operasi dari awal dengan business key", "Abaikan error karena entry capture sudah valid"],
+          "answer": 1,
+          "explanation": "Tanpa savepoint, rollback penuh menghindari state parsial; retry harus mengulang unit bisnis secara idempotent.",
+          "feedback": [
+            "Transaction aborted tidak boleh dipaksa COMMIT untuk menyimpan sebagian.",
+            "Benar: rollback penuh lalu retry seluruh operasi dari boundary awal.",
+            "Entry yang terlihat valid secara lokal belum tentu boleh berdiri sendiri menurut invariant operasi."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l4m01l03-edge-1",
+          "question": "Apa batas ROLLBACK TO SAVEPOINT yang tepat?",
+          "options": ["Ia membatalkan perubahan setelah marker, tetapi bukan efek provider eksternal sebelum atau sesudahnya.", "Ia mengembalikan email dan charge provider secara otomatis.", "Ia menjamin semua request lain melihat transaction yang sama."],
+          "answer": 0,
+          "explanation": "Savepoint hanya mengatur subtransaction pada database session tersebut.",
+          "feedback": [
+            "Benar: scope savepoint adalah perubahan database setelah marker.",
+            "Provider dan email berada di luar kontrol rollback database.",
+            "Savepoint tidak mengubah visibility atau koordinasi menjadi simulasi global."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l4m01l03-edge-2",
+          "question": "Client menerima timeout saat COMMIT. Boundary error-handling apa yang aman?",
+          "options": ["Anggap rollback dan ulangi charge tanpa lookup.", "Anggap commit pasti sukses dan masukkan ledger kedua.", "Tandai outcome tidak diketahui, rekonsiliasi business key, lalu retry hanya bila aman."],
+          "answer": 2,
+          "explanation": "Timeout komunikasi tidak menentukan apakah server sudah commit; retry buta dapat menggandakan efek.",
+          "feedback": [
+            "Timeout bukan bukti rollback.",
+            "Menulis ledger kedua dapat menggandakan efek yang sudah commit.",
+            "Benar: cek state dan provider melalui rekonsiliasi sebelum retry idempotent."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Pisahkan perubahan utama sebelum savepoint dari langkah optional setelah savepoint.",
+        "Error tanpa recovery membuat transaction aborted; savepoint hanya berguna jika dibuat sebelum langkah yang boleh dibatalkan.",
+        "Setelah COMMIT timeout, jangan menebak hasil; rekonsiliasi business key sebelum mengulang operasi atau external effect."
+      ],
+      "solutionSql": "BEGIN;\nINSERT INTO pg_temp.lesson_boundary_ledger VALUES (2,101,30000.00,'capture');\nSAVEPOINT optional_fee;\nINSERT INTO pg_temp.lesson_boundary_ledger VALUES (3,101,2500.00,'optional-fee');\nROLLBACK TO SAVEPOINT optional_fee;\nCOMMIT;\nSELECT entry_id, payment_id, amount, note FROM pg_temp.lesson_boundary_ledger ORDER BY entry_id;",
+      "solutionExplanation": "Reference script mempertahankan entry utama dan membuang entry optional menggunakan savepoint. Ia menghasilkan dua entry pada SELECT akhir. Bila error nyata terjadi, aplikasi harus memulihkan transaction state; lesson tidak menjalankan SQL learner dan tidak mensimulasikan timeout, concurrency, atau crash recovery.",
+      "critical": true
+    },
+    "reflection": "Jelaskan kapan memakai ROLLBACK penuh dan kapan ROLLBACK TO SAVEPOINT. Mengapa transaction boundary sebaiknya tidak mencakup network call lama, dan apa yang harus dilakukan client saat error atau timeout membuat outcome COMMIT tidak diketahui?"
+  }
+]

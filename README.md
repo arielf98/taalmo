@@ -30,7 +30,7 @@ Kelulusan lesson memerlukan aktivitas dan pemeriksaan wajib, bukan scroll atau N
 
 Aktivitas saat ini memakai prediksi deterministik, **belum menjalankan SQL pengguna**. Ini merupakan fallback aman karena platform belum memiliki runner SQL terisolasi. Penilaian formatif berlangsung di client; belum ada sertifikasi terproteksi, akun, atau sinkronisasi lintas perangkat. Tidak ada seed database aplikasi: konten diimpor statis berdasarkan stable ID.
 
-Lihat [rencana dan evidence](docs/database-path-implementation.md), [panduan authoring dan validasi](docs/database-path-authoring.md), serta [checklist 75 lesson draft](docs/database-path-remaining.md).
+Lihat [rencana dan evidence](docs/database-path-implementation.md), [panduan authoring dan validasi](docs/database-path-authoring.md), serta [checklist 72 lesson draft](docs/database-path-remaining.md).
 
 ## Fitur yang tersedia
 
@@ -41,10 +41,10 @@ Lihat [rencana dan evidence](docs/database-path-implementation.md), [panduan aut
 - Lab Lost Update: mode unsafe dan atomic increment, pilihan urutan penulisan serta saldo awal, run/step/reset/replay, histori, inspector, dan kuis akhir.
 - Lab Duplicate Payment Callback: mode unsafe dan idempotent, run/step/reset/replay, histori, inspector, ledger, transactional outbox, dan opsi rollback sebelum commit.
 - Kuis akhir lab yang terbuka setelah kedua mode selesai dieksplorasi.
-- Pilihan bahasa Inggris–Indonesia untuk seluruh 45 lesson kurikulum published, katalog termasuk judul draft, diagram alur, antarmuka, lesson transaksi, kuis, timeline, dan penjelasan simulasi. ID lesson, urutan jawaban, SQL, expected result dan progres tidak berubah saat bahasa diganti.
+- Pilihan bahasa Inggris–Indonesia untuk seluruh 48 lesson kurikulum published, katalog termasuk judul draft, diagram alur, antarmuka, lesson transaksi, kuis, timeline, dan penjelasan simulasi. ID lesson, urutan jawaban, SQL, expected result dan progres tidak berubah saat bahasa diganti.
 - Progres lokal, tema terang/gelap, serta layout desktop, tablet, dan mobile.
 
-Bagian praktik transaksi memiliki tiga lesson dan tiga lab: Lost Update, Duplicate Payment Callback, dan Deadlock. Ringkasan Database Engineering menggabungkan **48 lesson tersedia dan 3 lab**, atau 51 milestone aktivitas; 75 lesson database masih draft. Kelulusan modul/level tetap mengikuti assessment masing-masing, terpisah dari persentase aktivitas. ID lesson, milestone transaksi, versi konten, dan data progres browser dipertahankan tanpa migrasi.
+Bagian praktik transaksi memiliki tiga lesson dan tiga lab: Lost Update, Duplicate Payment Callback, dan Deadlock. Ringkasan Database Engineering menggabungkan **51 lesson tersedia dan 3 lab**, atau 54 milestone aktivitas; 72 lesson database masih draft. Kelulusan modul/level tetap mengikuti assessment masing-masing, terpisah dari persentase aktivitas. ID lesson, milestone transaksi, versi konten, dan data progres browser dipertahankan tanpa migrasi.
 
 ## Alur belajar pertama
 

@@ -119,5 +119,12 @@
   "expand-migrate-contract": "expand–migrate–contract",
   "backfill": "backfill",
   "backward-compatibility": "kompatibilitas mundur",
-  "data-quality": "kualitas data"
+  "data-quality": "kualitas data",
+  "acid": "ACID",
+  "atomicity": "atomisitas",
+  "durability": "durabilitas",
+  "payment-ledger": "ledger pembayaran",
+  "consistency": "konsistensi",
+  "transaction-boundary": "batas transaksi",
+  "error-recovery": "pemulihan error"
 }

@@ -15,6 +15,7 @@ import englishModeling from "./messages/en-database-modeling.json" with { type: 
 import englishNormalization from "./messages/en-database-normalization.json" with { type: "json" };
 import englishTypesConstraints from "./messages/en-database-types-constraints.json" with { type: "json" };
 import englishEvolution from "./messages/en-database-evolution.json" with { type: "json" };
+import englishAcid from "./messages/en-database-acid.json" with { type: "json" };
 export type Locale = "en" | "id";
 const indonesian: Record<string, string> = {
   ...interfaceMessages,
@@ -36,6 +37,7 @@ const english: Record<string, string> = {
   ...englishNormalization,
   ...englishTypesConstraints,
   ...englishEvolution,
+  ...englishAcid,
 };
 const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
