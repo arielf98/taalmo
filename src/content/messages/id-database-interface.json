@@ -187,5 +187,19 @@
   "write-amplification": "amplifikasi tulis",
   "index-cost": "biaya indeks",
   "storage": "penyimpanan",
-  "leading-column": "kolom awal"
+  "leading-column": "kolom awal",
+  "hash-join": "hash join",
+  "nested-loop": "nested loop",
+  "merge-join": "merge join",
+  "join-algorithms": "algoritma join",
+  "sort": "pengurutan",
+  "spill": "spill",
+  "work-mem": "work_mem",
+  "parallel-query": "query paralel",
+  "memory-budget": "anggaran memori",
+  "query-rewrite": "rewrite query",
+  "equivalence": "kesetaraan",
+  "pre-aggregation": "pra-agregasi",
+  "exists": "EXISTS",
+  "multiplicity": "multiplicity"
 }

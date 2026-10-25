@@ -1,0 +1,707 @@
+[
+  {
+    "id": "l5m03l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "query-planner",
+      "hash-join",
+      "nested-loop",
+      "merge-join",
+      "join-algorithms",
+      "commerce-analytics"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/queries-table-expressions.html",
+      "https://www.postgresql.org/docs/17/using-explain.html",
+      "https://www.postgresql.org/docs/17/parallel-query.html"
+    ],
+    "hook": "Laporan Commerce menggabungkan customer dengan orders. Pada satu request hanya ada satu customer yang sangat selektif, sedangkan request lain membaca hampir seluruh katalog order. Mengapa Nested Loop, Hash Join, dan Merge Join dapat masuk akal pada bentuk input yang berbeda, dan mengapa nama operator saja belum membuktikan performa?",
+    "objectives": [
+      "Menjelaskan hubungan ukuran input, selectivity, equality predicate, indeks, dan urutan input dengan pilihan algoritma join.",
+      "Membedakan cara kerja Nested Loop, Hash Join, dan Merge Join tanpa menganggap satu operator selalu paling cepat.",
+      "Membaca plan authored sebagai bukti bentuk algoritma dan menyebutkan batas yang hanya dapat dibuktikan oleh EXPLAIN runtime."
+    ],
+    "sections": [
+      {
+        "title": "Ukuran input mengubah pertanyaan planner",
+        "paragraphs": [
+          "Join selalu mempunyai makna logis yang sama: PostgreSQL memasangkan baris yang memenuhi kondisi join. Yang dapat berubah adalah cara fisik untuk mencari pasangan tersebut. Sebelum memilih nama operator, tulis grain hasil dan perkirakan berapa baris yang masuk dari sisi luar serta sisi dalam. Satu customer dengan delapan order adalah masalah yang berbeda dari seratus dua puluh customer dengan lima ribu order. Predicate equality seperti `c.customer_id = o.customer_id` membuka pilihan hash atau merge; predicate yang tidak memiliki equality key tidak dapat diperlakukan sebagai Hash Join biasa. Selectivity juga penting: filter yang menyisakan sedikit baris dapat membuat lookup berulang masuk akal, sementara filter luas membuat pembacaan dan pembangunan struktur sekali jalan lebih menarik.",
+          "Indeks adalah input keputusan, bukan perintah agar planner memilih Nested Loop. Indeks pada sisi dalam dapat membuat setiap lookup singkat, tetapi biaya random heap access dan jumlah pengulangan tetap harus dibandingkan. Sebaliknya, tidak adanya indeks tidak otomatis berarti Hash Join selalu unggul; input mungkin sudah terurut, hasil join mungkin perlu urutan yang sama, atau ukuran hash dapat melebihi memory yang tersedia. Planner memperkirakan cardinality dari statistik dan predicate. Jika estimate outer terlalu kecil, Nested Loop dapat dipilih untuk pekerjaan yang ternyata diulang sangat banyak. Karena itu pembacaan plan dimulai dari data shape dan estimate, bukan dari reputasi operator."
+        ]
+      },
+      {
+        "title": "Tiga algoritma, tiga biaya utama",
+        "paragraphs": [
+          "Nested Loop mengambil baris dari sisi luar lalu mencari pasangan pada sisi dalam untuk setiap baris tersebut. Ia cocok ketika outer kecil atau sangat selektif dan sisi dalam punya lookup yang tepat. Biaya utamanya adalah pengulangan: outer seribu baris dapat memanggil sisi dalam seribu kali. Hash Join biasanya membangun hash table dari satu input lalu memeriksa key input lain. Ia cocok untuk equality join dan input yang cukup besar ketika membangun hash lebih murah daripada lookup berulang. Ukuran row, jumlah baris, dan memory memengaruhi apakah hash tetap di memory atau membutuhkan kerja tambahan. Hash Join tidak menjawab inequality join secara umum.",
+          "Merge Join berjalan dengan dua input yang terurut pada join key, lalu memajukan pointer ketika key dibandingkan. Bila input sudah terurut atau urutan itu dibutuhkan lagi oleh parent node, biaya sort dapat terbayar. Bila kedua input belum terurut dan hanya dipakai sekali, sort tambahan dapat mengubah keputusan. Tiga algoritma ini juga dapat muncul bersama operator lain: planner dapat memakai Index Scan untuk memberi outer kecil, Hash pada salah satu child, atau Sort sebelum Merge Join. Jadi pertanyaan yang benar bukan “operator mana terbaik?”, melainkan “berapa baris dan kerja yang harus dilakukan operator ini untuk kontrak query tersebut?”"
+        ]
+      },
+      {
+        "title": "Batas plan authored dan bukti runtime",
+        "paragraphs": [
+          "Worked example pada lesson ini menyimpan tiga kasus dalam TEMP table: customer selektif dengan index lookup, input besar untuk equality join, dan dua input yang sudah terurut. Kolom `recommended_operator` adalah keputusan pedagogis yang ditulis berdasarkan asumsi data; ia bukan output planner yang direkam. Tabel membantu learner menghubungkan cardinality, index availability, equality predicate, dan ordering state ke alasan plan. Ia tidak mengukur latency, cache, disk I/O, memory, atau jumlah buffer. Dua plan yang terlihat berbeda dapat menghasilkan result set yang sama, dan plan yang terlihat sederhana dapat lebih mahal setelah estimate ternyata salah.",
+          "Dalam sistem nyata, gunakan EXPLAIN untuk melihat plan pada query, parameter, versi, statistik, dan konfigurasi yang benar. EXPLAIN biasa memberi prediksi; EXPLAIN ANALYZE menjalankan statement dan menambah evidence runtime, sehingga harus dipakai pada lingkungan yang aman. Lesson ini tidak memaksa `enable_hashjoin`, `enable_nestloop`, atau setting global lain. Mematikan operator hanya untuk menghasilkan plan tertentu dapat berguna sebagai eksperimen terisolasi, tetapi bukan rekomendasi produksi. Kesimpulan yang aman dari fixture ini adalah trade-off algoritma dan pertanyaan lanjutan yang perlu diukur, bukan klaim bahwa satu join pasti tercepat."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset J1 — tiga kasus join authored: satu outer kecil dengan index lookup, satu equality join dengan input besar, dan dua input yang sudah terurut. Semua ukuran dan rekomendasi adalah data latihan, bukan keluaran planner atau benchmark runtime.",
+      "setupSql": "CREATE TEMP TABLE lesson_join_cases (\n  case_id TEXT PRIMARY KEY,\n  left_rows INTEGER NOT NULL CHECK (left_rows > 0),\n  right_rows INTEGER NOT NULL CHECK (right_rows > 0),\n  right_lookup TEXT NOT NULL,\n  input_order TEXT NOT NULL,\n  join_predicate TEXT NOT NULL,\n  recommended_operator TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_join_cases VALUES\n ('selective_customer',1,8,'usable_index','unsorted','equality','Nested Loop'),\n ('broad_customer_orders',120,5000,'no_index','unsorted','equality','Hash Join'),\n ('sorted_customer_orders',1000,1200,'no_index','sorted','equality','Merge Join');",
+      "sql": "SELECT case_id, left_rows, right_rows, right_lookup, input_order, join_predicate, recommended_operator\nFROM pg_temp.lesson_join_cases\nORDER BY case_id;",
+      "columns": [
+        "case_id",
+        "left_rows",
+        "right_rows",
+        "right_lookup",
+        "input_order",
+        "join_predicate",
+        "recommended_operator"
+      ],
+      "rows": [
+        [
+          "broad_customer_orders",
+          "120",
+          "5000",
+          "no_index",
+          "unsorted",
+          "equality",
+          "Hash Join"
+        ],
+        [
+          "selective_customer",
+          "1",
+          "8",
+          "usable_index",
+          "unsorted",
+          "equality",
+          "Nested Loop"
+        ],
+        [
+          "sorted_customer_orders",
+          "1000",
+          "1200",
+          "no_index",
+          "sorted",
+          "equality",
+          "Merge Join"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Kasus selective mempunyai outer satu baris dan lookup sisi dalam yang kecil, sehingga pengulangan Nested Loop dapat masuk akal. Kasus broad memiliki input besar tanpa lookup yang dinyatakan, sehingga Hash Join menjadi kandidat authored untuk equality join. Kasus sorted menyediakan dua input terurut sehingga Merge Join tidak perlu dibebani asumsi sort baru. Semua rekomendasi bergantung pada kontrak data di fixture; tabel ini tidak membuktikan planner memilih operator tersebut atau bahwa latency-nya lebih rendah."
+    },
+    "checks": [
+      {
+        "id": "l5m03l01-check-1",
+        "question": "Kapan Nested Loop dengan lookup berindeks pada sisi dalam menjadi kandidat yang masuk akal?",
+        "options": [
+          "Saat sisi luar kecil atau sangat selektif dan setiap lookup sisi dalam diperkirakan menghasilkan sedikit baris.",
+          "Selalu, karena Nested Loop hanya membaca sisi dalam satu kali.",
+          "Hanya saat join tidak mempunyai key dan sisi dalam tidak perlu dicari."
+        ],
+        "answer": 0,
+        "explanation": "Nested Loop menjalankan sisi dalam untuk setiap baris outer. Outer kecil dan lookup yang selektif dapat menahan biaya pengulangan.",
+        "feedback": [
+          "Benar: cardinality outer dan biaya setiap lookup adalah alasan utama kandidat ini masuk akal.",
+          "Belum tepat: sisi dalam dapat dijalankan berulang, sehingga outer besar dapat membuatnya mahal.",
+          "Belum tepat: pasangan baris tetap membutuhkan relasi atau kondisi join yang sah."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l5m03l01-check-2",
+        "question": "Mengapa Hash Join tidak boleh dianggap pemenang universal untuk semua join Commerce?",
+        "options": [
+          "Hash Join selalu menghasilkan baris berbeda dari Nested Loop.",
+          "Hash Join terutama cocok untuk equality join dan ukuran hash, memory, serta bentuk input tetap memengaruhi biayanya.",
+          "Hash Join tidak pernah dapat mencocokkan dua tabel yang memiliki key."
+        ],
+        "answer": 1,
+        "explanation": "Hash Join mempunyai trade-off sendiri: ia membangun hash dan paling langsung untuk equality join, tetapi tidak otomatis lebih murah dari lookup atau input yang sudah terurut.",
+        "feedback": [
+          "Belum tepat: algoritma boleh berbeda tetapi hasil logis harus tetap sama bila query ekuivalen.",
+          "Benar: bentuk predicate dan ukuran input menentukan apakah pembangunan hash layak.",
+          "Belum tepat: equality key justru merupakan bentuk umum untuk Hash Join."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Bandingkan tiga kasus join authored dan jelaskan kapan ukuran input, index lookup, atau ordering membuat kandidat operator berbeda.",
+      "setup": "Gunakan Dataset J1 sebagai tabel keputusan yang sudah ditulis untuk latihan. Tidak ada EXPLAIN runtime, perubahan setting planner global, atau benchmark; learner memprediksi alasan operator dari cardinality dan bentuk input.",
+      "starterSql": "SELECT case_id, left_rows, right_rows, right_lookup, input_order\nFROM pg_temp.lesson_join_cases\nORDER BY case_id;",
+      "variants": [
+        {
+          "id": "l5m03l01-variant-1",
+          "question": "Kasus baru memiliki outer 2 baris, inner 400 baris, dan index lookup pada inner equality key. Kandidat authored mana yang paling mudah dipertanggungjawabkan?",
+          "options": [
+            "Hash Join pasti salah karena Hash Join tidak boleh membaca inner.",
+            "Merge Join pasti paling cepat walaupun kedua input belum terurut.",
+            "Nested Loop dengan lookup inner, karena pekerjaan dapat dibatasi pada dua lookup kecil."
+          ],
+          "answer": 2,
+          "explanation": "Outer yang sangat kecil dan lookup inner yang tersedia membuat pengulangan terbatas menjadi alasan yang masuk akal, tanpa menjanjikan hasil planner runtime.",
+          "feedback": [
+            "Belum tepat: Hash Join dapat membaca kedua input, tetapi belum tentu paling sesuai.",
+            "Belum tepat: Merge Join dapat memerlukan Sort tambahan bila input belum terurut.",
+            "Benar: ini alasan bentuk plan, bukan jaminan latency."
+          ]
+        },
+        {
+          "id": "l5m03l01-variant-2",
+          "question": "Dua input equality join masing-masing besar dan sudah terurut pada key yang sama. Apa alasan memilih Merge Join sebagai kandidat?",
+          "options": [
+            "Urutan yang sudah tersedia dapat menghindari sort tambahan dan memungkinkan dua input dipindai terarah.",
+            "Merge Join tidak membutuhkan join key sehingga bisa dipakai untuk semua predicate.",
+            "Input besar selalu membuat Merge Join lebih cepat daripada Hash Join."
+          ],
+          "answer": 0,
+          "explanation": "Ordering yang sudah ada mengurangi salah satu biaya utama Merge Join. Perbandingan runtime tetap membutuhkan data dan plan nyata.",
+          "feedback": [
+            "Benar: input terurut dan equality key memberi alasan struktural yang jelas.",
+            "Belum tepat: Merge Join tetap bergantung pada key dan bentuk kondisi yang sesuai.",
+            "Belum tepat: ukuran besar saja tidak membuktikan satu operator selalu unggul."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l5m03l01-edge-1",
+          "question": "Planner memilih Seq Scan walaupun index tersedia. Kesimpulan apa yang paling aman?",
+          "options": [
+            "PostgreSQL menonaktifkan semua index setelah satu query.",
+            "Predicate mungkin tidak selektif, tabel mungkin kecil, atau heap lookup diperkirakan lebih mahal.",
+            "Index pasti rusak dan harus langsung dihapus."
+          ],
+          "answer": 1,
+          "explanation": "Index adalah salah satu input planner. Pilihan Seq Scan perlu dibaca bersama selectivity, estimate, dan biaya akses data.",
+          "feedback": [
+            "Belum tepat: pemilihan index dievaluasi pada plan masing-masing query.",
+            "Benar: periksa estimate dan bentuk predicate sebelum menyimpulkan index bermasalah.",
+            "Belum tepat: pilihan Seq Scan bukan bukti kerusakan index."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l5m03l01-edge-2",
+          "question": "Apa batas kesimpulan dari tabel authored yang merekomendasikan Merge Join pada input sorted?",
+          "options": [
+            "Ia membuktikan planner akan memilih Merge Join pada setiap versi PostgreSQL.",
+            "Ia membuktikan Hash Join dan Nested Loop tidak dapat menghasilkan result set yang sama.",
+            "Ia memberi alasan bentuk plan; ia tidak membuktikan Merge Join lebih cepat setelah cache, sort, dan I/O nyata."
+          ],
+          "answer": 2,
+          "explanation": "Tabel authored menyatakan asumsi dan trade-off, bukan pengukuran atau kontrak planner lintas konfigurasi.",
+          "feedback": [
+            "Belum tepat: planner dipengaruhi statistik, versi, parameter, dan konfigurasi.",
+            "Belum tepat: algoritma berbeda dapat menghasilkan hasil logis yang sama.",
+            "Benar: evidence fixture berhenti pada alasan operator dan batasnya."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Tentukan grain hasil dan estimate baris sisi luar sebelum menyebut operator.",
+        "Tanyakan apakah equality key, lookup index, atau ordering input mengurangi kerja yang harus diulang.",
+        "Pisahkan alasan plan authored dari klaim latency; evidence runtime memerlukan EXPLAIN pada lingkungan aman."
+      ],
+      "solutionSql": "SELECT case_id, left_rows, right_rows, recommended_operator\nFROM pg_temp.lesson_join_cases\nORDER BY case_id;",
+      "solutionExplanation": "Reference mempertahankan tiga baris keputusan authored: Nested Loop untuk outer kecil dengan lookup, Hash Join untuk equality input besar yang belum terurut, dan Merge Join untuk input equality yang sudah terurut. Hasil ini tidak memaksa planner, tidak menjalankan EXPLAIN, dan tidak membuktikan operator tercepat. Learner harus membawa pertanyaan yang sama ke plan nyata dengan query, statistik, konfigurasi, dan data yang relevan.",
+      "critical": true
+    },
+    "reflection": "Jelaskan bagaimana ukuran sisi luar, selectivity, equality key, index lookup, dan ordering memengaruhi kandidat Nested Loop, Hash Join, atau Merge Join. Sebutkan bukti apa yang belum diberikan oleh tabel authored ini dan mengapa memaksa setting planner global bukan pengganti pengukuran yang aman."
+  },
+  {
+    "id": "l5m03l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "sort",
+      "spill",
+      "work-mem",
+      "parallel-query",
+      "memory-budget",
+      "query-planner"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/using-explain.html",
+      "https://www.postgresql.org/docs/17/sql-explain.html",
+      "https://www.postgresql.org/docs/17/runtime-config-resource.html",
+      "https://www.postgresql.org/docs/17/parallel-query.html"
+    ],
+    "hook": "Sebuah laporan ORDER BY tampak sederhana pada data kecil, tetapi input produksi menjadi lebar dan besar. Plan kemudian menunjukkan Sort Method yang memakai disk. Bagaimana membedakan sort in-memory dari spill, menetapkan work_mem secara lokal, dan menghitung risiko ketika banyak operasi, koneksi, atau parallel worker berjalan bersamaan?",
+    "objectives": [
+      "Menjelaskan Sort Method sebagai evidence authored atau runtime dan membedakan quicksort dari external merge tanpa mengarang pengukuran.",
+      "Menjelaskan bahwa work_mem berlaku per operasi dan dapat berulang pada banyak node, koneksi, serta worker paralel.",
+      "Memilih bounded SET LOCAL dalam transaction atau session latihan dan menolak perubahan global sebagai solusi default."
+    ],
+    "sections": [
+      {
+        "title": "Sort kecil dan spill disk menjawab kondisi berbeda",
+        "paragraphs": [
+          "Sort menerima baris dari child lalu mengembalikan baris dalam urutan yang diminta. Pada input kecil atau row yang sempit, seluruh kerja dapat selesai dengan metode in-memory seperti quicksort. Ketika data yang perlu diurutkan lebih besar daripada memory yang tersedia untuk operasi tersebut, PostgreSQL dapat memakai external sort dan menulis run sementara ke disk; output runtime dapat menyebut `external merge` beserta ukuran disk. Spill bukan tanda query pasti gagal dan bukan bukti bahwa index tidak berguna. Ia adalah informasi bahwa biaya sort mencakup I/O sementara dan perlu dibaca bersama jumlah baris, lebar baris, urutan yang diminta, serta node lain pada plan.",
+          "`Sort Method` yang tampak pada EXPLAIN ANALYZE adalah evidence eksekusi, sedangkan tabel lesson ini hanya menyimpan observasi authored untuk membangun model mental. Plain EXPLAIN dapat menunjukkan node Sort dan cost tanpa menjalankan query, tetapi tidak memberi actual sort method seolah-olah sudah diukur. Karena lesson tidak menjalankan database, nilai `quicksort`, `external_merge`, dan `disk_kb` pada fixture adalah label serta angka latihan. Learner boleh memprediksi bahwa input lebar dengan memory kecil lebih berisiko spill, tetapi tidak boleh menyebut angka itu sebagai ukuran disk yang benar-benar terjadi."
+        ]
+      },
+      {
+        "title": "work_mem adalah anggaran per operasi",
+        "paragraphs": [
+          "`work_mem` bukan satu ember memory untuk seluruh query dan bukan batas sederhana untuk seluruh koneksi. Ia adalah basis anggaran kerja bagi operasi executor tertentu, misalnya satu Sort atau satu hash operation; hash dapat memakai lebih dari nilai dasar melalui `hash_mem_multiplier`, dan angka ini bukan hard process limit untuk seluruh memory. Satu query dapat memiliki lebih dari satu node yang membutuhkan memory; beberapa bagian dapat hidup pada waktu yang tumpang tindih. Jika ada banyak koneksi aktif, setiap koneksi dapat menjalankan operasi sendiri. Karena itu menaikkan work_mem secara global hanya untuk menghilangkan satu spill dapat mengubah risiko disk menjadi tekanan memory pada server. Pilihan aman harus menyebut query, concurrency, row width, dan batas operasional yang diinginkan.",
+          "Parallel query menambah dimensi lain. Worker paralel dapat menjalankan operasi yang sama, sehingga anggaran per operasi dapat muncul pada beberapa proses. Angka `parallel_workers` di fixture bukan rumus universal untuk peak memory; ia hanya membantu learner melihat mengapa concurrency perlu dikalikan secara konservatif. Untuk eksperimen terbatas, bentuk seperti `BEGIN; SET LOCAL work_mem = '64MB'; EXPLAIN (COSTS OFF) SELECT ...; ROLLBACK;` memberi scope transaction yang jelas dan tidak meninggalkan setting global. EXPLAIN tanpa ANALYZE pada pola itu hanya memilih plan dalam scope tersebut; ia tidak membuktikan spill runtime berubah. Bukti actual sort atau disk memerlukan EXPLAIN ANALYZE pada lingkungan aman, dan tidak dijalankan oleh lesson ini. Contoh itu ditampilkan sebagai desain bounded, bukan dijadikan rekomendasi nominal untuk semua server."
+        ]
+      },
+      {
+        "title": "Baca evidence tanpa memaksa planner",
+        "paragraphs": [
+          "Worked example menyimpan tiga skenario: sort kecil satu session yang authored sebagai in-memory, sort lebar dengan work_mem kecil yang authored sebagai spill, dan kasus dengan beberapa session serta worker yang membuat budget aggregate perlu dihitung hati-hati. Kolom `sort_method` dan `disk_kb` membantu pembaca menghubungkan input dengan konsekuensi, tetapi tidak meniru output `EXPLAIN ANALYZE`. Tidak ada `SET work_mem` global, `max_parallel_workers` global, atau `enable_*` yang dipaksa. Tuning harus dimulai dari query dan evidence yang relevan, bukan dari menyalin angka memory dari mesin lain.",
+          "Jika plan nyata menunjukkan external merge, pertanyaan lanjutannya adalah apakah sort perlu dilakukan, apakah index atau perubahan query dapat menyediakan ordering, apakah cardinality estimate salah, dan apakah spill dapat diterima. Menambah memory dapat mempercepat satu sort tetapi memperburuk kompetisi saat traffic naik. Mengurangi parallelism dapat menurunkan peak memory tetapi mengubah throughput dan plan. Lesson ini melatih membaca hubungan itu sebagai keputusan trade-off. Ia tidak mengklaim latency, disk throughput, cache state, atau peak RSS; semua klaim tersebut membutuhkan pengukuran yang terkontrol, parameter yang diketahui, dan observability yang sesuai."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset J2 — authored sort observations: input row count, row width, work_mem per operation, session count, parallel worker count, sort operation count, and illustrative Sort Method. Values are teaching evidence, not EXPLAIN ANALYZE output.",
+      "setupSql": "CREATE TEMP TABLE lesson_sort_cases (\n  case_id TEXT PRIMARY KEY,\n  input_rows INTEGER NOT NULL CHECK (input_rows > 0),\n  row_width_bytes INTEGER NOT NULL CHECK (row_width_bytes > 0),\n  work_mem_mb INTEGER NOT NULL CHECK (work_mem_mb > 0),\n  session_count INTEGER NOT NULL CHECK (session_count > 0),\n  parallel_workers INTEGER NOT NULL CHECK (parallel_workers >= 0),\n  sort_operations INTEGER NOT NULL CHECK (sort_operations > 0),\n  sort_method TEXT NOT NULL,\n  disk_kb INTEGER NOT NULL CHECK (disk_kb >= 0),\n  evidence_label TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_sort_cases VALUES\n ('small_in_memory',5000,96,64,1,0,1,'quicksort',0,'authored_in_memory'),\n ('wide_spill',500000,512,4,1,0,1,'external_merge',128000,'authored_spill'),\n ('parallel_budget',1000000,256,16,4,2,3,'external_merge',256000,'authored_budget_risk');",
+      "sql": "SELECT case_id, input_rows, row_width_bytes, work_mem_mb, session_count, parallel_workers, sort_operations, sort_method, disk_kb, evidence_label\nFROM pg_temp.lesson_sort_cases\nORDER BY case_id;",
+      "columns": [
+        "case_id",
+        "input_rows",
+        "row_width_bytes",
+        "work_mem_mb",
+        "session_count",
+        "parallel_workers",
+        "sort_operations",
+        "sort_method",
+        "disk_kb",
+        "evidence_label"
+      ],
+      "rows": [
+        [
+          "parallel_budget",
+          "1000000",
+          "256",
+          "16",
+          "4",
+          "2",
+          "3",
+          "external_merge",
+          "256000",
+          "authored_budget_risk"
+        ],
+        [
+          "small_in_memory",
+          "5000",
+          "96",
+          "64",
+          "1",
+          "0",
+          "1",
+          "quicksort",
+          "0",
+          "authored_in_memory"
+        ],
+        [
+          "wide_spill",
+          "500000",
+          "512",
+          "4",
+          "1",
+          "0",
+          "1",
+          "external_merge",
+          "128000",
+          "authored_spill"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Small input diberi label authored_in_memory, sedangkan input lebar dengan work_mem kecil diberi label authored_spill. Kasus parallel_budget menunjukkan empat session, dua parallel worker, dan tiga operasi sort sebagai alasan untuk menghitung budget secara konservatif. `disk_kb` adalah angka pedagogis, bukan pengukuran disk. Fixture tidak mengklaim bahwa PostgreSQL akan memilih Sort Method tersebut atau bahwa work_mem tertentu aman untuk server nyata."
+    },
+    "checks": [
+      {
+        "id": "l5m03l02-check-1",
+        "question": "Apa arti paling tepat dari Sort Method external merge pada evidence sort?",
+        "options": [
+          "Sort menggunakan jalur external dan dapat melibatkan temporary disk; ini bukan bukti query gagal.",
+          "Semua baris hilang karena PostgreSQL tidak dapat mengurutkan input besar.",
+          "Server pasti memiliki cukup memory sehingga disk tidak pernah dipakai."
+        ],
+        "answer": 0,
+        "explanation": "External merge menunjukkan sort tidak sepenuhnya in-memory pada evidence tersebut; ukuran input dan konfigurasi tetap perlu diperiksa.",
+        "feedback": [
+          "Benar: spill adalah informasi biaya dan I/O, bukan otomatis error.",
+          "Belum tepat: external sort tetap dapat menghasilkan semua baris dengan benar.",
+          "Belum tepat: nama external justru mengingatkan kemungkinan temporary disk."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l5m03l02-check-2",
+        "question": "Mengapa work_mem tinggi pada satu query tidak boleh dianggap sebagai memory budget global yang aman?",
+        "options": [
+          "Karena setiap query PostgreSQL hanya boleh mempunyai satu operasi dan satu process.",
+          "Karena work_mem berlaku per operasi dan dapat dikonsumsi oleh beberapa node, koneksi, serta parallel worker.",
+          "Karena work_mem hanya memengaruhi nama kolom dan tidak pernah memengaruhi executor."
+        ],
+        "answer": 1,
+        "explanation": "Memory yang tersedia perlu dilihat terhadap bentuk query dan concurrency. Nilai per operasi dapat berlipat ketika banyak operasi atau worker aktif.",
+        "feedback": [
+          "Belum tepat: query dapat memiliki banyak node dan parallel process.",
+          "Benar: hitung risiko aggregate, bukan hanya satu node yang sedang dilihat.",
+          "Belum tepat: work_mem memengaruhi operasi seperti Sort dan hash."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Baca authored sort observations dan pilih tindakan bounded yang menjaga evidence serta risiko memory tetap terlihat.",
+      "setup": "Dataset J2 adalah tabel authored, bukan output EXPLAIN runtime. Gunakan contoh bounded `BEGIN; SET LOCAL work_mem = '64MB'; EXPLAIN (COSTS OFF) SELECT ...; ROLLBACK;` hanya sebagai pola scope; player tidak menjalankan SQL atau mengubah setting server.",
+      "starterSql": "SELECT case_id, input_rows, work_mem_mb, session_count, parallel_workers, sort_operations, sort_method\nFROM pg_temp.lesson_sort_cases\nORDER BY case_id;",
+      "variants": [
+        {
+          "id": "l5m03l02-variant-1",
+          "question": "Kasus wide_spill ingin dieksplorasi dengan memory lebih besar. Langkah paling aman untuk latihan adalah apa?",
+          "options": [
+            "Mengubah work_mem global permanen sampai semua query server berhenti spill.",
+            "Menghapus ORDER BY agar output tidak perlu memiliki kontrak urutan.",
+            "Batasi perubahan dengan SET LOCAL dalam transaction disposable dan bandingkan evidence pada query yang sama."
+          ],
+          "answer": 2,
+          "explanation": "Scope lokal membatasi dampak setting dan membuat eksperimen dapat dipulihkan; hasil tetap perlu diukur pada environment yang relevan.",
+          "feedback": [
+            "Belum tepat: setting global dapat memperbesar tekanan memory pada koneksi lain.",
+            "Belum tepat: menghapus kebutuhan output bukan pengukuran tuning yang setara.",
+            "Benar: SET LOCAL memberi boundary transaction dan tidak mengubah setting global."
+          ]
+        },
+        {
+          "id": "l5m03l02-variant-2",
+          "question": "Mengapa parallel_budget tidak cukup dinilai dari work_mem 16MB pada satu worker?",
+          "options": [
+            "Karena jumlah session, worker, sort operation, dan row width dapat membuat kebutuhan aggregate lebih besar.",
+            "Karena parallel worker selalu berbagi satu memory budget sehingga tidak perlu dihitung.",
+            "Karena external merge membuktikan semua worker berhenti sebelum sort selesai."
+          ],
+          "answer": 0,
+          "explanation": "Work_mem adalah per operasi; beberapa process dan node dapat aktif sehingga satu angka per worker bukan total risiko.",
+          "feedback": [
+            "Benar: concurrency dan jumlah operasi harus masuk dalam perhitungan konservatif.",
+            "Belum tepat: worker dapat memiliki kebutuhan executor masing-masing.",
+            "Belum tepat: Sort Method tidak memberi bukti worker berhenti atau tidak."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l5m03l02-edge-1",
+          "question": "Tim ingin mematikan semua spill dengan menaikkan work_mem global. Apa risiko utama?",
+          "options": [
+            "Menaikkan work_mem global otomatis membuat semua plan menggunakan Index Scan.",
+            "Banyak koneksi dan operasi dapat mengonsumsi memory bersamaan sehingga tekanan memory berpindah dari disk ke server.",
+            "work_mem global hanya memengaruhi satu request pertama dan tidak pernah berulang."
+          ],
+          "answer": 1,
+          "explanation": "Perubahan global memperluas dampak melampaui query yang sedang diamati dan tidak menjamin semua sort akan in-memory.",
+          "feedback": [
+            "Belum tepat: work_mem tidak memilih Index Scan secara otomatis.",
+            "Benar: jumlah operasi dan koneksi perlu dikalikan secara konservatif.",
+            "Belum tepat: work_mem dapat dipakai oleh banyak query dan operasi."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l5m03l02-edge-2",
+          "question": "Apa yang belum dibuktikan oleh `disk_kb = 128000` pada Dataset J2?",
+          "options": [
+            "Ia membuktikan setiap server akan menulis tepat 128000 KB untuk input yang sama.",
+            "Ia membuktikan Sort Method tidak dapat berubah ketika statistics atau cache berubah.",
+            "Ia belum membuktikan bytes temporary yang benar-benar ditulis, latency, atau throughput pada PostgreSQL."
+          ],
+          "answer": 2,
+          "explanation": "Kolom tersebut adalah angka authored untuk mengilustrasikan evidence dan tidak berasal dari runtime measurement.",
+          "feedback": [
+            "Belum tepat: environment dan plan dapat mengubah hasil.",
+            "Belum tepat: statistics, data, dan konfigurasi memengaruhi plan serta resource.",
+            "Benar: ukuran disk, latency, dan cache memerlukan pengukuran yang aman."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Bedakan Sort Method authored dari output EXPLAIN ANALYZE yang benar-benar menjalankan statement.",
+        "Hitung work_mem per operasi lalu pertimbangkan node, session, dan worker yang dapat aktif bersamaan.",
+        "Gunakan SET LOCAL dalam boundary bounded untuk eksperimen; jangan menjadikan setting global sebagai jawaban default."
+      ],
+      "solutionSql": "SELECT case_id, input_rows, work_mem_mb, session_count, parallel_workers, sort_operations, sort_method, disk_kb, evidence_label\nFROM pg_temp.lesson_sort_cases\nORDER BY case_id;",
+      "solutionExplanation": "Reference mempertahankan tiga observation authored dan menampilkan hubungan antara ukuran input, row width, memory per operation, concurrency, dan label Sort Method. `external_merge` serta `disk_kb` di sini adalah evidence yang ditulis untuk latihan, bukan hasil eksekusi. Tuning yang aman memerlukan query dan environment nyata, scope setting lokal, serta pertimbangan aggregate memory saat banyak session atau worker berjalan.",
+      "critical": true
+    },
+    "reflection": "Jelaskan kapan sort dapat tetap in-memory, apa arti spill external merge, mengapa work_mem berlaku per operasi, dan bagaimana session serta parallel worker mengubah budget. Tulis mengapa SET LOCAL bounded lebih aman untuk eksperimen daripada perubahan global, serta batas evidence authored pada lesson ini."
+  },
+  {
+    "id": "l5m03l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "query-rewrite",
+      "equivalence",
+      "pre-aggregation",
+      "exists",
+      "multiplicity",
+      "school-finance"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/queries-table-expressions.html",
+      "https://www.postgresql.org/docs/17/functions-subquery.html",
+      "https://www.postgresql.org/docs/17/queries-union.html",
+      "https://www.postgresql.org/docs/17/functions-conditional.html"
+    ],
+    "hook": "Laporan outstanding memakai satu baris per invoice, tetapi query lama langsung menjumlahkan invoice setelah JOIN ke payments. Invoice dengan dua cicilan dapat menggandakan parent, sementara invoice tanpa payment dapat hilang. Bagaimana melakukan rewrite dengan pre-aggregation, mempertahankan semua invoice, menghitung hanya payment succeeded, lalu membandingkan dua hasil sebagai multiset?",
+    "objectives": [
+      "Menetapkan grain satu baris per invoice sebelum menghitung paid dan outstanding.",
+      "Menggunakan LEFT JOIN, COALESCE, dan filter succeeded untuk mempertahankan invoice tanpa payment serta membedakan NULL dari nol.",
+      "Membandingkan query referensi dan rewrite dengan EXCEPT ALL dua arah tanpa mengubah hasil atau mengklaim performa dari kesetaraan output."
+    ],
+    "sections": [
+      {
+        "title": "Rewrite dimulai dari grain dan multiplicity",
+        "paragraphs": [
+          "Query rewrite bukan perlombaan mengganti bentuk SQL dengan kata yang lebih pendek. Langkah pertama adalah menulis arti satu baris hasil. Pada laporan ini satu baris berarti satu invoice, sehingga amount invoice boleh menyumbang sekali. Tabel payments berada pada grain payment: satu invoice dapat mempunyai beberapa payment succeeded, pending, atau failed. JOIN langsung menghasilkan satu pasangan untuk setiap payment yang cocok. Invoice 103 dan 109 masing-masing memiliki dua payment succeeded; bila `SUM(i.amount)` dilakukan pada hasil join mentah, parent amount ikut terulang. Masalah itu bukan diselesaikan dengan `DISTINCT` secara membabi buta, karena DISTINCT dapat menghapus detail sah dan tidak mengubah grain aggregate yang salah.",
+          "Rewrite yang aman membuat paid aggregate satu baris per invoice lebih dulu, lalu LEFT JOIN aggregate itu ke invoices. Dengan begitu invoice yang tidak mempunyai payment succeeded tetap terlihat. Payment pending dan failed berada di tabel sumber, tetapi tidak masuk paid aggregate karena filter status ditempatkan sebelum SUM. Jika tidak ada child, SUM pada aggregate tidak menghasilkan baris; LEFT JOIN memberikan sisi kanan NULL dan COALESCE mengubah ketiadaan pembayaran menjadi paid 0.00 untuk perhitungan. Nilai nol ini adalah keputusan tampilan laporan, bukan bukti bahwa ada payment row bernilai nol. Grain, filter, dan perlakuan NULL harus dijelaskan bersama, bukan disimpulkan dari angka akhir saja."
+        ]
+      },
+      {
+        "title": "Bandingkan hasil, bukan teks query",
+        "paragraphs": [
+          "Dua query dapat ditulis sangat berbeda dan tetap menghasilkan relation yang sama. Untuk memeriksa rewrite, pilih kolom yang membentuk kontrak hasil dan bandingkan dua arah dengan `EXCEPT ALL`. A minus B menunjukkan baris yang ada pada query pertama tetapi hilang pada query kedua; B minus A menunjukkan baris yang hanya muncul pada rewrite. `EXCEPT ALL` mempertahankan multiplicity, sehingga perbandingan tidak menyembunyikan duplikasi seperti `EXCEPT` atau DISTINCT. Kedua arah harus kosong untuk menyatakan multiset hasil sama pada fixture dan kolom yang dipilih. Itu lebih kuat daripada membandingkan dua string SQL, tetapi tetap tidak membuktikan performa, plan, lock, atau kesetaraan untuk semua kemungkinan data.",
+          "Lesson ini memakai query correlated sebagai reference: untuk setiap invoice, subquery menghitung COUNT dan SUM payment succeeded. Rewrite memakai CTE paid_per_invoice lalu LEFT JOIN. Keduanya memperlihatkan grain yang sama tetapi biaya potensialnya dapat berbeda. Expected report menampilkan seluruh sepuluh invoice, termasuk 104 yang hanya mempunyai payment pending, 105 yang mempunyai payment failed, dan 108 yang tidak memiliki payment row. Invoice 103 dan 109 memperlihatkan bahwa dua payment menjadi satu paid aggregate. Nilai `paid` tidak boleh tetap NULL pada report akhir, sedangkan payment count nol membantu learner membedakan absence dari payment yang amount-nya nol."
+        ]
+      },
+      {
+        "title": "Kesetaraan punya batas kontrak",
+        "paragraphs": [
+          "Reference dan rewrite harus memakai source, status filter, kolom, dan grain yang sama. Jika satu query menghitung semua payment sementara query lain hanya succeeded, EXCEPT ALL akan menemukan perbedaan yang memang bermakna. Jika satu query memakai INNER JOIN, invoice tanpa child akan hilang; jika query lain memakai LEFT JOIN, hasil tidak lagi sama. Jika filter status diletakkan pada WHERE setelah LEFT JOIN, baris NULL dapat terhapus dan laporan berubah menjadi perilaku inner join. Karena seed tidak memiliki `invoices.status`, status yang disaring harus datang dari `school.payments`; menambahkan asumsi kolom invoice yang tidak ada akan membuat rewrite tidak dapat dipakai.",
+          "Worked setup menyalin kolom relevan School Finance ke TEMP table sehingga reference dan rewrite memiliki fixture fresh yang sama tanpa mengubah source. Query hanya membaca; tidak ada update, payment baru, atau optimizer setting. Kesetaraan EXCEPT ALL dua arah memberi acceptance property untuk sepuluh invoice dan sebelas payment seed, tetapi bukan jaminan lintas histori refund, credit, overpayment, NULL timestamp, atau data live yang melanggar kontrak. Setelah output ekuivalen, barulah plan dan measurement dapat dibandingkan pada lingkungan aman. Rewrite yang lebih cepat tetapi mengubah invoice tanpa payment bukan perbaikan; correctness output tetap menjadi boundary pertama."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset J3 — School Finance fresh TEMP copy: sepuluh invoice dan sebelas payment dari seed. Report satu baris per invoice menghitung hanya payment succeeded, menjaga invoice tanpa payment, dan mengubah ketiadaan payment menjadi paid 0.00 secara eksplisit.",
+      "setupSql": "CREATE TEMP TABLE lesson_rewrite_invoices AS\nSELECT invoice_id, student_id, period_month, due_date, amount\nFROM school.invoices;\nCREATE TEMP TABLE lesson_rewrite_payments AS\nSELECT payment_id, invoice_id, amount, status, paid_at\nFROM school.payments;",
+      "sql": "WITH paid_per_invoice AS (\n  SELECT p.invoice_id, COUNT(*)::bigint AS succeeded_payment_count,\n         SUM(p.amount)::numeric(12,2) AS paid\n  FROM pg_temp.lesson_rewrite_payments p\n  WHERE p.status = 'succeeded'\n  GROUP BY p.invoice_id\n)\nSELECT i.invoice_id, i.student_id, i.amount,\n       COALESCE(p.succeeded_payment_count, 0::bigint) AS succeeded_payment_count,\n       COALESCE(p.paid, 0.00::numeric(12,2))::numeric(12,2) AS paid,\n       (i.amount - COALESCE(p.paid, 0.00::numeric(12,2)))::numeric(12,2) AS outstanding\nFROM pg_temp.lesson_rewrite_invoices i\nLEFT JOIN paid_per_invoice p ON p.invoice_id = i.invoice_id\nORDER BY i.invoice_id;",
+      "columns": [
+        "invoice_id",
+        "student_id",
+        "amount",
+        "succeeded_payment_count",
+        "paid",
+        "outstanding"
+      ],
+      "rows": [
+        [
+          "101",
+          "1",
+          "500000.00",
+          "1",
+          "500000.00",
+          "0.00"
+        ],
+        [
+          "102",
+          "1",
+          "500000.00",
+          "1",
+          "200000.00",
+          "300000.00"
+        ],
+        [
+          "103",
+          "2",
+          "450000.00",
+          "2",
+          "450000.00",
+          "0.00"
+        ],
+        [
+          "104",
+          "2",
+          "450000.00",
+          "0",
+          "0.00",
+          "450000.00"
+        ],
+        [
+          "105",
+          "3",
+          "650000.00",
+          "0",
+          "0.00",
+          "650000.00"
+        ],
+        [
+          "106",
+          "3",
+          "650000.00",
+          "1",
+          "500000.00",
+          "150000.00"
+        ],
+        [
+          "107",
+          "4",
+          "450000.00",
+          "1",
+          "450000.00",
+          "0.00"
+        ],
+        [
+          "108",
+          "5",
+          "400000.00",
+          "0",
+          "0.00",
+          "400000.00"
+        ],
+        [
+          "109",
+          "6",
+          "650000.00",
+          "2",
+          "650000.00",
+          "0.00"
+        ],
+        [
+          "110",
+          "6",
+          "650000.00",
+          "1",
+          "650000.00",
+          "0.00"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Paid_per_invoice mengubah payment succeeded menjadi satu baris per invoice sebelum LEFT JOIN. Invoice 103 dan 109 tetap satu baris walaupun mempunyai dua payment; invoice 104, 105, dan 108 tetap terlihat dengan payment count dan paid nol karena pending, failed, atau tidak ada child. Outstanding seluruh seed berjumlah 1950000. Query tidak membaca invoices.status karena kolom itu tidak ada pada schema School Finance."
+    },
+    "checks": [
+      {
+        "id": "l5m03l03-check-1",
+        "question": "Mengapa paid_per_invoice perlu dibentuk sebelum invoices digabungkan ke report?",
+        "options": [
+          "Agar setiap invoice menjadi satu baris sebelum amount invoice dan payment dihitung bersama.",
+          "Agar payment kedua pada invoice otomatis dihapus dari database.",
+          "Agar DISTINCT dapat menghapus semua perbedaan antara invoice dan payment."
+        ],
+        "answer": 0,
+        "explanation": "Pre-aggregation mengunci grain invoice dan menjumlahkan payment succeeded tanpa menggandakan amount parent.",
+        "feedback": [
+          "Benar: dua payment menjadi satu aggregate sebelum report invoice dibentuk.",
+          "Belum tepat: rewrite hanya membaca data dan tidak menghapus payment.",
+          "Belum tepat: DISTINCT bukan pengganti grain dan dapat menghilangkan detail yang sah."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l5m03l03-check-2",
+        "question": "Apa peran COALESCE pada invoice tanpa payment succeeded?",
+        "options": [
+          "Menghapus invoice yang tidak mempunyai pasangan pada LEFT JOIN.",
+          "Mengubah sisi kanan NULL akibat tidak ada child menjadi paid 0.00 secara eksplisit tanpa mengarang payment row.",
+          "Mengubah payment pending menjadi succeeded agar outstanding selalu nol."
+        ],
+        "answer": 1,
+        "explanation": "LEFT JOIN mempertahankan invoice; COALESCE menentukan nilai laporan untuk aggregate yang tidak memiliki baris pasangan.",
+        "feedback": [
+          "Belum tepat: menghapus parent adalah perilaku yang berlawanan dengan LEFT JOIN.",
+          "Benar: nol adalah nilai laporan untuk ketiadaan receipt succeeded, bukan payment baru.",
+          "Belum tepat: status pending tetap tidak masuk paid aggregate."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Temukan multiplicity pada direct join lalu pilih rewrite yang mempertahankan semua invoice dan menyamakan hasil dengan query reference.",
+      "setup": "Gunakan fresh TEMP copy Dataset J3. Starter menunjukkan detail invoice-payment pada grain pasangan; reference dan rewrite tetap mengembalikan satu baris per invoice. Player tidak mengeksekusi SQL learner.",
+      "starterSql": "SELECT i.invoice_id, i.amount, p.payment_id, p.amount AS payment_amount, p.status\nFROM pg_temp.lesson_rewrite_invoices i\nLEFT JOIN pg_temp.lesson_rewrite_payments p\n  ON p.invoice_id = i.invoice_id\n AND p.status = 'succeeded'\nORDER BY i.invoice_id, p.payment_id;",
+      "variants": [
+        {
+          "id": "l5m03l03-variant-1",
+          "question": "Apa masalah pada direct join ketika invoice 103 memiliki payment succeeded 203 dan 204?",
+          "options": [
+            "Invoice 103 hilang karena LEFT JOIN selalu membuang parent dengan lebih dari satu child.",
+            "Payment 204 otomatis dianggap failed karena hanya satu payment boleh ada.",
+            "Invoice 103 muncul dua kali pada grain pasangan sehingga SUM(i.amount) dapat menghitung 450000 dua kali."
+          ],
+          "answer": 2,
+          "explanation": "JOIN mempertahankan satu baris per pasangan yang cocok; invoice amount perlu diagregasikan pada grain invoice sebelum laporan total.",
+          "feedback": [
+            "Belum tepat: LEFT JOIN mempertahankan parent dan justru menampilkan pasangan yang cocok.",
+            "Belum tepat: schema mengizinkan beberapa payment pada satu invoice.",
+            "Benar: multiplicity child menggandakan parent pada hasil join mentah."
+          ]
+        },
+        {
+          "id": "l5m03l03-variant-2",
+          "question": "Invoice mana yang tetap harus ada pada report walaupun tidak mempunyai payment succeeded?",
+          "options": [
+            "104, 105, dan 108: masing-masing hanya pending, failed, atau tidak memiliki payment row.",
+            "Hanya 108, karena payment pending dan failed tetap dianggap receipt.",
+            "Tidak ada, karena report outstanding hanya boleh berisi invoice dengan payment."
+          ],
+          "answer": 0,
+          "explanation": "Filter succeeded membuat 104 dan 105 tidak memiliki paid aggregate; 108 tidak memiliki child sama sekali. LEFT JOIN menjaga ketiganya.",
+          "feedback": [
+            "Benar: ketiga keadaan perlu dibedakan tetapi tetap berada pada report invoice.",
+            "Belum tepat: pending dan failed tidak dihitung sebagai payment berhasil.",
+            "Belum tepat: invoice tanpa receipt tetap mempunyai billed dan outstanding."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l5m03l03-edge-1",
+          "question": "Apa yang terjadi jika filter `p.status = 'succeeded'` dipindahkan ke WHERE setelah LEFT JOIN?",
+          "options": [
+            "Payment failed berubah menjadi succeeded karena WHERE memperbaiki status.",
+            "Invoice tanpa pasangan succeeded dapat terhapus karena sisi kanan NULL tidak memenuhi WHERE.",
+            "Semua invoice tetap terlihat dan payment pending otomatis menjadi nol tanpa perubahan grain."
+          ],
+          "answer": 1,
+          "explanation": "Predicate pada tabel kanan setelah LEFT JOIN dapat menolak baris NULL dan mengubah perilaku report menjadi seperti inner join.",
+          "feedback": [
+            "Belum tepat: query tidak mengubah nilai status source.",
+            "Benar: letakkan filter di aggregate atau ON bila parent tanpa child harus dipertahankan.",
+            "Belum tepat: WHERE dapat menghapus parent tanpa pasangan."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l5m03l03-edge-2",
+          "question": "Apa yang dibuktikan ketika kedua arah EXCEPT ALL menghasilkan nol baris?",
+          "options": [
+            "Kedua query pasti mempunyai execution plan dan latency yang sama pada semua data.",
+            "Semua aturan refund, credit, dan histori payment sudah terbukti lengkap.",
+            "Kedua query menghasilkan multiset kolom yang sama pada fixture dan filter yang dipilih."
+          ],
+          "answer": 2,
+          "explanation": "EXCEPT ALL dua arah memeriksa kesetaraan hasil termasuk multiplicity untuk kontrak kolom tersebut, bukan kesetaraan biaya atau seluruh domain.",
+          "feedback": [
+            "Belum tepat: query ekuivalen dapat mempunyai plan dan biaya yang berbeda.",
+            "Belum tepat: fixture seed tidak mencakup seluruh state finansial.",
+            "Benar: tidak ada row yang hanya muncul di salah satu hasil pada fixture."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Tulis grain target satu invoice per baris dan agregasikan hanya payment succeeded di dalam CTE.",
+        "Gunakan LEFT JOIN lalu COALESCE agar NULL akibat ketiadaan child menjadi paid nol tanpa mengarang row payment.",
+        "Bandingkan reference dan rewrite dengan EXCEPT ALL dua arah; kesetaraan output bukan bukti plan atau latency sama."
+      ],
+      "solutionSql": "WITH reference AS (\n  SELECT i.invoice_id, i.student_id, i.amount,\n         COALESCE((\n           SELECT COUNT(*)::bigint\n           FROM pg_temp.lesson_rewrite_payments p\n           WHERE p.invoice_id = i.invoice_id\n             AND p.status = 'succeeded'\n         ), 0::bigint) AS succeeded_payment_count,\n         COALESCE((\n           SELECT SUM(p.amount)\n           FROM pg_temp.lesson_rewrite_payments p\n           WHERE p.invoice_id = i.invoice_id\n             AND p.status = 'succeeded'\n         ), 0.00::numeric(12,2))::numeric(12,2) AS paid,\n         (i.amount - COALESCE((\n           SELECT SUM(p.amount)\n           FROM pg_temp.lesson_rewrite_payments p\n           WHERE p.invoice_id = i.invoice_id\n             AND p.status = 'succeeded'\n         ), 0.00::numeric(12,2)))::numeric(12,2) AS outstanding\n  FROM pg_temp.lesson_rewrite_invoices i\n), rewritten AS (\n  WITH paid_per_invoice AS (\n    SELECT p.invoice_id, COUNT(*)::bigint AS succeeded_payment_count,\n           SUM(p.amount)::numeric(12,2) AS paid\n    FROM pg_temp.lesson_rewrite_payments p\n    WHERE p.status = 'succeeded'\n    GROUP BY p.invoice_id\n  )\n  SELECT i.invoice_id, i.student_id, i.amount,\n         COALESCE(p.succeeded_payment_count, 0::bigint) AS succeeded_payment_count,\n         COALESCE(p.paid, 0.00::numeric(12,2))::numeric(12,2) AS paid,\n         (i.amount - COALESCE(p.paid, 0.00::numeric(12,2)))::numeric(12,2) AS outstanding\n  FROM pg_temp.lesson_rewrite_invoices i\n  LEFT JOIN paid_per_invoice p ON p.invoice_id = i.invoice_id\n), reference_minus_rewritten AS (\n  SELECT invoice_id, student_id, amount, succeeded_payment_count, paid, outstanding\n  FROM reference\n  EXCEPT ALL\n  SELECT invoice_id, student_id, amount, succeeded_payment_count, paid, outstanding\n  FROM rewritten\n), rewritten_minus_reference AS (\n  SELECT invoice_id, student_id, amount, succeeded_payment_count, paid, outstanding\n  FROM rewritten\n  EXCEPT ALL\n  SELECT invoice_id, student_id, amount, succeeded_payment_count, paid, outstanding\n  FROM reference\n)\nSELECT 'reference_minus_rewritten' AS comparison, COUNT(*)::bigint AS difference_count\nFROM reference_minus_rewritten\nUNION ALL\nSELECT 'rewritten_minus_reference', COUNT(*)::bigint\nFROM rewritten_minus_reference\nORDER BY comparison;",
+      "solutionExplanation": "Reference memakai correlated subquery pada grain invoice, sedangkan rewritten memakai paid_per_invoice dan LEFT JOIN. Kedua arah EXCEPT ALL membandingkan invoice_id, student_id, amount, succeeded_payment_count, paid, dan outstanding sebagai multiset; expected count 0/0 berarti tidak ada baris yang hanya muncul di satu hasil pada seed. Query ini tidak membuktikan plan atau performa sama, tidak menambah payment, dan tidak mencakup refund, credit, histori lengkap, atau invoices.status yang memang tidak ada pada seed.",
+      "critical": true
+    },
+    "reflection": "Jelaskan grain satu invoice, bahaya multiplicity payment, alasan filter succeeded dan LEFT JOIN, perbedaan NULL dengan paid 0.00, serta apa yang dibuktikan dan tidak dibuktikan oleh EXCEPT ALL dua arah ketika memvalidasi rewrite outstanding."
+  }
+]

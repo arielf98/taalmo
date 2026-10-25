@@ -13,13 +13,13 @@
 
 ## Database Engineering — database curriculum
 
-The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L4 and L5M01–L5M02 provide 66 published bilingual lessons; 54 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
+The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L4 and L5M01–L5M03 provide 69 published bilingual lessons; 51 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
 
-## Recommended next milestone: L5M03 authoring
+## Recommended next milestone: L5M04 authoring
 
-L5M02 follows L5M01. L5 remains incomplete and its level assessment stays unavailable. Prediction exercises assess index-design reasoning; they do not execute a tuning benchmark or certify database performance.
+L5M03 follows L5M02. L5 still lacks its final two modules and its level assessment remains unavailable. Resource predictions and fixture equivalence do not establish a measured performance improvement.
 
-Continue with L5M03 — Joins, Sorts, dan Rewrite: join algorithms, sort spill and per-operation memory costs, and result-preserving rewrites. Use deterministic results for semantic equivalence and explicitly authored inputs for plan/performance illustrations. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
+Continue with L5M04 — Large Data Strategies: scale/skew, stable seek pagination on created_at and ID, and batch-size contention tradeoffs. Keep deterministic data examples separate from authored benchmark scenarios and avoid changing live configuration. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
 
 ## Later learning improvements
 

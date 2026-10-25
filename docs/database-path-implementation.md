@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L4 and L5M01–L5M02: 66 published / 54 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L4 and L5M01–L5M03: 69 published / 51 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -226,3 +226,11 @@ Added three bilingual index-design lessons covering B-tree selectivity, composit
 Totals: 22 authored modules, 66 published / 54 draft lessons; 69 combined lessons plus three labs (72 activity milestones). Existing E2E expectations only change the count and next draft route to l5m03l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
 
 Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L5M03**.
+
+## L5M03 continuation — 25 October 2026
+
+Added three bilingual lessons for join algorithms, sort/memory tradeoffs and semantic query rewrite. Join and sort operator choices, disk values and concurrency metadata are explicitly authored inputs. Memory prose includes per-operation scope, parallel workers, hash_mem_multiplier and bounded transaction-local settings. The outstanding rewrite retains all ten invoices, succeeded-only payment sums and counts, and zero receipts for pending-only, failed-only and childless invoices. The independent reference compares correlated aggregation against preaggregation with EXCEPT ALL in both directions over all six output columns. No source fixture, global optimizer setting or performance measurement was changed or executed.
+
+Totals: 23 authored modules, 69 published / 51 draft lessons; 72 combined lessons plus three labs (75 activity milestones). Existing E2E expectations only change the count and next draft route to l5m04l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
+
+Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L5M04**.
