@@ -24,6 +24,7 @@ import englishPlanner from "./messages/en-database-planner.json" with { type: "j
 import englishIndexes from "./messages/en-database-indexes.json" with { type: "json" };
 import englishJoinsRewrite from "./messages/en-database-joins-rewrite.json" with { type: "json" };
 import englishLargeData from "./messages/en-database-large-data.json" with { type: "json" };
+import englishTuning from "./messages/en-database-tuning.json" with { type: "json" };
 export type Locale = "en" | "id";
 const indonesian: Record<string, string> = {
   ...interfaceMessages,
@@ -54,6 +55,7 @@ const english: Record<string, string> = {
   ...englishIndexes,
   ...englishJoinsRewrite,
   ...englishLargeData,
+  ...englishTuning,
 };
 const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

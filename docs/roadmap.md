@@ -13,13 +13,13 @@
 
 ## Database Engineering — database curriculum
 
-The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L4 and L5M01–L5M04 provide 72 published bilingual lessons; 48 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
+The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L5 provide 75 published bilingual lessons; 45 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
 
-## Recommended next milestone: L5M05 authoring
+## Recommended next milestone: L6M01 authoring
 
-L5M04 follows L5M03. L5 still lacks its tuning clinic and the level assessment remains unavailable. Small deterministic fixtures and authored batch metadata do not prove large-data performance.
+L5M05 completes publication of L5. Its level assessment follows the existing publication and learner-mastery gates. Authored durations, query counts and evidence labels do not certify a production performance improvement.
 
-Continue with L5M05 — Workload Tuning Clinic: repeated baseline measurement and percentiles, pool/transaction/N+1 bottlenecks, and a correctness-plus-performance evidence rubric. Separate database execution from network/pool wait and preserve comparison context. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
+Continue with L6M01 — Physical Storage dan Buffering: heap pages and tuple versions, shared buffers versus OS cache, and wide-value/TOAST behavior. Distinguish logical value lengths from physical storage and use labeled illustrative storage/cache traces instead of invented engine observations. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
 
 ## Later learning improvements
 

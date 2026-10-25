@@ -1,16 +1,6 @@
 # Remaining curriculum authoring
 
-The following 48 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
-
-## L5 — Performance Engineering
-
-### L5M05 — Workload Tuning Clinic
-
-Prerequisite: l5m04. Scenario: Commerce + Analytics.
-
-- [ ] `l5m05l01` — Baseline dan metodologi benchmark
-- [ ] `l5m05l02` — Pool, transactions, dan N+1
-- [ ] `l5m05l03` — Performance certification
+The following 45 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L6 — PostgreSQL Internals
 

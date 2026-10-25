@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L4 and L5M01–L5M04: 72 published / 48 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L5: 75 published / 45 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -242,3 +242,11 @@ Added three bilingual large-data lessons. A deterministic generator/report disti
 Totals: 24 authored modules, 72 published / 48 draft lessons; 75 combined lessons plus three labs (78 activity milestones). Existing E2E expectations only change the count and next draft route to l5m05l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
 
 Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L5M05**.
+
+## L5M05 continuation — 25 October 2026
+
+Added three bilingual tuning-clinic lessons. L5M05L01 computes explicitly defined continuous percentiles over authored repeated-run durations with warmups excluded and cache/concurrency conditions separated. L5M05L02 explains pool wait, connection and transaction boundaries and N+1 round trips using a deterministic 100-invoice aggregate of 105050.00; its 101-versus-one statement counts include the list query and are not executed or measured. L5M05L03 classifies authored before/after evidence under a correctness and performance rubric that requires improvement, minimum sample counts and declared context in both phases rather than granting trusted certification. Source review corrected PostgreSQL boolean CSV representations and clarified count/evidence scope. No actual benchmark, pool, production setting or external operation was run. All L5 modules are now published, using the existing assessment gate.
+
+Totals: 25 authored modules, 75 published / 45 draft lessons; 78 combined lessons plus three labs (81 activity milestones). Existing E2E expectations only change the count and next draft route to l6m01l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
+
+Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L6M01**.

@@ -1,0 +1,677 @@
+[
+  {
+    "id": "l5m05l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "performance",
+      "benchmarking",
+      "latency",
+      "percentiles",
+      "workload-methodology",
+      "commerce-analytics"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/using-explain.html",
+      "https://www.postgresql.org/docs/17/sql-explain.html",
+      "https://www.postgresql.org/docs/17/pgbench.html",
+      "https://www.postgresql.org/docs/17/monitoring-stats.html"
+    ],
+    "hook": "Satu angka latency tidak cukup untuk menyebut query Commerce membaik. Bagaimana merancang baseline yang memisahkan warmup, cache, concurrency, ukuran data, dan tail latency agar p50 serta p95 dapat dibaca dengan jujur?",
+    "objectives": [
+      "Menjelaskan mengapa cache, warmup, concurrency, parameter, konfigurasi, dan volume data harus dipisahkan ketika membandingkan workload.",
+      "Menghitung p50 dan p95 dari sampel berulang dengan metode percentile_cont yang dinyatakan secara eksplisit.",
+      "Menyusun baseline yang dapat diulang tanpa mengubah angka authored menjadi bukti runtime atau SLA production."
+    ],
+    "sections": [
+      {
+        "title": "Baseline adalah kontrak pengukuran",
+        "paragraphs": [
+          "Baseline bukan satu angka yang ditempelkan pada query, melainkan deskripsi workload dan aturan pengukurannya. Untuk laporan invoice Commerce, catat statement yang sama, parameter yang dipakai, versi PostgreSQL dan driver, konfigurasi yang relevan, ukuran data, bentuk hasil, serta apakah request berjalan sendiri atau bersama request lain. Query dengan sepuluh ribu baris dan query dengan sepuluh juta baris bukan baseline yang sama. Begitu pula request concurrency satu dan concurrency sepuluh: keduanya menjawab pertanyaan kapasitas yang berbeda. Jika salah satu kandidat memakai prepared statement sementara kandidat lain tidak, perbedaan itu harus disebutkan sebelum angka dibandingkan. Baseline yang cukup rinci membuat pembaca tahu kondisi apa yang sebenarnya diukur dan kapan angka tersebut tidak boleh dipindahkan ke workload lain.",
+          "Cache dan warmup juga bagian dari kontrak. Run pertama dapat membayar parsing, planning, pembacaan halaman, atau pengisian cache; run berikutnya mungkin lebih hangat. Jangan menghapus run pertama diam-diam lalu menyebut sisanya sebagai performa umum. Tandai warmup dan keluarkan dari sampel utama bila tujuan memang mengukur steady state, atau laporkan cold-start sebagai cohort terpisah bila cold-start penting bagi pengguna. Simpan hasil per run, bukan hanya rata-rata, karena dua kelompok dengan rata-rata sama dapat memiliki tail yang sangat berbeda. Baseline yang baik bukan janji bahwa semua run berikutnya identik; baseline adalah titik pembanding dengan kondisi yang tertulis, sehingga perubahan dapat ditelusuri dan diulang secara aman.",
+          "Kontrak juga menjelaskan unit observasi dan batas reproduksi. Bila durasi diambil dari sisi aplikasi, dokumentasikan kapan timer dimulai dan berhenti, apakah waktu serialisasi response ikut dihitung, serta bagaimana cancellation diperlakukan. Bila yang diukur hanya waktu database, jangan menyebutnya sebagai pengalaman pengguna. Simpan parameter yang mewakili kasus umum maupun kasus berat, karena parameter dapat mengubah selectivity dan jalur planner. Tetapkan batas resource dan jangan mengubah setting global hanya untuk membuat satu angka terlihat lebih baik. Catatan sederhana tentang versi, data, cache, concurrency, dan sample membuat reviewer dapat mengulang pertanyaan yang sama tanpa menebak asumsi yang hilang."
+        ]
+      },
+      {
+        "title": "Sampel, p50, dan p95",
+        "paragraphs": [
+          "Sampling harus memiliki unit yang jelas: satu baris sampel mewakili satu eksekusi request yang selesai, dengan durasi end-to-end atau durasi database yang dipilih secara konsisten. Tetapkan jumlah run, warmup yang dikeluarkan, urutan atau randomisasi parameter, serta cara menangani error dan timeout. Dalam contoh ini, p50 dan p95 dihitung dengan `percentile_cont`: setelah durasi diurutkan, posisi untuk kuantil p didefinisikan sebagai `r = 1 + (n - 1) × p`; bila r bukan bilangan bulat, nilainya diinterpolasi linear antara dua posisi terdekat. Dengan aturan itu, p50 pada sebelas sampel adalah posisi keenam, sedangkan p95 berada di posisi 10,5. Metode lain seperti nearest-rank dapat menghasilkan angka berbeda, jadi nama metode harus ikut laporan.",
+          "P50 menggambarkan titik tengah sampel, tetapi pengguna yang mengalami ekor lambat sering lebih terlihat pada p95. P95 juga bukan nilai maksimum dan bukan jaminan bahwa 95 persen request production akan selesai di bawah angka tersebut; ia hanya deskripsi cohort yang dikumpulkan. Sebelas sampel cukup untuk latihan menghitung metode, bukan dasar SLA. Untuk keputusan nyata, perbanyak sampel, pisahkan parameter dan cohort yang bermakna, catat outlier tanpa menghapusnya tanpa alasan, lalu nyatakan ketidakpastian. Jangan mencampur warm dan cold, concurrency satu dan sepuluh, atau ukuran data berbeda ke satu percentile karena hasilnya akan menjawab workload fiktif yang tidak pernah dijalankan.",
+          "Kuantil juga sensitif terhadap definisi sampel. Jika satu request menghasilkan beberapa operasi database, tentukan apakah yang dicatat adalah satu durasi request atau satu durasi operasi; jangan mencampurnya dalam kolom yang sama. Jelaskan satuan, pembulatan, zona waktu bila timestamp dipakai, dan apakah retry dihitung sebagai request baru. p95 dari sample kecil dapat berpindah jauh karena satu nilai; itu alasan untuk menyimpan seluruh raw durations dan bukan hanya percentile. Ketika membandingkan kandidat, gunakan aturan dan cohort yang sama, lalu sebutkan jika target p95 adalah kebijakan internal, bukan angka yang berasal dari PostgreSQL. Itu adalah disiplin, bukan formalitas."
+        ]
+      },
+      {
+        "title": "Baca tabel authored tanpa mengklaim benchmark",
+        "paragraphs": [
+          "Dataset B1 menyimpan durasi yang ditulis untuk latihan, tiga cohort, dan satu baris warmup pada tiap cohort. Cohort `warm, concurrency 1` memiliki sebelas durasi terurut yang menghasilkan p50 24,00 ms dan p95 40,00 ms menurut metode linear. Cohort `cold, concurrency 1` memiliki p50 85,00 ms dan p95 115,00 ms, sedangkan `warm, concurrency 10` memiliki p50 34,00 ms dan p95 54,00 ms. Perbedaan ini membantu pembaca melihat bahwa cache dan concurrency mengubah distribusi, tetapi angka tersebut bukan pengukuran PostgreSQL. Query hanya menghitung data TEMP yang disediakan lesson; ia tidak menjalankan query invoice, tidak mengisi cache, dan tidak mengamati wall clock.",
+          "Gunakan hasil ini untuk memeriksa disiplin pelaporan: sebutkan cohort, n, metode percentile, data_rows, dan apakah warmup dikeluarkan. Jika sebuah perubahan menurunkan p50 tetapi menaikkan p95, tulis trade-off tersebut, lalu cari penyebab pada plan, lock, pool, atau resource sebelum menyimpulkan perbaikan. Untuk baseline production, query yang sama perlu dijalankan pada fixture atau lingkungan yang diizinkan, dengan hasil dan konfigurasi disimpan untuk audit. Lesson ini tidak memberi angka target universal dan tidak membuktikan bahwa `warm` lebih baik untuk semua pengguna; ia memberi kerangka agar target serta regresi dapat diperdebatkan dengan data yang konteksnya lengkap.",
+          "Tabel authored juga mengajarkan bentuk laporan yang dapat diaudit, bukan hanya aritmetika. Sertakan daftar run yang masuk dan keluar, alasan warmup dikeluarkan, serta cohort yang sengaja tidak dibandingkan. Bila p95 naik setelah perubahan sementara p50 turun, jangan memilih angka yang mendukung narasi; laporkan keduanya dan cari apakah tail berasal dari lock, antrean pool, parameter tertentu, atau noise sample. Perubahan pada ukuran data harus menghasilkan baseline baru, bukan catatan kaki kecil pada angka lama. Di lingkungan nyata, simpan query text, parameter, hasil bisnis, plan, konfigurasi, dan error bersama duration agar perbaikan performa tidak dibayar dengan regresi correctness. Ia tidak memberi izin untuk mengubah production."
+          "Jangan menafsirkan tabel ini sebagai urutan cold lalu warm yang pasti terjadi pada setiap server. Cache dapat berubah karena workload lain, autovacuum, restart, atau eviction; concurrency dapat mengubah antrean dan interleaving. Catatan cohort memberi bahasa untuk membandingkan kondisi, bukan sebab tunggal. Jika ingin menyimpulkan bahwa kandidat lebih baik, tetapkan hipotesis, ukur before dan after pada kondisi sebanding, dan simpan bukti yang cukup untuk memeriksa result set. Tanpa langkah itu, angka hanya contoh cara menghitung dan melaporkan distribusi."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset B1 — tiga cohort durasi authored untuk laporan invoice: cold/concurrency 1, warm/concurrency 1, dan warm/concurrency 10 pada data_rows 10000. Satu baris warmup per cohort ditandai dan dikeluarkan dari percentile. Semua durasi ditulis untuk latihan, bukan hasil benchmark PostgreSQL.",
+      "setupSql": "CREATE TEMP TABLE lesson_benchmark_runs (\n  run_id INTEGER PRIMARY KEY,\n  cache_state TEXT NOT NULL,\n  concurrency INTEGER NOT NULL,\n  data_rows INTEGER NOT NULL,\n  duration_ms NUMERIC(8,2) NOT NULL,\n  is_warmup BOOLEAN NOT NULL,\n  note TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_benchmark_runs VALUES\n  (1, 'warm', 1, 10000, 200.00, true, 'warmup excluded'),\n  (2, 'warm', 1, 10000, 18.00, false, 'sample'),\n  (3, 'warm', 1, 10000, 19.00, false, 'sample'),\n  (4, 'warm', 1, 10000, 20.00, false, 'sample'),\n  (5, 'warm', 1, 10000, 21.00, false, 'sample'),\n  (6, 'warm', 1, 10000, 22.00, false, 'sample'),\n  (7, 'warm', 1, 10000, 24.00, false, 'sample'),\n  (8, 'warm', 1, 10000, 25.00, false, 'sample'),\n  (9, 'warm', 1, 10000, 27.00, false, 'sample'),\n  (10, 'warm', 1, 10000, 31.00, false, 'sample'),\n  (11, 'warm', 1, 10000, 35.00, false, 'sample'),\n  (12, 'warm', 1, 10000, 45.00, false, 'sample'),\n  (13, 'cold', 1, 10000, 250.00, true, 'warmup excluded'),\n  (14, 'cold', 1, 10000, 72.00, false, 'sample'),\n  (15, 'cold', 1, 10000, 75.00, false, 'sample'),\n  (16, 'cold', 1, 10000, 78.00, false, 'sample'),\n  (17, 'cold', 1, 10000, 80.00, false, 'sample'),\n  (18, 'cold', 1, 10000, 82.00, false, 'sample'),\n  (19, 'cold', 1, 10000, 85.00, false, 'sample'),\n  (20, 'cold', 1, 10000, 87.00, false, 'sample'),\n  (21, 'cold', 1, 10000, 90.00, false, 'sample'),\n  (22, 'cold', 1, 10000, 94.00, false, 'sample'),\n  (23, 'cold', 1, 10000, 100.00, false, 'sample'),\n  (24, 'cold', 1, 10000, 130.00, false, 'sample'),\n  (25, 'warm', 10, 10000, 180.00, true, 'warmup excluded'),\n  (26, 'warm', 10, 10000, 24.00, false, 'sample'),\n  (27, 'warm', 10, 10000, 25.00, false, 'sample'),\n  (28, 'warm', 10, 10000, 26.00, false, 'sample'),\n  (29, 'warm', 10, 10000, 28.00, false, 'sample'),\n  (30, 'warm', 10, 10000, 30.00, false, 'sample'),\n  (31, 'warm', 10, 10000, 34.00, false, 'sample'),\n  (32, 'warm', 10, 10000, 35.00, false, 'sample'),\n  (33, 'warm', 10, 10000, 38.00, false, 'sample'),\n  (34, 'warm', 10, 10000, 42.00, false, 'sample'),\n  (35, 'warm', 10, 10000, 48.00, false, 'sample'),\n  (36, 'warm', 10, 10000, 60.00, false, 'sample');",
+      "sql": "SELECT cache_state, concurrency, data_rows, COUNT(*)::INTEGER AS sample_n,\n       percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_ms)::NUMERIC(8,2) AS p50_ms,\n       percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms)::NUMERIC(8,2) AS p95_ms\nFROM pg_temp.lesson_benchmark_runs\nWHERE is_warmup = false\nGROUP BY cache_state, concurrency, data_rows\nORDER BY cache_state, concurrency;",
+      "columns": [
+        "cache_state",
+        "concurrency",
+        "data_rows",
+        "sample_n",
+        "p50_ms",
+        "p95_ms"
+      ],
+      "rows": [
+        [
+          "cold",
+          "1",
+          "10000",
+          "11",
+          "85.00",
+          "115.00"
+        ],
+        [
+          "warm",
+          "1",
+          "10000",
+          "11",
+          "24.00",
+          "40.00"
+        ],
+        [
+          "warm",
+          "10",
+          "10000",
+          "11",
+          "34.00",
+          "54.00"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Query mengeluarkan satu baris per cohort setelah warmup dikeluarkan. Dengan percentile_cont dan r = 1 + (n - 1) × p, sebelas sample menempatkan p50 pada posisi 6 dan p95 pada posisi 10,5; misalnya warm/concurrency 1 menginterpolasi 35 dan 45 menjadi 40,00. Hasil ini hanya menghitung angka authored dalam TEMP table. Ia bukan durasi yang diukur, tidak membuktikan cache PostgreSQL, dan tidak boleh dipakai sebagai SLA atau perbandingan lintas ukuran data tanpa cohort baru."
+    },
+    "checks": [
+      {
+        "id": "l5m05l01-check-1",
+        "question": "Mengapa warmup, cache_state, concurrency, dan data_rows perlu dicatat terpisah ketika membuat baseline?",
+        "options": [
+          "Karena tiap kombinasi mendefinisikan cohort workload berbeda; mencampurnya dapat membuat percentile menjawab pertanyaan yang tidak jelas.",
+          "Karena percentile hanya boleh dihitung dari satu baris dan tidak boleh memakai data berulang.",
+          "Karena concurrency otomatis mengubah isi tabel sehingga data_rows tidak lagi relevan."
+        ],
+        "answer": 0,
+        "explanation": "Cache, concurrency, dan ukuran data mengubah kondisi kerja. Baseline perlu menyatakan cohort sebelum angka dibandingkan.",
+        "feedback": [
+          "Benar. Pisahkan cohort agar p50/p95 masih punya konteks workload yang dapat diulang.",
+          "Belum tepat. Percentile memang memerlukan sampel berulang; justru setiap run perlu dicatat.",
+          "Belum tepat. Concurrency tidak otomatis mengubah data_rows; keduanya adalah dimensi workload yang harus dicatat."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l5m05l01-check-2",
+        "question": "Dengan sebelas durasi terurut dan metode percentile_cont, posisi p95 adalah ...",
+        "options": [
+          "Posisi pertama, karena p95 mengabaikan ekor lambat.",
+          "Posisi kesembilan secara wajib, tanpa interpolasi apa pun.",
+          "r = 1 + (11 - 1) × 0,95 = 10,5, sehingga dua posisi terakhir diinterpolasi linear."
+        ],
+        "answer": 2,
+        "explanation": "Metode continuous yang dinyatakan lesson memakai posisi 1 + (n - 1) × p; untuk n=11 dan p=0,95 hasilnya 10,5.",
+        "feedback": [
+          "Belum tepat. P95 justru memperhatikan bagian ekor sampel, bukan posisi pertama.",
+          "Belum tepat. Nearest-rank dan continuous interpolation adalah metode berbeda; lesson ini menyatakan rumusnya.",
+          "Benar. Posisi 10,5 berarti nilai antara sampel ke-10 dan ke-11 sesuai interpolasi linear."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Gunakan Dataset B1 untuk menjelaskan p50/p95 tiap cohort, lalu tulis batas kesimpulan sebelum angka authored disebut sebagai benchmark.",
+      "setup": "Fixture TEMP berisi 33 durasi non-warmup pada data_rows 10000 dan tiga warmup yang harus dikeluarkan. Hitung percentile dengan metode continuous linear yang ditulis pada lesson; jangan menggabungkan cache_state atau concurrency berbeda. Semua rows adalah authored input, bukan hasil query atau stopwatch.",
+      "starterSql": "SELECT cache_state, concurrency, data_rows, COUNT(*)::INTEGER AS sample_n,\n       percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_ms)::NUMERIC(8,2) AS p50_ms,\n       percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms)::NUMERIC(8,2) AS p95_ms\nFROM pg_temp.lesson_benchmark_runs\nWHERE is_warmup = false\nGROUP BY cache_state, concurrency, data_rows\nORDER BY cache_state, concurrency;",
+      "variants": [
+        {
+          "id": "l5m05l01-variant-1",
+          "question": "Sampel baru untuk satu cohort memiliki lima durasi terurut 10, 12, 15, 20, 50 ms. Dengan percentile_cont dan r = 1 + (n - 1) × p, berapa p50?",
+          "options": [
+            "12,00 ms, karena p50 selalu memilih nilai kedua untuk lima sample.",
+            "15,00 ms, karena p50 berada pada posisi 1 + 4 × 0,50 = 3.",
+            "50,00 ms, karena percentile harus memakai nilai maksimum."
+          ],
+          "answer": 1,
+          "explanation": "Untuk n=5, posisi p50 adalah 3 sehingga nilai tengahnya 15,00 ms.",
+          "feedback": [
+            "Belum tepat. Posisi kedua bukan rumus p50 untuk n=5 pada metode ini.",
+            "Benar. Posisi 3 adalah nilai tengah setelah durasi diurutkan.",
+            "Belum tepat. Nilai maksimum adalah p100, bukan p50."
+          ]
+        },
+        {
+          "id": "l5m05l01-variant-2",
+          "question": "Warm cohort memiliki p95 40 ms tetapi cold cohort memiliki p95 115 ms. Pernyataan paling aman adalah ...",
+          "options": [
+            "Pada cohort yang dicatat, distribusi cold memiliki tail lebih tinggi; penyebab dan generalisasi production masih perlu evidence.",
+            "Warm cache selalu 75 ms lebih cepat untuk semua pengguna.",
+            "Cold cohort harus dihapus karena hanya warm cache yang valid."
+          ],
+          "answer": 0,
+          "explanation": "Angka authored dapat dibandingkan dalam konteks cohort, tetapi tidak membuktikan kausalitas universal atau SLA.",
+          "feedback": [
+            "Benar. Laporkan perbedaan cohort dan batas evidence tanpa mengubahnya menjadi klaim universal.",
+            "Belum tepat. Selisih ini hanya berlaku pada data authored dan kondisi yang dicatat.",
+            "Belum tepat. Cold-start dapat relevan; ia dipisahkan, bukan dihapus tanpa tujuan."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l5m05l01-edge-1",
+          "question": "Satu timeout 5000 ms muncul di sampel p95. Apa tindakan metodologis yang paling aman?",
+          "options": [
+            "Hapus timeout agar p95 terlihat lebih bagus.",
+            "Ganti timeout dengan p50 lalu lanjutkan tanpa catatan.",
+            "Catat sebagai outcome/error sesuai aturan workload, lalu laporkan apakah percentile memasukkan atau mengecualikannya dan mengapa."
+          ],
+          "answer": 2,
+          "explanation": "Timeout adalah bagian dari pengalaman workload. Menghapus atau mengganti diam-diam membuat baseline tidak dapat diaudit.",
+          "feedback": [
+            "Belum tepat. Menghapus outlier tanpa aturan dapat menyembunyikan regresi.",
+            "Belum tepat. Mengganti hasil dengan p50 mengubah data tanpa dasar.",
+            "Benar. Aturan error/timeout harus eksplisit dan hasilnya tetap terlihat dalam laporan."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l5m05l01-edge-2",
+          "question": "Dua baseline sama-sama p95 40 ms, tetapi satu memakai 10 ribu rows/concurrency 1 dan satu 1 juta rows/concurrency 10. Kesimpulan yang tepat?",
+          "options": [
+            "Keduanya pasti ekuivalen karena p95 sama.",
+            "Baseline pertama harus dipakai karena concurrency 1 selalu representatif.",
+            "Angka tidak boleh dibandingkan sebagai workload yang sama; dimensi data dan concurrency berbeda."
+          ],
+          "answer": 2,
+          "explanation": "Percentile tanpa konteks cohort tidak menyatakan workload yang identik.",
+          "feedback": [
+            "Belum tepat. Nilai sama tidak menghapus perbedaan kondisi pengukuran.",
+            "Belum tepat. Concurrency 1 bukan otomatis representatif untuk semua pengguna.",
+            "Benar. Simpan kedua cohort dan beri nama pertanyaan yang dijawab masing-masing."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Pisahkan baris warmup terlebih dahulu, lalu hitung n pada setiap kombinasi cache_state, concurrency, dan data_rows.",
+        "Gunakan rumus posisi yang ditulis lesson; p50 dan p95 tidak sama dengan minimum dan maksimum.",
+        "Setelah memperoleh angka, tulis cohort, metode, batas sample, dan apa yang belum diukur sebelum menyebut baseline."
+      ],
+      "solutionSql": "SELECT cache_state, concurrency, data_rows, COUNT(*)::INTEGER AS sample_n,\n       percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_ms)::NUMERIC(8,2) AS p50_ms,\n       percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms)::NUMERIC(8,2) AS p95_ms\nFROM pg_temp.lesson_benchmark_runs\nWHERE is_warmup = false\nGROUP BY cache_state, concurrency, data_rows\nORDER BY cache_state, concurrency;",
+      "solutionExplanation": "Reference query mempertahankan tiga cohort dan mengeluarkan warmup. Pembacaan yang benar menyebut cold/concurrency 1 sebagai 85,00/115,00; warm/concurrency 1 sebagai 24,00/40,00; dan warm/concurrency 10 sebagai 34,00/54,00 dengan n=11. Angka itu dihitung dari data authored melalui percentile_cont, bukan diukur dari PostgreSQL. Baseline nyata memerlukan query, parameter, data state, konfigurasi, cache policy, sample yang cukup, serta aturan timeout yang terdokumentasi.",
+      "critical": true
+    },
+    "reflection": "Jelaskan cara memisahkan warmup, cache, concurrency, dan volume data saat membuat baseline, tulis rumus percentile_cont untuk p50/p95, dan sebutkan mengapa angka authored Dataset B1 belum menjadi benchmark atau SLA production."
+  },
+  {
+    "id": "l5m05l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "connection-pool",
+      "transactions",
+      "n-plus-one",
+      "round-trips",
+      "query-shape",
+      "commerce-analytics"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/tutorial-transactions.html",
+      "https://www.postgresql.org/docs/17/ddl-constraints.html",
+      "https://www.postgresql.org/docs/17/sql-select.html",
+      "https://www.postgresql.org/docs/17/runtime-config-connection.html"
+    ],
+    "hook": "Halaman invoice memuat 100 baris dan ORM mengirim satu SELECT per invoice. SQL tiap request tampak murah, tetapi pengguna menunggu. Bagaimana membedakan round-trip, waktu database, waktu menunggu pool, dan transaction yang terlalu panjang?",
+    "objectives": [
+      "Menjelaskan N+1 sebagai pola banyak round-trip dan membandingkannya dengan satu agregasi yang mempertahankan hasil per invoice.",
+      "Memisahkan pool wait, database execution, dan end-to-end latency tanpa menganggap pengurangan query count sebagai bukti 100x lebih cepat.",
+      "Menentukan batas transaction dan pool size yang menjaga resource, locking, dan correctness pada workload Commerce."
+    ],
+    "sections": [
+      {
+        "title": "N+1 adalah biaya bentuk request",
+        "paragraphs": [
+          "N+1 terjadi ketika aplikasi mengambil daftar induk dengan satu query lalu menjalankan query turunan untuk setiap baris. Dalam laporan invoice, satu SELECT untuk daftar 100 invoice diikuti 100 SELECT payment berarti sedikitnya 101 statement dan banyak perjalanan aplikasi–database. Masing-masing SELECT dapat selesai cepat di database, tetapi setiap round-trip membawa serialisasi, jaringan, peminjaman koneksi, parsing atau bind, dan koordinasi di aplikasi. Jika satu invoice tidak memiliki payment, pola tersebut tetap membayar perjalanan untuk memperoleh hasil kosong. Perbaikan bukan sekadar mengganti nama method ORM: query gabungan atau agregasi harus menjaga grain, filter status, dan invoice tanpa payment agar hasilnya tetap benar.",
+          "Satu query agregasi dapat mengembalikan 100 baris ringkasan dalam satu round-trip, tetapi itu bukan janji latency 100 kali lebih rendah. Query besar dapat memakai CPU, memory, lock, atau waktu transfer yang lebih tinggi; jaringan yang cepat dapat membuat N+1 tidak terlalu terlihat, sedangkan jaringan lambat membuatnya dominan. Bandingkan query count, row count, total database time, ukuran payload, dan end-to-end time dalam cohort yang sama. Jangan mengganti LEFT JOIN dengan INNER JOIN hanya agar jumlah baris tampak kecil. Correctness tetap mencakup invoice yang tidak punya payment, hanya payment `succeeded`, dan jumlah tidak terduplikasi oleh join.",
+          "Saat menghapus N+1, tulis kontrak output sebelum menulis rewrite. Apakah satu baris mewakili invoice, customer, atau payment? Apakah invoice dengan nol payment harus tetap muncul? Apakah payment gagal, refund, dan duplicate event memiliki aturan masing-masing? Agregasi yang tepat biasanya memerlukan preaggregation pada grain payment lalu join ke invoice, atau FILTER yang jelas, bukan SUM mentah setelah beberapa relasi digabung. Uji mental dengan invoice kosong, dua payment succeeded, dan satu payment gagal. Jika hasil berubah pada kasus kecil tersebut, pengurangan round-trip tidak menyelesaikan masalah; ia hanya memindahkan bug ke query yang lebih besar.",
+          "ORM sering menyembunyikan N+1 di serializer, property lazy, atau loop template, sehingga membaca SQL repository saja belum cukup. Trace driver atau logging yang diizinkan perlu menghubungkan request_id dengan statement dan parameter tanpa membocorkan data sensitif. Query batched juga dapat memerlukan pagination agar payload tidak tumbuh tanpa batas. Pilih agregasi yang mengembalikan kontrak yang dibutuhkan, bukan seluruh detail hanya karena jumlah statement turun. Pembelajaran utamanya adalah mengurangi perjalanan sambil menjaga grain dan invariant, kemudian mengukur biaya baru pada lingkungan yang aman."
+        ]
+      },
+      {
+        "title": "Pool dan batas transaction",
+        "paragraphs": [
+          "Connection pool membatasi berapa banyak request dapat memakai koneksi database secara bersamaan; ia bukan database server dan bukan pengganti `max_connections`. Ketika semua slot pool sedang dipakai, request menunggu sebelum statement dikirim. Ukur setidaknya tiga waktu: `pool_wait_ms` sejak request meminta koneksi sampai mendapatkannya, `db_time_ms` selama database menjalankan statement, dan `end_to_end_ms` dari awal request sampai response selesai. End-to-end dapat mencakup serialisasi, jaringan, antrean aplikasi, dan pemrosesan hasil. Jika hanya mengukur db_time, antrean pool dapat tersembunyi; jika hanya mengukur end-to-end, akar masalah dapat tercampur.",
+          "Transaction yang terlalu panjang memegang koneksi dan snapshot lebih lama, menahan lock tertentu, serta mengurangi kapasitas pool untuk request lain. Pool yang dibesarkan tanpa batas juga dapat menekan server: lebih banyak backend berarti kompetisi CPU, memory, locks, dan I/O, bukan otomatis throughput lebih tinggi. `max_connections` adalah batas server, sedangkan pool client harus dipilih dengan mempertimbangkan worker aplikasi dan workload lain. Buka transaction sedekat mungkin dengan operasi database yang konsisten, jangan menunggu HTTP atau pekerjaan CPU yang tidak perlu di dalamnya, dan jangan memecah atomic business operation hanya untuk memendekkan waktu secara naif.",
+          "Pool size tidak dapat dipilih dari satu angka throughput tanpa menghitung pemilik koneksi lain. Jika ada beberapa worker, setiap worker mungkin memiliki pool sendiri; jumlah maksimum koneksi client dapat menjadi jumlah worker dikali pool size, ditambah admin, job worker, dan replica traffic. Periksa apakah pool queue mendominasi saat database masih idle, atau database sudah jenuh saat queue membesar. Transaction boundary juga memengaruhi snapshot dan lock, sehingga waktu menunggu HTTP di dalam transaction tidak sama dengan waktu query. Pilih pool secara bertahap, ukur wait dan database time, dan simpan batas aman agar eksperimen tidak menghabiskan slot server.",
+          "Pool wait dan database time harus dicatat dengan clock yang konsisten. Jika pool timeout terjadi sebelum statement dikirim, ia bukan db error; jika database menunggu lock, db_time dapat besar meski CPU rendah. End-to-end mencakup keduanya serta kerja aplikasi setelah result diterima. Gunakan timeout dan cancellation yang eksplisit, lalu bedakan request yang gagal dari request yang selesai lambat. Dengan pemisahan ini, menaikkan pool dapat diuji sebagai hipotesis terbatas, bukan resep universal yang mengorbankan resource server."
+        ]
+      },
+      {
+        "title": "Agregasi nyata pada fixture invoice",
+        "paragraphs": [
+          "Dataset N1 membuat 100 invoice Commerce dan satu payment `succeeded` untuk setiap invoice. Query batched memakai `LEFT JOIN` dan agregasi bersyarat, sehingga invoice tetap muncul dan hanya payment yang benar yang dijumlahkan. Baris metadata `n_plus_one` menyatakan pola aplikasi menerbitkan satu query daftar ditambah 100 query detail setelah daftar invoice, sehingga total statement menjadi 101; fixture lesson tidak mengirim 100 query tersebut. Baris `batched_aggregate` menyatakan satu statement yang mengambil daftar serta agregasinya. Kedua baris memakai ringkasan dari fixture yang sama, yaitu 100 invoice berbayar dan total 105050,00, tetapi ringkasan itu bukan bukti bahwa 101-query request telah dieksekusi atau hasilnya ekuivalen pada semua kondisi.",
+          "Reference query hanya membaca TEMP fixture sekali untuk menghitung ringkasan yang dipakai kedua label; ia bukan simulasi 100 detail round-trip, bukan pengukuran pool atau jaringan, dan bukan bukti kesetaraan runtime. Untuk eksperimen yang diizinkan, simpan trace per request dengan query count, pool wait, db time, end-to-end, rows, parameter, dan transaction boundary; ulangi pada data serta concurrency yang sama. Metadata `statement_count` 101 versus 1 menunjukkan scope panggilan aplikasi dan pengurangan 100 statement, bukan klaim 100x lebih cepat. Jika query agregasi menghilangkan invoice kosong atau mencampur payment gagal, perbaikan performa itu tidak lulus karena result set tidak ekuivalen.",
+          "Fixture sengaja membuat data kecil tetapi lengkap untuk menelusuri invariant: satu invoice satu succeeded payment, semua invoice terwakili, dan total dapat dihitung dari angka authored. Pada workload nyata, perbandingan N+1 dan batch harus memeriksa result set dua arah, bukan hanya total aggregate. Catat juga payload size karena satu query yang mengembalikan detail berlebihan dapat menggeser bottleneck ke jaringan atau serializer. Kolom statement_count tetap sebuah model scope aplikasi; ia baru menjadi measurement setelah trace driver benar-benar merekam statement yang dikirim, retry, cancellation, dan error.",
+          "Jika fixture mempunyai invoice tanpa payment, hasil batched yang benar harus mengembalikan paid_total nol atau NULL sesuai kontrak, bukan menghapus invoice. Jika ada dua succeeded payments, jumlah harus dijumlahkan tepat sekali; jika ada status failed, FILTER harus mencegahnya masuk. Kasus kecil ini sengaja dapat diperiksa dari SQL, tetapi player tidak menjalankan trace aplikasi atau pool. Karena itu, kesimpulan lesson berhenti pada query shape, invariant yang diharapkan, dan desain pengukuran lanjutan."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset N1 — isolated Commerce fixture dengan invoice_id 1..100, satu payment succeeded per invoice, dan metadata bentuk request. Nilai statement_count adalah kontrak authored tentang panggilan aplikasi, sedangkan jumlah invoice dan total payment dihitung dari TEMP rows.",
+      "setupSql": "CREATE TEMP TABLE lesson_nplusone_invoices (\n  invoice_id INTEGER PRIMARY KEY,\n  customer_id INTEGER NOT NULL,\n  issued_on DATE NOT NULL\n);\nINSERT INTO pg_temp.lesson_nplusone_invoices\nSELECT g, 7000 + ((g - 1) % 10), DATE '2026-10-01' + ((g - 1) % 20)\nFROM generate_series(1, 100) AS series(g);\nCREATE TEMP TABLE lesson_nplusone_payments (\n  payment_id INTEGER PRIMARY KEY,\n  invoice_id INTEGER NOT NULL REFERENCES pg_temp.lesson_nplusone_invoices(invoice_id),\n  status TEXT NOT NULL,\n  amount NUMERIC(12,2) NOT NULL\n);\nINSERT INTO pg_temp.lesson_nplusone_payments\nSELECT g, g, 'succeeded', (1000 + g)::NUMERIC(12,2)\nFROM generate_series(1, 100) AS series(g);\nCREATE TEMP TABLE lesson_request_shapes (\n  strategy TEXT PRIMARY KEY,\n  statement_count INTEGER NOT NULL,\n  note TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_request_shapes VALUES\n  ('n_plus_one', 101, 'one list SELECT plus one detail SELECT per invoice'),\n  ('batched_aggregate', 1, 'one grouped statement for the list');",
+      "sql": "WITH per_invoice AS (\n  SELECT i.invoice_id,\n         COALESCE(SUM(p.amount) FILTER (WHERE p.status = 'succeeded'), 0.00)::NUMERIC(12,2) AS paid_total\n  FROM pg_temp.lesson_nplusone_invoices AS i\n  LEFT JOIN pg_temp.lesson_nplusone_payments AS p ON p.invoice_id = i.invoice_id\n  GROUP BY i.invoice_id\n), result_summary AS (\n  SELECT COUNT(*)::INTEGER AS invoice_count,\n         COUNT(*) FILTER (WHERE paid_total > 0)::INTEGER AS paid_invoice_count,\n         SUM(paid_total)::NUMERIC(12,2) AS total_succeeded\n  FROM per_invoice\n)\nSELECT s.strategy, s.statement_count, r.invoice_count, r.paid_invoice_count, r.total_succeeded\nFROM pg_temp.lesson_request_shapes AS s\nCROSS JOIN result_summary AS r\nORDER BY s.statement_count DESC;",
+      "columns": [
+        "strategy",
+        "statement_count",
+        "invoice_count",
+        "paid_invoice_count",
+        "total_succeeded"
+      ],
+      "rows": [
+        [
+          "n_plus_one",
+          "101",
+          "100",
+          "100",
+          "105050.00"
+        ],
+        [
+          "batched_aggregate",
+          "1",
+          "100",
+          "100",
+          "105050.00"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Agregasi menghitung 100 invoice dan total succeeded 105050,00 dari fixture sekali. Perbedaan statement_count 101 versus 1 adalah metadata authored tentang satu list ditambah 100 detail statement versus satu batched statement; fixture tidak mengirim 101 query dan angka ini bukan measurement. Lesson belum mengukur pool wait, db time, end-to-end, network, atau latency, serta belum membuktikan result equivalence pada request terpisah; ia hanya membuat query shape dan expected business summary dapat dibaca."
+    },
+    "checks": [
+      {
+        "id": "l5m05l02-check-1",
+        "question": "Apa masalah utama pola satu SELECT detail untuk setiap 100 invoice?",
+        "options": [
+          "Selalu terjadi deadlock karena SELECT read-only pasti mengunci semua invoice.",
+          "Round-trip dan peminjaman koneksi dapat berulang 100 kali; query count turun bila hasil yang sama dapat dibuat satu agregasi.",
+          "Database tidak dapat mengembalikan lebih dari satu row dari SELECT."
+        ],
+        "answer": 1,
+        "explanation": "N+1 menambah perjalanan aplikasi–database dan koordinasi per item. Agregasi dapat mengurangi statement sambil menjaga grain dan filter.",
+        "feedback": [
+          "Belum tepat. SELECT tetap dapat mengambil lock tertentu, tetapi deadlock bukan konsekuensi otomatis pola N+1.",
+          "Benar. Round-trip, pool acquisition, dan parsing berulang adalah biaya yang perlu dipisahkan dari db execution.",
+          "Belum tepat. SELECT dapat mengembalikan banyak row; masalahnya adalah bentuk request dan jumlah perjalanan."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l5m05l02-check-2",
+        "question": "Jika statement_count turun dari 101 menjadi 1, apa klaim yang paling tepat?",
+        "options": [
+          "End-to-end pasti turun tepat 100 kali.",
+          "Server `max_connections` otomatis naik karena query lebih sedikit.",
+          "Bentuk request mengurangi 100 statement pada scope contoh; latency, resource, dan result equivalence tetap harus diukur pada cohort yang sama."
+        ],
+        "answer": 2,
+        "explanation": "Query count adalah sinyal round-trip, bukan rasio latency universal. Agregasi juga memiliki biaya CPU, memory, payload, dan plan sendiri.",
+        "feedback": [
+          "Belum tepat. Pengurangan statement tidak menetapkan rasio waktu end-to-end.",
+          "Belum tepat. max_connections adalah konfigurasi server dan tidak berubah karena satu query aplikasi.",
+          "Benar. Sebutkan pengurangan query count tanpa menjanjikan 100x speedup."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Bandingkan bentuk N+1 dan agregasi pada fixture 100 invoice. Pastikan jumlah, filter succeeded, invoice kosong, pool wait, db time, dan end-to-end tidak tercampur.",
+      "setup": "TEMP tables lesson_nplusone_invoices dan lesson_nplusone_payments berisi 100 invoice serta 100 payment succeeded. lesson_request_shapes menyimpan statement_count 101 untuk satu list plus 100 detail SELECT dan 1 untuk agregasi. SQL di bawah adalah satu query batched yang benar; SELECT detail dapat dibayangkan diulang oleh aplikasi, tetapi tidak dieksekusi 100 kali oleh player.",
+      "starterSql": "-- Satu query agregasi untuk menggantikan detail SELECT per invoice\nSELECT i.invoice_id,\n       COALESCE(SUM(p.amount) FILTER (WHERE p.status = 'succeeded'), 0.00)::NUMERIC(12,2) AS paid_total\nFROM pg_temp.lesson_nplusone_invoices AS i\nLEFT JOIN pg_temp.lesson_nplusone_payments AS p ON p.invoice_id = i.invoice_id\nGROUP BY i.invoice_id\nORDER BY i.invoice_id;",
+      "variants": [
+        {
+          "id": "l5m05l02-variant-1",
+          "question": "Sebuah batched query mengembalikan 100 invoice, tetapi menggunakan INNER JOIN dan invoice tanpa payment hilang. Apakah optimasi lulus?",
+          "options": [
+            "Ya, karena jumlah row lebih kecil berarti selalu lebih cepat dan lebih benar.",
+            "Belum. Ia harus mempertahankan invoice tanpa payment bila kontrak laporan memerlukannya; performa tidak menggantikan kesetaraan hasil.",
+            "Ya, selama statement_count menjadi 1; status payment tidak perlu difilter."
+          ],
+          "answer": 1,
+          "explanation": "Rewrite harus mempertahankan semantic contract. LEFT JOIN dan conditional aggregation diperlukan bila invoice kosong tetap harus muncul.",
+          "feedback": [
+            "Belum tepat. Menghilangkan row bukan bukti hasil benar.",
+            "Benar. Correctness dan query count adalah dua syarat berbeda.",
+            "Belum tepat. Filter status dan invoice kosong tetap bagian kontrak laporan."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l5m05l02-variant-2",
+          "question": "Trace menunjukkan pool_wait_ms 80, db_time_ms 5, dan end_to_end_ms 100. Area pertama yang perlu diperiksa adalah ...",
+          "options": [
+            "Antrean pool atau kapasitas worker, karena waktu menunggu jauh melebihi waktu database pada trace ini.",
+            "Mengganti semua SELECT dengan UPDATE agar database lebih sibuk.",
+            "Menaikkan pool tanpa batas sampai sama dengan max_connections dan menghapus measurement."
+          ],
+          "answer": 0,
+          "explanation": "Pool wait 80 ms adalah komponen terbesar yang terlihat pada trace, tetapi perubahan tetap harus mempertimbangkan kapasitas server dan cohort.",
+          "feedback": [
+            "Benar. Pisahkan antrean pool dari db_time, lalu ukur ulang dengan perubahan yang dibatasi.",
+            "Belum tepat. Mengubah operasi menjadi mutasi merusak correctness dan bukan diagnosis.",
+            "Belum tepat. Pool oversizing dapat memperburuk contention; max_connections bukan target tanpa batas."
+          ],
+          "critical": true
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l5m05l02-edge-1",
+          "question": "Handler memegang satu koneksi selama HTTP call 2 detik di dalam transaction. Risiko utama adalah ...",
+          "options": [
+            "Transaction otomatis menjadi lebih atomic sehingga semua lock hilang.",
+            "Koneksi pool dan snapshot/lock dapat tertahan lebih lama, sehingga request lain mengantre dan bloat/contention dapat meningkat.",
+            "Database akan mengubah semua SELECT menjadi batched aggregate tanpa perubahan aplikasi."
+          ],
+          "answer": 1,
+          "explanation": "Kerja non-database di dalam transaction memperpanjang kepemilikan koneksi dan lifetime snapshot/lock sesuai operasi.",
+          "feedback": [
+            "Belum tepat. Atomicity tidak menghapus biaya menahan resource.",
+            "Benar. Batasi transaction pada unit kerja database yang dibutuhkan dan ukur pool wait.",
+            "Belum tepat. Database tidak otomatis mengubah query shape aplikasi."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l5m05l02-edge-2",
+          "question": "Pool client dinaikkan dari 20 menjadi 200 dan db_time bertambah pada semua request. Penjelasan yang paling aman adalah ...",
+          "options": [
+            "Pool lebih besar selalu memperbaiki throughput.",
+            "`max_connections` pasti tidak relevan selama aplikasi masih dapat membuka socket.",
+            "Oversubscription dapat menambah kompetisi CPU, memory, lock, dan I/O; bandingkan dengan kapasitas server dan workload lain."
+          ],
+          "answer": 2,
+          "explanation": "Pool adalah batas concurrency client, bukan jaminan server mampu memproses semua backend lebih efisien.",
+          "feedback": [
+            "Belum tepat. Pool besar dapat memperburuk contention.",
+            "Belum tepat. Batas server dan resource tetap membatasi koneksi yang berguna.",
+            "Benar. Ukur pool wait dan db time bersama, lalu pilih kapasitas yang dapat dipertanggungjawabkan."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Hitung grain output dan cek invoice kosong sebelum membandingkan statement_count.",
+        "Pisahkan pool_wait_ms, db_time_ms, dan end_to_end_ms; komponen terbesar memberi hipotesis awal, bukan bukti kausal final.",
+        "Query count 101 menjadi 1 adalah pengurangan 100 statement pada scope contoh, bukan janji latency 100x atau izin memperbesar pool tanpa batas."
+      ],
+      "solutionSql": "WITH per_invoice AS (\n  SELECT i.invoice_id,\n         COALESCE(SUM(p.amount) FILTER (WHERE p.status = 'succeeded'), 0.00)::NUMERIC(12,2) AS paid_total\n  FROM pg_temp.lesson_nplusone_invoices AS i\n  LEFT JOIN pg_temp.lesson_nplusone_payments AS p ON p.invoice_id = i.invoice_id\n  GROUP BY i.invoice_id\n), result_summary AS (\n  SELECT COUNT(*)::INTEGER AS invoice_count,\n         COUNT(*) FILTER (WHERE paid_total > 0)::INTEGER AS paid_invoice_count,\n         SUM(paid_total)::NUMERIC(12,2) AS total_succeeded\n  FROM per_invoice\n)\nSELECT s.strategy, s.statement_count, r.invoice_count, r.paid_invoice_count, r.total_succeeded\nFROM pg_temp.lesson_request_shapes AS s\nCROSS JOIN result_summary AS r\nORDER BY s.statement_count DESC;",
+      "solutionExplanation": "Reference query hanya menghitung ringkasan fixture sekali lalu menampilkannya di samping dua metadata strategi: invoice_count 100, paid_invoice_count 100, dan total_succeeded 105050,00. `n_plus_one` menyatakan satu list plus 100 detail statement (101 total); `batched_aggregate` menyatakan satu statement. Itu menunjukkan scope request authored, bukan pengukuran round-trip atau bukti result equivalence runtime. Diagnosis workload nyata harus menambahkan trace pool wait, database execution, end-to-end, payload, concurrency, transaction duration, serta evidence bahwa hasil rewrite ekuivalen.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa 100 SELECT per invoice dapat mahal walaupun tiap query singkat, bagaimana agregasi mempertahankan invoice kosong dan filter succeeded, serta cara membedakan pool wait, db time, end-to-end, transaction duration, dan batas max_connections tanpa menjanjikan 100x speedup."
+  },
+  {
+    "id": "l5m05l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "performance-certification",
+      "regression",
+      "correctness",
+      "p95",
+      "explain",
+      "commerce-analytics"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/using-explain.html",
+      "https://www.postgresql.org/docs/17/sql-explain.html",
+      "https://www.postgresql.org/docs/17/queries-union.html",
+      "https://www.postgresql.org/docs/17/pgbench.html"
+    ],
+    "hook": "Sebuah rewrite mengklaim p95 turun dari 250 ms menjadi 120 ms. Apakah itu cukup untuk sertifikasi? Sebelum memberi label lulus, kita perlu target p95, hasil yang ekuivalen, plan before/after, konfigurasi, data, repetisi, dan safety.",
+    "objectives": [
+      "Menyusun rubric performance certification yang mensyaratkan target p95, hasil ekuivalen, konteks plan, konfigurasi, data, repetisi, dan safety.",
+      "Membedakan bukti before/after authored dari benchmark live serta menolak optimasi yang cepat tetapi mengubah hasil.",
+      "Menjelaskan mengapa certification adalah keputusan berbatas scope dan waktu, bukan klaim bahwa query selalu cepat di production."
+    ],
+    "sections": [
+      {
+        "title": "Cepat saja belum cukup",
+        "paragraphs": [
+          "Performance certification adalah keputusan berbasis rubric, bukan stempel untuk angka tercepat. Kandidat harus memenuhi target yang dinyatakan, misalnya p95 tidak lebih dari 200 ms pada cohort tertentu, sekaligus mengembalikan hasil yang benar dan ekuivalen. Result equivalence perlu dibandingkan pada grain, urutan bila memang dikontrak, NULL, duplicate, dan filter yang sama; query yang menghilangkan invoice kosong tidak lulus hanya karena p95 turun. Target p95 juga harus menyebut sample method, jumlah repetisi, warmup policy, parameter, concurrency, ukuran data, dan timeout. Tanpa scope itu, kata “lulus” menyembunyikan pertanyaan workload mana yang sebenarnya dipenuhi.",
+          "Plan before/after memberi konteks perubahan: operator, estimated rows, actual evidence bila tersedia, index, sort, join, dan buffer yang relevan. Catat versi PostgreSQL, konfigurasi session/server yang memengaruhi plan, status cache, statistik, data snapshot, dan perubahan schema. Safety mencakup fixture disposable atau izin perubahan yang jelas, rollback plan untuk mutasi, serta larangan mengukur statement berbahaya pada production tanpa prosedur. Lesson ini menampilkan evidence authored agar learner berlatih rubric; tidak ada benchmark live, tidak ada query yang disertifikasi, dan tidak ada bukti bahwa angka tabel mewakili server mana pun.",
+          "Sertifikasi juga harus menyebut apa yang berada di luar scope. Target p95 pada satu parameter dan concurrency tidak otomatis berlaku untuk parameter lain, cache cold, pool penuh, atau data yang sudah tumbuh. Jika query memakai index baru, catat DDL, predicate, maintenance cost, dan plan yang berubah; jika rewrite mengubah transaction boundary, catat isolation serta lock behavior. Before dan after bukan harus memiliki plan identik—perubahan plan dapat menjadi tujuan—tetapi evidence harus cukup untuk menjelaskan perubahan. Dengan scope yang eksplisit, “certified” berarti lulus rubric pada kondisi tertentu, bukan janji performa abadi.",
+          "Scope yang baik juga menyebut pemilik keputusan dan masa berlaku. Index, statistik, pool, versi, dan distribusi data terus berubah; certification tanpa expiry dapat bertahan sebagai folklore setelah premisnya hilang. Simpan target dan alasan pemilihannya, bukan hanya angka akhir. Jika hasil before dan after berbeda karena data berubah secara sengaja, perlakukan itu sebagai cohort baru dengan pertanyaan baru, bukan perbandingan yang diam-diam diberi label improvement. Ini membuat reviewer dapat membedakan regression pada candidate dari perubahan lingkungan."
+        ]
+      },
+      {
+        "title": "Rubric before/after yang dapat diaudit",
+        "paragraphs": [
+          "Paket evidence minimal menyimpan baris before dan after untuk kandidat yang sama. Before memberi baseline p95 dan konteks pembanding; after mencatat p95, target, sample count, result_equivalent, plan_captured, config_same, data_snapshot_same, repeated, dan safety_reviewed. `plan_captured` berarti plan context tersedia, bukan berarti operator tertentu pasti lebih cepat. `config_same` dan `data_snapshot_same` menjaga agar penurunan angka tidak berasal dari kondisi yang berubah. `repeated` menandai bahwa sample bukan satu run. Semua boolean harus dapat dilacak ke catatan atau artifact yang diizinkan, bukan diisi true untuk membuat candidate lulus.",
+          "Keputusan dapat diringkas sebagai certified hanya bila after memenuhi target p95 dan seluruh guard correctness, plan context, config, data, repetisi, serta safety bernilai true. Candidate dengan p95 120 ms tetapi result_equivalent false harus ditolak. Candidate yang benar dan mencapai target tetapi tidak menyimpan plan before/after atau tidak membuktikan konfigurasi sama juga belum certified; ia dapat menjadi hipotesis yang perlu diukur ulang. Rubric ini sengaja konservatif karena optimasi yang sulit dijelaskan akan sulit direproduksi dan sulit dipulihkan ketika workload berubah.",
+          "Untuk tujuan “kurangi p95”, after juga harus lebih rendah daripada before pada cohort yang sebanding; memenuhi absolute target tanpa improvement yang dapat diatribusikan belum menjelaskan manfaat candidate. Kedua phase perlu sample_count yang cukup dan evidence context, bukan hanya after yang dipilih karena kebetulan baik. Gunakan status reject atau pending ketika evidence hilang, bukan memaksa boolean true. Bila target 200 ms tercapai tetapi p95 naik dari 180 ke 190, candidate mungkin masih memenuhi target namun tidak membuktikan improvement terhadap baseline; laporan harus membedakan kedua pertanyaan itu.",
+          "Minimum sample_count sepuluh pada SQL ini adalah guard pedagogis agar satu run tidak diberi bobot sebagai p95; angka itu bukan ambang statistik universal. Pada operasi nyata, pilih jumlah sample dan confidence yang sesuai workload, error rate, dan keputusan yang dipertaruhkan. Pastikan before dan after memakai metode percentile yang sama, warmup policy yang sama, serta rekaman timeout/error yang tidak disembunyikan. Bila salah satu phase kurang sample, keputusan harus pending atau reject, bukan certified hanya karena after terlihat rendah."
+        ]
+      },
+      {
+        "title": "Baca keputusan authored dengan batas scope",
+        "paragraphs": [
+          "Dataset C1 berisi tiga candidate: `idx_invoice_student` mencapai p95 authored 160 ms dari target 200 ms dan semua guard true; `fast_rewrite` mencapai 120 ms tetapi result_equivalent false; `cache_only` mencapai 150 ms dengan hasil benar tetapi plan_captured false. Reference query menggabungkan before dan after lalu menghitung keputusan dari kondisi rubric. Hanya candidate pertama diberi label `certified` dalam contoh. Label tersebut berarti memenuhi aturan data authored pada cohort lesson, bukan sertifikasi production dan bukan prediksi bahwa p95 akan sama setelah data, cache, concurrency, atau versi berubah.",
+          "Setelah keputusan, simpan query text, parameter, hasil before/after, plan artifact, konfigurasi, snapshot data, jumlah run, warmup, error, dan safety review dalam catatan yang dapat diaudit. Uji ulang ketika schema, index, PostgreSQL version, pool, resource limit, atau distribusi data berubah. Certification juga perlu expiry atau owner bila digunakan dalam operasi nyata. Jangan memaksa setting planner global atau menekan correctness untuk mencapai target; bila target gagal, laporkan regresi dan hipotesis berikutnya. Tidak ada angka Dataset C1 yang boleh dipresentasikan sebagai latency yang kami ukur.",
+          "Checklist ini tidak menggantikan review manusia atas query dan data. Hasil authored dapat membantu menguji apakah rubric ditulis konsisten, tetapi hanya pengukuran yang diizinkan dan evidence yang dapat diaudit yang dapat mendukung keputusan operasional. Jika before dan after memakai fixture berbeda, parameter berbeda, atau sampling error yang tidak dicatat, tandai hasil sebagai tidak sebanding. Jika perubahan schema atau index memiliki risiko deploy, certification performa tidak menghapus kebutuhan migration plan, rollback, dan ownership.",
+          "Baca keputusan `certified` sebagai “lulus kriteria yang tertulis” dan selalu tampilkan kriteria itu bersama label. Jangan menyalin label ke dashboard global tanpa cohort, timestamp, dan owner. Bila customer-facing target berubah, rubric harus ditinjau ulang; bila candidate hanya mengurangi database time tetapi pool wait meningkat, pertanyaan end-to-end belum lulus. Dengan demikian certification menjadi artefak keputusan yang dapat ditinjau, bukan klaim metafisik bahwa PostgreSQL akan selalu cepat."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset C1 — authored before/after rubric untuk tiga candidate invoice. Nilai p95, sample_count, plan/config/data/repeat/safety flags, dan keputusan ditulis untuk latihan audit, bukan benchmark live atau certification production.",
+      "setupSql": "CREATE TEMP TABLE lesson_performance_certification (\n  candidate_id TEXT NOT NULL,\n  phase TEXT NOT NULL CHECK (phase IN ('before', 'after')),\n  p95_ms NUMERIC(8,2) NOT NULL,\n  target_p95_ms NUMERIC(8,2) NOT NULL,\n  sample_count INTEGER NOT NULL,\n  result_equivalent BOOLEAN NOT NULL,\n  plan_captured BOOLEAN NOT NULL,\n  config_same BOOLEAN NOT NULL,\n  data_snapshot_same BOOLEAN NOT NULL,\n  repeated BOOLEAN NOT NULL,\n  safety_reviewed BOOLEAN NOT NULL,\n  PRIMARY KEY (candidate_id, phase)\n);\nINSERT INTO pg_temp.lesson_performance_certification VALUES\n  ('idx_invoice_student', 'before', 240.00, 200.00, 12, true, true, true, true, true, true),\n  ('idx_invoice_student', 'after', 160.00, 200.00, 12, true, true, true, true, true, true),\n  ('fast_rewrite', 'before', 250.00, 200.00, 12, true, true, true, true, true, true),\n  ('fast_rewrite', 'after', 120.00, 200.00, 12, false, true, true, true, true, true),\n  ('cache_only', 'before', 220.00, 200.00, 12, true, true, true, true, true, true),\n  ('cache_only', 'after', 150.00, 200.00, 12, true, false, true, true, true, true);",
+      "sql": "SELECT after_e.candidate_id,\n       before_e.p95_ms AS before_p95_ms,\n       after_e.p95_ms AS after_p95_ms,\n       after_e.target_p95_ms,\n       (after_e.p95_ms <= after_e.target_p95_ms) AS target_met,\n       (after_e.p95_ms < before_e.p95_ms) AS improved_p95,\n       after_e.sample_count AS after_sample_count,\n       before_e.sample_count AS before_sample_count,\n       after_e.result_equivalent,\n       after_e.plan_captured,\n       after_e.config_same,\n       after_e.data_snapshot_same,\n       after_e.repeated,\n       after_e.safety_reviewed,\n       CASE WHEN after_e.p95_ms <= after_e.target_p95_ms\n                 AND after_e.p95_ms < before_e.p95_ms\n                 AND before_e.sample_count >= 10\n                 AND after_e.sample_count >= 10\n                 AND before_e.plan_captured\n                 AND before_e.config_same\n                 AND before_e.data_snapshot_same\n                 AND before_e.repeated\n                 AND before_e.safety_reviewed\n                 AND after_e.result_equivalent\n                 AND after_e.plan_captured\n                 AND after_e.config_same\n                 AND after_e.data_snapshot_same\n                 AND after_e.repeated\n                 AND after_e.safety_reviewed\n            THEN 'certified' ELSE 'reject' END AS decision\nFROM pg_temp.lesson_performance_certification AS after_e\nJOIN pg_temp.lesson_performance_certification AS before_e\n  ON before_e.candidate_id = after_e.candidate_id\n AND before_e.phase = 'before'\nWHERE after_e.phase = 'after'\nORDER BY after_e.candidate_id;",
+      "columns": [
+        "candidate_id",
+        "before_p95_ms",
+        "after_p95_ms",
+        "target_p95_ms",
+        "target_met",
+        "improved_p95",
+        "after_sample_count",
+        "before_sample_count",
+        "result_equivalent",
+        "plan_captured",
+        "config_same",
+        "data_snapshot_same",
+        "repeated",
+        "safety_reviewed",
+        "decision"
+      ],
+      "rows": [
+        [
+          "cache_only",
+          "220.00",
+          "150.00",
+          "200.00",
+          "t",
+          "t",
+          "12",
+          "12",
+          "t",
+          "f",
+          "t",
+          "t",
+          "t",
+          "t",
+          "reject"
+        ],
+        [
+          "fast_rewrite",
+          "250.00",
+          "120.00",
+          "200.00",
+          "t",
+          "t",
+          "12",
+          "12",
+          "f",
+          "t",
+          "t",
+          "t",
+          "t",
+          "t",
+          "reject"
+        ],
+        [
+          "idx_invoice_student",
+          "240.00",
+          "160.00",
+          "200.00",
+          "t",
+          "t",
+          "12",
+          "12",
+          "t",
+          "t",
+          "t",
+          "t",
+          "t",
+          "t",
+          "certified"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Reference query menghitung keputusan dari target p95, perbaikan after < before, sample_count minimal 10 pada kedua phase, baseline context, dan guard after. `cache_only` gagal karena plan_captured false; `fast_rewrite` gagal karena result_equivalent false walaupun p95 120,00; hanya `idx_invoice_student` memenuhi semua syarat authored. Label certified dibatasi pada Dataset C1 dan rubric ini. Ia bukan hasil benchmark live, bukan bukti production, dan tidak menyatakan plan atau latency akan sama setelah kondisi workload berubah."
+    },
+    "checks": [
+      {
+        "id": "l5m05l03-check-1",
+        "question": "Candidate after memiliki p95 120 ms dari target 200 ms tetapi result_equivalent = false. Apa keputusan rubric?",
+        "options": [
+          "Certified karena target p95 adalah satu-satunya syarat yang objektif.",
+          "Certified sementara; correctness boleh diperbaiki setelah deploy.",
+          "Reject, karena perbaikan latency tidak lulus bila hasil query berubah dari kontrak."
+        ],
+        "answer": 2,
+        "explanation": "Rubric mensyaratkan target dan hasil ekuivalen. Candidate cepat tetapi salah tidak dapat disertifikasi.",
+        "feedback": [
+          "Belum tepat. Target p95 hanyalah satu guard dari beberapa syarat.",
+          "Belum tepat. Menunda correctness memindahkan bug ke pengguna dan bukan certification.",
+          "Benar. Correctness adalah guard kritis yang tidak dapat ditukar dengan latency."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l5m05l03-check-2",
+        "question": "Mengapa config_same dan data_snapshot_same diperlukan pada before/after?",
+        "options": [
+          "Agar penurunan p95 tidak diam-diam berasal dari konfigurasi atau dataset yang berubah.",
+          "Agar semua plan harus memiliki operator yang identik byte per byte.",
+          "Agar satu run after dapat menggantikan semua repetisi before."
+        ],
+        "answer": 0,
+        "explanation": "Perbandingan yang adil perlu menjaga kondisi yang memengaruhi planner dan latency, sambil tetap mengizinkan perubahan plan yang memang diuji.",
+        "feedback": [
+          "Benar. Catat konteks yang sama sehingga perubahan lebih mungkin berasal dari candidate yang diuji.",
+          "Belum tepat. Plan boleh berubah; yang penting plan context dicatat dan hasil tetap benar.",
+          "Belum tepat. Repetisi before dan after tetap diperlukan untuk memahami distribusi."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Terapkan rubric Dataset C1. Pilih candidate yang benar-benar memenuhi target p95, result equivalence, plan context, config/data parity, repetisi, dan safety.",
+      "setup": "TEMP table berisi pasangan before/after untuk tiga candidate invoice. Semua flags adalah authored evidence yang harus dibaca, bukan hasil benchmark live. Keputusan `certified` hanya berlaku pada target 200 ms, sample 12, dan cohort yang dinyatakan; jangan mengubah label menjadi klaim production.",
+      "starterSql": "SELECT after_e.candidate_id, before_e.p95_ms AS before_p95_ms, after_e.p95_ms AS after_p95_ms, after_e.target_p95_ms, after_e.result_equivalent, after_e.plan_captured, after_e.config_same, after_e.data_snapshot_same, after_e.repeated, after_e.safety_reviewed\nFROM pg_temp.lesson_performance_certification AS after_e\nJOIN pg_temp.lesson_performance_certification AS before_e ON before_e.candidate_id = after_e.candidate_id AND before_e.phase = 'before'\nWHERE after_e.phase = 'after'\nORDER BY after_e.candidate_id;",
+      "variants": [
+        {
+          "id": "l5m05l03-variant-1",
+          "question": "Candidate A mencapai target p95 dan hasil ekuivalen, tetapi after tidak memiliki plan capture. Apa statusnya?",
+          "options": [
+            "Certified karena plan tidak pernah memengaruhi reproducibility.",
+            "Belum certified; simpan evidence plan before/after dan ukur ulang sebelum keputusan final.",
+            "Certified jika pool dinaikkan agar angka semakin rendah."
+          ],
+          "answer": 1,
+          "explanation": "Target dan correctness belum cukup bila rubric mensyaratkan plan context. Missing evidence harus menghasilkan reject atau pending, bukan certified.",
+          "feedback": [
+            "Belum tepat. Plan context membantu menjelaskan perubahan dan batas generalisasi.",
+            "Benar. Candidate perlu evidence lengkap sebelum lulus rubric.",
+            "Belum tepat. Mengubah pool tanpa evidence baru tidak mengisi plan capture."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l5m05l03-variant-2",
+          "question": "After p95 190 ms memenuhi target 200 ms, tetapi data snapshot berubah dari before. Kesimpulan paling aman?",
+          "options": [
+            "Belum dapat mengaitkan perbaikan dengan candidate; ulangi pada data snapshot yang sebanding atau nyatakan scope baru.",
+            "Certified karena p95 di bawah target apa pun datanya.",
+            "Reject permanen karena data tidak boleh berubah pada eksperimen apa pun."
+          ],
+          "answer": 0,
+          "explanation": "Data parity diperlukan untuk perbandingan yang dapat diatribusikan; perubahan data perlu cohort dan target yang dinyatakan ulang.",
+          "feedback": [
+            "Benar. Data berbeda mengubah pertanyaan; ulangi atau batasi klaim pada scope data baru.",
+            "Belum tepat. Target tanpa konteks data tidak cukup untuk certification.",
+            "Belum tepat. Data boleh berubah pada workload nyata, tetapi perbandingan harus menyatakan scope dan desainnya."
+          ],
+          "critical": true
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l5m05l03-edge-1",
+          "question": "Optimizer memberi p95 bagus pada satu run, tetapi sample_count after = 1. Apa yang dilakukan rubric?",
+          "options": [
+            "Certified karena satu run lebih murni daripada banyak run.",
+            "Certified bila operator plan terlihat canggih.",
+            "Belum certified; repetisi dan metode sampling wajib dibuktikan sebelum p95 dipakai sebagai target."
+          ],
+          "answer": 2,
+          "explanation": "Satu run tidak menunjukkan distribusi atau tail yang repeatable. Rubric membutuhkan evidence repetisi.",
+          "feedback": [
+            "Belum tepat. Satu run rentan noise dan tidak menggambarkan p95.",
+            "Belum tepat. Nama operator bukan bukti stabilitas workload.",
+            "Benar. Lengkapi sample, warmup policy, dan metode percentile."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l5m05l03-edge-2",
+          "question": "Profiling dilakukan dengan UPDATE pada data nyata tanpa safety review. Walaupun p95 memenuhi target, statusnya ...",
+          "options": [
+            "Certified karena target performa mengalahkan risiko data.",
+            "Belum certified; safety review adalah guard terpisah dan mutasi perlu prosedur yang disetujui.",
+            "Certified jika output SELECT sesudahnya terlihat benar."
+          ],
+          "answer": 1,
+          "explanation": "Performance evidence tidak menghapus risiko mutasi. Safety dan correctness adalah syarat certification.",
+          "feedback": [
+            "Belum tepat. Target latency tidak memberi izin untuk merusak data.",
+            "Benar. Hentikan klaim certification sampai safety evidence dan scope diperbaiki.",
+            "Belum tepat. Pemeriksaan sesudah mutasi tidak mengembalikan side effect yang sudah terjadi."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Mulai dari target p95, lalu centang result_equivalent dan setiap guard evidence; satu false menggagalkan certified.",
+        "Bedakan missing evidence dari evidence false: keduanya tidak mendukung certification, tetapi tindakan lanjutnya dapat berupa capture atau rerun.",
+        "Tulis scope cohort, plan, config, data, repetisi, dan safety; jangan menyebut Dataset C1 sebagai benchmark atau sertifikasi live."
+      ],
+      "solutionSql": "SELECT after_e.candidate_id,\n       before_e.p95_ms AS before_p95_ms,\n       after_e.p95_ms AS after_p95_ms,\n       after_e.target_p95_ms,\n       (after_e.p95_ms <= after_e.target_p95_ms) AS target_met,\n       (after_e.p95_ms < before_e.p95_ms) AS improved_p95,\n       after_e.sample_count AS after_sample_count,\n       before_e.sample_count AS before_sample_count,\n       after_e.result_equivalent,\n       after_e.plan_captured,\n       after_e.config_same,\n       after_e.data_snapshot_same,\n       after_e.repeated,\n       after_e.safety_reviewed,\n       CASE WHEN after_e.p95_ms <= after_e.target_p95_ms\n                 AND after_e.p95_ms < before_e.p95_ms\n                 AND before_e.sample_count >= 10\n                 AND after_e.sample_count >= 10\n                 AND before_e.plan_captured\n                 AND before_e.config_same\n                 AND before_e.data_snapshot_same\n                 AND before_e.repeated\n                 AND before_e.safety_reviewed\n                 AND after_e.result_equivalent\n                 AND after_e.plan_captured\n                 AND after_e.config_same\n                 AND after_e.data_snapshot_same\n                 AND after_e.repeated\n                 AND after_e.safety_reviewed\n            THEN 'certified' ELSE 'reject' END AS decision\nFROM pg_temp.lesson_performance_certification AS after_e\nJOIN pg_temp.lesson_performance_certification AS before_e\n  ON before_e.candidate_id = after_e.candidate_id\n AND before_e.phase = 'before'\nWHERE after_e.phase = 'after'\nORDER BY after_e.candidate_id;",
+      "solutionExplanation": "Rubric memberi certified hanya pada idx_invoice_student karena after p95 160,00 <= 200,00, lebih rendah dari before 240,00, kedua sample_count 12 memenuhi minimum, dan semua context/guard true. cache_only memenuhi p95 serta correctness tetapi kehilangan plan_captured. fast_rewrite memenuhi p95 tetapi result_equivalent false. Semua keputusan adalah pembacaan table authored; tidak ada benchmark live, EXPLAIN runtime, atau production certification yang dibuat oleh lesson.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa p95 yang turun tidak cukup untuk certification, bagaimana before/after menjaga result equivalence serta konteks plan/config/data, mengapa repetisi dan safety wajib, dan mengapa label Dataset C1 tidak boleh dibaca sebagai benchmark production."
+  }
+]

@@ -26,6 +26,7 @@ export const authored = [
   "l5-indexes",
   "l5-joins-rewrite",
   "l5-large-data",
+  "l5-tuning",
 ].flatMap((file) => read(`src/content/database/${file}.json`));
 const modules = blueprint.levels.flatMap((level) => level.modules);
 const lessons = modules.flatMap((module) => module.lessons);

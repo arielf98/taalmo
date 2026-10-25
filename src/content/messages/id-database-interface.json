@@ -211,5 +211,18 @@
   "consistent-order": "urutan konsisten",
   "batch-writes": "penulisan batch",
   "contention": "kontensi",
-  "wal": "WAL"
+  "wal": "WAL",
+  "benchmarking": "benchmarking",
+  "latency": "latensi",
+  "percentiles": "persentil",
+  "workload-methodology": "metodologi workload",
+  "connection-pool": "pool koneksi",
+  "n-plus-one": "N+1",
+  "round-trips": "round trip",
+  "query-shape": "bentuk query",
+  "performance-certification": "rubrik performa",
+  "regression": "regresi",
+  "p95": "p95",
+  "transactions": "transaksi",
+  "correctness": "kebenaran hasil"
 }
