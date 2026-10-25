@@ -1,0 +1,609 @@
+[
+  {
+    "id": "l4m04l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "idempotency",
+      "unique-constraints",
+      "payment-ledger",
+      "webhooks",
+      "payment"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/sql-insert.html",
+      "https://www.postgresql.org/docs/17/ddl-constraints.html",
+      "https://www.postgresql.org/docs/17/index-unique-checks.html"
+    ],
+    "hook": "Provider mengirim callback payment yang sama dua kali. Tanpa guard, dua callback dapat membuat dua efek lokal walaupun transfer hanya satu. Bagaimana mendefinisikan idempotency key, membatasi scope merchant, membandingkan payload, dan membuat INSERT atomik tanpa menganggap signature provider sebagai deduplikasi database?",
+    "objectives": [
+      "Menjelaskan idempotency key sebagai identitas operasi dalam scope bisnis yang tepat, bukan sekadar string global.",
+      "Menggunakan UNIQUE dan INSERT ... ON CONFLICT untuk menghindari race check-then-insert serta memeriksa konflik payload.",
+      "Membedakan autentikasi atau signature provider dari penjagaan duplicate effect di database."
+    ],
+    "sections": [
+      {
+        "title": "Key adalah identitas operasi dalam scope",
+        "paragraphs": [
+          "Idempotency berarti pengulangan request untuk operasi yang sama menghasilkan efek lokal yang tidak bertambah. Key harus memiliki scope yang jelas: merchant_id, provider_account, atau tenant dapat menjadi bagian identitas karena provider yang berbeda boleh mengeluarkan teks key yang sama. Jangan menjadikan key sebagai satu-satunya identitas global bila domain sebenarnya membatasi ke merchant. Simpan payload fingerprint atau parameter canonical agar server dapat membedakan retry yang sama dari key yang dipakai ulang untuk operasi berbeda.",
+          "Signature provider menjawab pertanyaan autentikasi dan integritas pesan: apakah callback berasal dari pihak yang memiliki secret dan payload tidak berubah menurut protokolnya. Signature tidak memberi UNIQUE constraint, tidak menentukan scope key, dan tidak mencegah callback valid yang sama diproses dua kali. Sebaliknya, key database tidak membuktikan siapa pengirimnya. Jalur aman memeriksa authentication, lalu memakai business identity dan unique guard untuk efek lokal."
+        ]
+      },
+      {
+        "title": "UNIQUE mengalahkan check-then-insert",
+        "paragraphs": [
+          "Pola SELECT untuk mencari key lalu INSERT memiliki race: dua transaksi dapat sama-sama melihat ketiadaan sebelum salah satunya commit. UNIQUE pada pasangan scope dan idempotency_key menjadikan database arbiter yang memutuskan konflik. INSERT ... ON CONFLICT dapat memilih DO NOTHING atau DO UPDATE, tetapi pilihan itu harus memeriksa payload. Untuk retry identik, kembalikan hasil efek yang sudah ada; untuk key sama dengan payload berbeda, tandai conflict dan jangan menimpa fakta pertama secara diam-diam.",
+          "Atomic upsert hanya menjamin satu hasil INSERT atau UPDATE terhadap constraint arbiter dalam statement itu. Ia tidak otomatis mengirim email, menagih kartu, atau memanggil provider tepat sekali. Jika statement melakukan perubahan lokal dan outbox dalam transaction yang sama, keduanya dapat commit bersama; worker eksternal tetap mengirim dengan delivery at-least-once dan membutuhkan key yang sama. Jangan menyebut UNIQUE saja sebagai exactly-once untuk seluruh sistem."
+        ]
+      },
+      {
+        "title": "Fixture callback dan batas pembuktian",
+        "paragraphs": [
+          "Dataset A memiliki merchant shop-a dan shop-b yang boleh memakai teks idempotency_key sama karena scope-nya berbeda. Baris shop-a sudah memiliki payment yang sukses. Incoming table memiliki retry shop-a dengan payload_hash sama dan satu callback shop-a dengan payload_hash berbeda. Script memproses keduanya lewat dua INSERT terpisah agar satu ON CONFLICT tidak menyentuh row arbiter yang sama lebih dari sekali. Laporan akhir memisahkan replay identik, payload conflict, dan merchant tanpa callback tanpa mengubah fakta payment sukses.",
+          "Semua tabel contoh adalah TEMP dan setiap referensi SQL memakai pg_temp. Payload hash h-a1 dan signature_valid pada fixture adalah label deterministik, bukan implementasi HMAC atau bukti autentikasi provider. Lesson player hanya meminta prediksi dan alasan; ia tidak menjalankan dua session paralel. Race sebenarnya perlu diuji dengan concurrency harness, sedangkan lesson ini mengajarkan kontrak yang harus menjadi arbiter sebelum harness tersebut dibuat."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset A — callback Commerce: dua merchant TEMP berbagi teks key yang sama pada scope berbeda; shop-a menerima satu retry payload_hash sama dan satu callback payload_hash berbeda. Tabel hanya berada di pg_temp dan effect_count mewakili satu efek lokal.",
+      "setupSql": "CREATE TEMP TABLE lesson_payment_idempotency (\n  payment_id BIGINT PRIMARY KEY,\n  merchant_id TEXT NOT NULL,\n  idempotency_key TEXT NOT NULL,\n  payload_hash TEXT NOT NULL,\n  provider_ref TEXT NOT NULL,\n  status TEXT NOT NULL CHECK (status IN ('processing','succeeded','conflict')),\n  effect_count INTEGER NOT NULL CHECK (effect_count = 1),\n  UNIQUE (merchant_id, idempotency_key)\n);\nINSERT INTO pg_temp.lesson_payment_idempotency VALUES\n (9001,'shop-a','pay-2026-001','h-a1','provider-9001','succeeded',1),\n (9002,'shop-b','pay-2026-001','h-b1','provider-9002','succeeded',1);\nCREATE TEMP TABLE lesson_payment_incoming (\n  merchant_id TEXT NOT NULL,\n  idempotency_key TEXT NOT NULL,\n  payload_hash TEXT NOT NULL,\n  provider_ref TEXT NOT NULL,\n  status TEXT NOT NULL,\n  effect_count INTEGER NOT NULL,\n  signature_valid BOOLEAN NOT NULL\n);\nINSERT INTO pg_temp.lesson_payment_incoming VALUES\n ('shop-a','pay-2026-001','h-a1','provider-9001','succeeded',1,true),\n ('shop-a','pay-2026-001','h-a2','provider-9010','succeeded',1,true);",
+      "sql": "INSERT INTO pg_temp.lesson_payment_idempotency\n  (payment_id, merchant_id, idempotency_key, payload_hash, provider_ref, status, effect_count)\nSELECT 9101, merchant_id, idempotency_key, payload_hash, provider_ref, status, effect_count\nFROM pg_temp.lesson_payment_incoming\nWHERE signature_valid AND payload_hash = 'h-a1'\nON CONFLICT (merchant_id, idempotency_key) DO UPDATE\n  SET payload_hash = EXCLUDED.payload_hash\nWHERE lesson_payment_idempotency.payload_hash = EXCLUDED.payload_hash;\n\nINSERT INTO pg_temp.lesson_payment_idempotency\n  (payment_id, merchant_id, idempotency_key, payload_hash, provider_ref, status, effect_count)\nSELECT 9102, merchant_id, idempotency_key, payload_hash, provider_ref, status, effect_count\nFROM pg_temp.lesson_payment_incoming\nWHERE signature_valid AND payload_hash = 'h-a2'\nON CONFLICT (merchant_id, idempotency_key) DO UPDATE\n  SET payload_hash = EXCLUDED.payload_hash\nWHERE lesson_payment_idempotency.payload_hash = EXCLUDED.payload_hash;\n\nSELECT p.merchant_id, p.idempotency_key, p.payload_hash, p.status, p.effect_count,\n       i.payload_hash AS incoming_payload_hash,\n       CASE\n         WHEN i.idempotency_key IS NULL THEN 'unchanged'\n         WHEN p.payload_hash = i.payload_hash THEN 'replayed_same_payload'\n         ELSE 'payload_conflict'\n       END AS replay_state\nFROM pg_temp.lesson_payment_idempotency p\nLEFT JOIN pg_temp.lesson_payment_incoming i\n  ON i.merchant_id = p.merchant_id\n AND i.idempotency_key = p.idempotency_key\nORDER BY p.merchant_id, i.payload_hash NULLS LAST;",
+      "columns": [
+        "merchant_id",
+        "idempotency_key",
+        "payload_hash",
+        "status",
+        "effect_count",
+        "incoming_payload_hash",
+        "replay_state"
+      ],
+      "rows": [
+        [
+          "shop-a",
+          "pay-2026-001",
+          "h-a1",
+          "succeeded",
+          "1",
+          "h-a1",
+          "replayed_same_payload"
+        ],
+        [
+          "shop-a",
+          "pay-2026-001",
+          "h-a1",
+          "succeeded",
+          "1",
+          "h-a2",
+          "payload_conflict"
+        ],
+        [
+          "shop-b",
+          "pay-2026-001",
+          "h-b1",
+          "succeeded",
+          "1",
+          null,
+          "unchanged"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Scope merchant_id memungkinkan key pay-2026-001 muncul pada dua merchant tanpa collision. Retry shop-a dengan h-a1 diklasifikasikan replayed_same_payload; callback h-a2 diklasifikasikan payload_conflict oleh laporan dan tidak mengubah payment sukses atau effect_count. Shop-b tidak memiliki incoming callback sehingga tetap unchanged. Signature_valid hanya mengizinkan pesan fixture masuk jalur; ia bukan pengganti UNIQUE, dan contoh ini tidak mengirim efek provider eksternal."
+    },
+    "checks": [
+      {
+        "id": "l4m04l01-check-1",
+        "question": "Mengapa UNIQUE sebaiknya mencakup merchant_id bersama idempotency_key?",
+        "options": [
+          "Karena key provider selalu harus unik global di semua merchant.",
+          "Karena scope bisnis menentukan kapan dua teks key mewakili operasi yang sama atau berbeda.",
+          "Karena merchant_id menggantikan kebutuhan payload comparison."
+        ],
+        "answer": 1,
+        "explanation": "Key yang sama dari dua merchant dapat merupakan dua operasi sah. Unique scope harus mengikuti identitas operasi, sementara payload comparison tetap diperlukan di dalam scope tersebut.",
+        "feedback": [
+          "Global uniqueness mungkin terlalu ketat dan menolak operasi sah dari merchant berbeda.",
+          "Benar: pasangan merchant_id dan key membuat boundary identitas eksplisit.",
+          "Scope tidak membuktikan payload sama; key reuse dengan payload berbeda tetap harus ditolak atau dikarantina."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l4m04l01-check-2",
+        "question": "Apa kelemahan pola SELECT key lalu INSERT tanpa UNIQUE constraint?",
+        "options": [
+          "Dua request dapat sama-sama melihat key belum ada lalu sama-sama membuat efek.",
+          "SELECT selalu mengunci seluruh tabel sehingga INSERT pasti aman.",
+          "Payload signature provider otomatis menutup race database."
+        ],
+        "answer": 0,
+        "explanation": "Check-then-insert tidak atomik antar transaksi. Constraint unik dan statement conflict-aware diperlukan agar database menjadi arbiter.",
+        "feedback": [
+          "Benar: pemeriksaan dan insert terpisah membuka race ketika request berjalan bersama.",
+          "SELECT biasa tidak menjadi unique guard atau kunci global otomatis.",
+          "Signature memverifikasi pesan, bukan serialisasi INSERT lokal."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi hasil retry callback shop-a dan jelaskan mengapa shop-b boleh memiliki key teks yang sama.",
+      "setup": "Dataset A memiliki dua merchant, dua payment sukses, satu incoming retry shop-a dengan payload_hash sama, dan satu incoming callback shop-a dengan payload_hash berbeda. Aktivitas memprediksi result set dan status effect lokal; player tidak menjalankan SQL atau callback paralel.",
+      "starterSql": "SELECT merchant_id, idempotency_key, payload_hash, status, effect_count\nFROM pg_temp.lesson_payment_idempotency\nORDER BY merchant_id;",
+      "variants": [
+        {
+          "id": "l4m04l01-variant-1",
+          "question": "Retry shop-a dengan key pay-2026-001 dan payload_hash h-a1 harus menghasilkan apa?",
+          "options": [
+            "Baris payment baru dengan effect_count 2.",
+            "Satu conflict yang menimpa payload lama dengan payload retry.",
+            "Replay row yang sama dengan effect_count tetap 1."
+          ],
+          "answer": 2,
+          "explanation": "Key dan payload sama menandakan retry identik dalam scope merchant. Guard mengembalikan hasil lokal yang telah ada tanpa menambah efek.",
+          "feedback": [
+            "Retry identik tidak boleh menggandakan effect_count.",
+            "Payload yang sama tidak perlu menimpa fakta; conflict payload berbeda yang perlu dihentikan.",
+            "Benar: satu efek lokal tetap ada dan hasil dapat dikembalikan kepada caller."
+          ]
+        },
+        {
+          "id": "l4m04l01-variant-2",
+          "question": "Shop-a memakai key yang sama tetapi payload_hash h-a2 dan amount berbeda. Apa keputusan aman?",
+          "options": [
+            "Terima update karena key lebih penting daripada payload.",
+            "Tandai key reuse conflict dan jangan mengubah efek sukses pertama.",
+            "Hapus row lama lalu proses payload baru."
+          ],
+          "answer": 1,
+          "explanation": "Key yang sama dengan payload berbeda tidak lagi merupakan retry yang sama. Mengganti fakta sukses diam-diam dapat menagih nilai yang berbeda.",
+          "feedback": [
+            "Key tanpa payload contract dapat menyamarkan perubahan jumlah atau tujuan.",
+            "Benar: konflik perlu dikembalikan atau dikarantina untuk investigasi.",
+            "Menghapus fakta pertama merusak audit dan membuka jalan double effect."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l4m04l01-edge-1",
+          "question": "Signature provider valid pada dua callback identik. Apa yang masih harus dijaga database?",
+          "options": [
+            "Tidak ada; signature valid berarti callback kedua pasti aman.",
+            "Unique business key, payload comparison, dan satu transaction boundary untuk efek lokal.",
+            "Hanya membuat hash signature baru agar callback kedua berbeda."
+          ],
+          "answer": 1,
+          "explanation": "Dua pesan identik dapat sama-sama autentik. Signature tidak mendeduplikasi operasi; database tetap memerlukan identity dan guard.",
+          "feedback": [
+            "Callback valid tetap dapat merupakan delivery retry.",
+            "Benar: authentication dan idempotency menjawab risiko yang berbeda.",
+            "Mengubah hash tidak menyelesaikan identitas operasi atau duplicate effect."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l4m04l01-edge-2",
+          "question": "Apa risiko jika record idempotency dihapus segera setelah response sukses?",
+          "options": [
+            "Retry provider setelah cleanup dapat terlihat sebagai operasi baru dan membuat efek kedua.",
+            "Cleanup membuat UNIQUE constraint lebih kuat untuk request berikutnya.",
+            "Record tidak perlu disimpan karena provider selalu berhenti mengirim."
+          ],
+          "answer": 0,
+          "explanation": "Retention adalah bagian dari idempotency contract. Jika key reuse masih mungkin setelah record hilang, server membutuhkan arsip, stable provider reference, atau kebijakan yang mencegah reuse.",
+          "feedback": [
+            "Benar: jendela retry harus dicakup oleh retention atau identitas durable lain.",
+            "Menghapus row tidak memperkuat guard terhadap request yang datang kemudian.",
+            "Delivery at-least-once tidak menjamin provider berhenti setelah satu response."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Tentukan scope operasi lebih dulu: merchant/provider account dan key bersama-sama membentuk identitas.",
+        "Pisahkan signature authentication dari duplicate guard; gunakan UNIQUE sebagai arbiter, bukan SELECT lalu INSERT.",
+        "Bandingkan payload untuk key yang sama: retry identik replay hasil, payload berbeda menjadi conflict dan tidak menimpa efek."
+      ],
+      "solutionSql": "INSERT INTO pg_temp.lesson_payment_idempotency\n  (payment_id, merchant_id, idempotency_key, payload_hash, provider_ref, status, effect_count)\nSELECT 9101, merchant_id, idempotency_key, payload_hash, provider_ref, status, effect_count\nFROM pg_temp.lesson_payment_incoming\nWHERE signature_valid AND payload_hash = 'h-a1'\nON CONFLICT (merchant_id, idempotency_key) DO UPDATE\n  SET payload_hash = EXCLUDED.payload_hash\nWHERE lesson_payment_idempotency.payload_hash = EXCLUDED.payload_hash;\n\nINSERT INTO pg_temp.lesson_payment_idempotency\n  (payment_id, merchant_id, idempotency_key, payload_hash, provider_ref, status, effect_count)\nSELECT 9102, merchant_id, idempotency_key, payload_hash, provider_ref, status, effect_count\nFROM pg_temp.lesson_payment_incoming\nWHERE signature_valid AND payload_hash = 'h-a2'\nON CONFLICT (merchant_id, idempotency_key) DO UPDATE\n  SET payload_hash = EXCLUDED.payload_hash\nWHERE lesson_payment_idempotency.payload_hash = EXCLUDED.payload_hash;\n\nSELECT p.merchant_id, p.idempotency_key, p.payload_hash, p.status, p.effect_count,\n       i.payload_hash AS incoming_payload_hash,\n       CASE\n         WHEN i.idempotency_key IS NULL THEN 'unchanged'\n         WHEN p.payload_hash = i.payload_hash THEN 'replayed_same_payload'\n         ELSE 'payload_conflict'\n       END AS replay_state\nFROM pg_temp.lesson_payment_idempotency p\nLEFT JOIN pg_temp.lesson_payment_incoming i\n  ON i.merchant_id = p.merchant_id\n AND i.idempotency_key = p.idempotency_key\nORDER BY p.merchant_id, i.payload_hash NULLS LAST;",
+      "solutionExplanation": "Reference memakai UNIQUE (merchant_id, idempotency_key) sebagai arbiter dan hanya menerima incoming dengan signature_valid. Laporan memisahkan retry h-a1 sebagai replayed_same_payload dan callback h-a2 sebagai payload_conflict; row payment sukses tetap succeeded dan effect_count tetap satu. Shop-b tetap unchanged karena tidak memiliki incoming callback. Payload berbeda tidak boleh di-update secara diam-diam. Script ini tidak membuktikan signature cryptography, network exactly-once, atau provider side effect.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa idempotency key perlu scope merchant/provider, mengapa signature autentikasi berbeda dari UNIQUE database, dan bagaimana payload conflict serta retention memengaruhi retry. Sebutkan batas klaim yang tidak boleh dibuat dari satu upsert lokal."
+  },
+  {
+    "id": "l4m04l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "payment-ledger",
+      "double-entry",
+      "reconciliation",
+      "mutable-balance",
+      "invariants"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/ddl-constraints.html",
+      "https://www.postgresql.org/docs/17/tutorial-transactions.html"
+    ],
+    "hook": "Saldo mutable account terlihat cepat dibaca, tetapi satu perubahan saldo dapat kehilangan jejak. Ledger append-only menyimpan posting debit-credit; bagaimana merekonsiliasi saldo sekarang dari posting valid dan menemukan drift tanpa menganggap query laporan sebagai guard penulisan?",
+    "objectives": [
+      "Membedakan ledger append-only sebagai audit trail dari mutable balance sebagai projection yang dapat direkonsiliasi.",
+      "Menyusun invariant double-entry: posting berpasangan, sisi debit-credit, account scope, dan net delta nol.",
+      "Mengidentifikasi drift saldo dan menjelaskan mengapa laporan rekonsiliasi tidak otomatis mencegah writer yang salah."
+    ],
+    "sections": [
+      {
+        "title": "Ledger menyimpan fakta, balance menyimpan proyeksi",
+        "paragraphs": [
+          "Ledger append-only mencatat fakta posting yang tidak diubah untuk memperbaiki tampilan saldo. Satu payment dapat menghasilkan debit pada satu account dan credit pada account lain dengan nominal yang sama. Mutable balance adalah angka yang nyaman dibaca, tetapi ia merupakan projection yang harus memiliki source of truth dan aturan refresh. Jika balance berubah tanpa posting, audit tidak dapat menjelaskan asal perubahan; jika posting ada tetapi balance tidak berubah, rekonsiliasi menunjukkan drift.",
+          "Append-only tidak berarti setiap row otomatis benar. CHECK amount positif, side terbatas, primary key, dan foreign key membantu menjaga satu baris. Invariant transfer membutuhkan beberapa row: tepat dua posting, account berbeda, satu debit dan satu credit, serta net delta nol. PostgreSQL tidak menganggap SUM lintas tabel sebagai aturan yang harus dijaga hanya karena query audit dapat menghitungnya."
+        ]
+      },
+      {
+        "title": "Double-entry dan scope invariant",
+        "paragraphs": [
+          "Gunakan tanda yang konsisten ketika merekonsiliasi: debit mengurangi account dan credit menambah account pada projection, atau simpan amount positif dengan side terpisah lalu tentukan rumus di satu tempat. Jangan mengubah ledger amount menjadi negatif secara ad hoc saat memperbaiki drift. Grouping per payment atau transfer menjaga grain sehingga posting dari dua operasi tidak tertukar. Foreign key payment hanya membuktikan payment ada; ia tidak membuktikan pasangan posting lengkap.",
+          "Invariant balance memiliki dua sisi. Per payment, total debit dan credit harus sama. Per account, opening balance ditambah delta ledger harus sama dengan current balance yang disimpan. Jika salah satu berbeda, laporan harus menandai drift dan mengarahkan remediation. Meng-update balance agar sama dengan laporan dapat menyamarkan kehilangan posting; prosedur koreksi sebaiknya membuat adjustment entry yang memiliki identitas dan alasan."
+        ]
+      },
+      {
+        "title": "Dataset ledger dan batas pembuktian",
+        "paragraphs": [
+          "Dataset B berisi dua payment yang masing-masing mempunyai posting debit dan credit seimbang. Opening balance account 1 adalah 100000 dan account 2 adalah 50000. Setelah posting, projection yang diharapkan adalah 55000 dan 95000. Worked query menghitung delta signed dari ledger dan membandingkan canonical balance dengan current balance; kedua row berstatus reconciled.",
+          "Fixture menggunakan TEMP table, sehingga hasil hanya membuktikan kontrak snapshot yang disediakan. Query tidak mengunci writer, tidak membuktikan append-only privilege, tidak membuktikan urutan event provider, dan tidak memasang trigger untuk menolak drift. Saldo yang cocok pada satu pembacaan juga tidak membuktikan bahwa concurrent update berikutnya akan terkoordinasi. Gunakan hasil ini sebagai report dan acceptance property, bukan klaim guard production."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset B — Payment Ledger double-entry: dua payment TEMP, empat posting debit-credit, dan dua mutable balance. Opening balance account 1/2 adalah 100000/50000; posting valid menghasilkan current balance 55000/95000.",
+      "setupSql": "CREATE TEMP TABLE lesson_ledger_payments (\n  payment_id BIGINT PRIMARY KEY,\n  status TEXT NOT NULL CHECK (status = 'succeeded')\n);\nINSERT INTO pg_temp.lesson_ledger_payments VALUES (5001,'succeeded'), (5002,'succeeded');\nCREATE TEMP TABLE lesson_ledger_entries (\n  entry_id BIGINT PRIMARY KEY,\n  payment_id BIGINT NOT NULL REFERENCES pg_temp.lesson_ledger_payments(payment_id),\n  account_id BIGINT NOT NULL,\n  side TEXT NOT NULL CHECK (side IN ('debit','credit')),\n  amount NUMERIC(12,2) NOT NULL CHECK (amount > 0)\n);\nINSERT INTO pg_temp.lesson_ledger_entries VALUES\n (8101,5001,1,'debit',30000.00),\n (8102,5001,2,'credit',30000.00),\n (8103,5002,1,'debit',15000.00),\n (8104,5002,2,'credit',15000.00);\nCREATE TEMP TABLE lesson_mutable_balances (\n  account_id BIGINT PRIMARY KEY,\n  opening_balance NUMERIC(12,2) NOT NULL,\n  current_balance NUMERIC(12,2) NOT NULL\n);\nINSERT INTO pg_temp.lesson_mutable_balances VALUES (1,100000.00,55000.00), (2,50000.00,95000.00);",
+      "sql": "WITH deltas AS (\n  SELECT account_id,\n         SUM(CASE WHEN side = 'debit' THEN -amount ELSE amount END) AS ledger_delta\n  FROM pg_temp.lesson_ledger_entries\n  GROUP BY account_id\n), report AS (\n  SELECT b.account_id, b.opening_balance, b.current_balance,\n         COALESCE(d.ledger_delta,0.00) AS ledger_delta,\n         b.opening_balance + COALESCE(d.ledger_delta,0.00) AS canonical_balance\n  FROM pg_temp.lesson_mutable_balances b\n  LEFT JOIN deltas d ON d.account_id = b.account_id\n)\nSELECT account_id, opening_balance, current_balance, ledger_delta, canonical_balance,\n       current_balance - canonical_balance AS difference,\n       CASE WHEN current_balance = canonical_balance THEN 'reconciled' ELSE 'drift' END AS reconciliation_state\nFROM report\nORDER BY account_id;",
+      "columns": [
+        "account_id",
+        "opening_balance",
+        "current_balance",
+        "ledger_delta",
+        "canonical_balance",
+        "difference",
+        "reconciliation_state"
+      ],
+      "rows": [
+        [
+          "1",
+          "100000.00",
+          "55000.00",
+          "-45000.00",
+          "55000.00",
+          "0.00",
+          "reconciled"
+        ],
+        [
+          "2",
+          "50000.00",
+          "95000.00",
+          "45000.00",
+          "95000.00",
+          "0.00",
+          "reconciled"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Debit posting mengurangi account 1 sebesar 45000, sedangkan credit menambah account 2 sebesar 45000. Opening plus signed ledger_delta sama dengan current_balance untuk kedua account. Ini membuktikan snapshot fixture dapat direkonsiliasi; tidak membuktikan bahwa semua writer selalu append-only atau bahwa balance tidak drift setelah query selesai."
+    },
+    "checks": [
+      {
+        "id": "l4m04l02-check-1",
+        "question": "Apa peran mutable balance dibanding ledger append-only?",
+        "options": [
+          "Mutable balance adalah source of truth tunggal sehingga ledger tidak perlu dipertahankan.",
+          "Mutable balance adalah projection cepat yang harus direkonsiliasi terhadap posting ledger yang menjadi fakta audit.",
+          "Mutable balance otomatis membuat posting yang hilang kembali muncul."
+        ],
+        "answer": 1,
+        "explanation": "Ledger menyimpan posting sebagai jejak; balance dapat dipakai untuk read performance tetapi harus memiliki aturan refresh dan rekonsiliasi.",
+        "feedback": [
+          "Menghapus ledger menghilangkan audit dan jalur rekonstruksi ketika balance salah.",
+          "Benar: projection cepat tetap perlu dibandingkan dengan source of truth.",
+          "Angka projection tidak dapat menciptakan fakta posting yang hilang."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l4m04l02-check-2",
+        "question": "Syarat mana yang bersama-sama menunjukkan transfer double-entry valid pada kontrak fixture?",
+        "options": [
+          "Tepat dua entry, account berbeda, satu debit negatif secara signed, satu credit positif, dan net delta nol.",
+          "Satu entry apa pun dengan amount positif karena balance dapat diubah kemudian.",
+          "Net delta nol saja tanpa memeriksa jumlah entry atau account."
+        ],
+        "answer": 0,
+        "explanation": "Net zero perlu dipadukan dengan count, side, dan account scope agar dua posting yang benar tidak tertukar dengan baris yang saling menutup secara salah.",
+        "feedback": [
+          "Benar: fixture meminta seluruh syarat pasangan dan agregat, bukan hanya total.",
+          "Satu posting bukan double-entry meskipun projection kemudian diubah.",
+          "Net zero saja tidak membuktikan pasangan, identity, atau account yang tepat."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi canonical balance dan reconciliation_state untuk dua account setelah membaca posting ledger.",
+      "setup": "Dataset B memiliki opening balance account 1/2 sebesar 100000/50000 dan empat posting valid. Debit 30000+15000 mengurangi account 1; credit dengan nominal sama menambah account 2. Aktivitas hanya membaca snapshot TEMP.",
+      "starterSql": "SELECT account_id, opening_balance, current_balance\nFROM pg_temp.lesson_mutable_balances\nORDER BY account_id;",
+      "variants": [
+        {
+          "id": "l4m04l02-variant-1",
+          "question": "Jika payment 5003 menambah debit 5000 pada account 1 dan credit 5000 pada account 2, apa delta tambahan per account?",
+          "options": [
+            "Account 1 -5000 dan account 2 +5000, tetap net zero secara transfer.",
+            "Kedua account +5000 karena semua posting adalah payment masuk.",
+            "Account 1 +5000 dan account 2 -5000 karena debit selalu menambah saldo."
+          ],
+          "answer": 0,
+          "explanation": "Kontrak signed delta mengartikan debit sebagai pengurangan account dan credit sebagai penambahan account.",
+          "feedback": [
+            "Benar: pasangan 5000 mengubah projection dengan arah berlawanan dan jumlah seimbang.",
+            "Debit bukan credit; arah posting menentukan delta account.",
+            "Signed convention pada fixture mendefinisikan debit sebagai pengurangan."
+          ]
+        },
+        {
+          "id": "l4m04l02-variant-2",
+          "question": "Current balance account 2 berubah menjadi 94000 tanpa posting baru. Apa status rekonsiliasinya?",
+          "options": [
+            "reconciled karena ledger tetap memiliki net delta 45000.",
+            "drift dengan difference -1000 dibanding canonical balance 95000.",
+            "valid karena mutable balance selalu mengalahkan ledger."
+          ],
+          "answer": 1,
+          "explanation": "Projection 94000 berbeda dari opening 50000 plus ledger delta 45000, sehingga difference -1000 menunjukkan drift.",
+          "feedback": [
+            "Ledger tidak dapat membuat current balance 94000 menjadi sama secara otomatis.",
+            "Benar: canonical 95000, current 94000, sehingga report menandai drift -1000.",
+            "Balance adalah projection yang perlu direkonsiliasi, bukan pengganti jejak."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l4m04l02-edge-1",
+          "question": "Jika account 1 memiliki current balance benar tetapi satu posting debit hilang dan posting credit juga hilang, apa yang dibuktikan report?",
+          "options": [
+            "Selalu menemukan kehilangan karena current balance benar.",
+            "Belum tentu menemukan; snapshot dapat cocok sementara audit ledger tidak lengkap, sehingga perlu pemeriksaan posting/payment completeness.",
+            "Mengisi dua posting yang hilang dari selisih balance secara otomatis."
+          ],
+          "answer": 1,
+          "explanation": "Rekonsiliasi balance terhadap ledger hanya membandingkan projection dengan fakta yang tersedia. Jika dua fakta hilang dan angka kebetulan cocok, completeness check terpisah diperlukan.",
+          "feedback": [
+            "Balance yang cocok tidak membuktikan ledger lengkap.",
+            "Benar: perlu completeness, stable payment identity, dan pemeriksaan sumber lain.",
+            "Report tidak boleh mengarang posting untuk mengisi gap."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l4m04l02-edge-2",
+          "question": "Bagaimana mencatat refund yang membalik payment tanpa mengedit posting sukses lama?",
+          "options": [
+            "UPDATE amount posting lama menjadi nol agar saldo terbaru terlihat.",
+            "DELETE payment lama lalu masukkan satu row refund.",
+            "Tambahkan adjustment atau reversal entry baru dengan identitas dan alasan yang dapat diaudit."
+          ],
+          "answer": 2,
+          "explanation": "Append-only ledger mempertahankan histori. Reversal baru menyatakan perubahan bisnis tanpa menghapus fakta payment sebelumnya.",
+          "feedback": [
+            "Mengubah histori menghilangkan bukti nominal dan urutan asli.",
+            "Delete merusak audit dan dapat memutus referensi payment.",
+            "Benar: reversal entry baru dapat direkonsiliasi dan ditautkan ke alasan refund."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Tetapkan signed convention: debit mengurangi account, credit menambah account, lalu group delta per account.",
+        "Bandingkan opening_balance + ledger_delta dengan current_balance; selisih adalah drift, bukan alasan mengubah ledger.",
+        "Periksa transfer pada grain payment dan account; net zero saja tidak membuktikan pasangan atau completeness."
+      ],
+      "solutionSql": "WITH deltas AS (\n  SELECT account_id,\n         SUM(CASE WHEN side = 'debit' THEN -amount ELSE amount END) AS ledger_delta\n  FROM pg_temp.lesson_ledger_entries\n  GROUP BY account_id\n), report AS (\n  SELECT b.account_id, b.opening_balance, b.current_balance,\n         COALESCE(d.ledger_delta,0.00) AS ledger_delta,\n         b.opening_balance + COALESCE(d.ledger_delta,0.00) AS canonical_balance\n  FROM pg_temp.lesson_mutable_balances b\n  LEFT JOIN deltas d ON d.account_id = b.account_id\n)\nSELECT account_id, opening_balance, current_balance, ledger_delta, canonical_balance,\n       current_balance - canonical_balance AS difference,\n       CASE WHEN current_balance = canonical_balance THEN 'reconciled' ELSE 'drift' END AS reconciliation_state\nFROM report\nORDER BY account_id;",
+      "solutionExplanation": "Reference mengagregasikan posting ledger dengan signed convention lalu membandingkan hasilnya dengan mutable balance. Account 1 memiliki delta -45000 dan canonical 55000; account 2 memiliki delta +45000 dan canonical 95000. Keduanya reconciled pada fixture. Ini bukan trigger append-only, lock guard, completeness proof, atau jaminan concurrent writer.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa ledger append-only dan mutable balance memiliki peran berbeda. Tuliskan invariant double-entry, rumus canonical balance, cara mengenali drift, dan mengapa report yang cocok tidak membuktikan seluruh posting atau writer production benar."
+  },
+  {
+    "id": "l4m04l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "exactly-once",
+      "at-least-once",
+      "idempotency",
+      "external-effects",
+      "payment-ledger"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/sql-insert.html",
+      "https://www.postgresql.org/docs/17/tutorial-transactions.html",
+      "https://www.postgresql.org/docs/17/ddl-constraints.html"
+    ],
+    "hook": "Server sudah commit efek payment, tetapi response hilang di jaringan. Client mengulang request dan provider mengirim callback lagi. Bagaimana mencapai exactly-once effect secara lokal dengan key stabil, sementara delivery tetap at-least-once dan panggilan eksternal tidak atomik bersama database?",
+    "objectives": [
+      "Membedakan exactly-once effect lokal yang terukur dari exactly-once delivery atau network exactly-once yang tidak dapat dijanjikan.",
+      "Menggabungkan stable business identity, UNIQUE guard, transaction boundary, dan retry yang aman untuk effect lokal.",
+      "Menjelaskan mengapa external provider call memerlukan idempotency provider, outbox, atau rekonsiliasi terpisah dari transaction database."
+    ],
+    "sections": [
+      {
+        "title": "Tujuan tepatnya adalah effect lokal sekali",
+        "paragraphs": [
+          "Jaringan, queue, dan webhook umumnya memberi delivery at-least-once: pesan dapat diulang, terlambat, atau response hilang setelah server commit. Target yang dapat dibuktikan adalah satu effect lokal untuk satu stable business identity dalam scope tertentu. Contohnya satu payment_intent atau pasangan merchant_id dan provider_ref menghasilkan paling banyak satu row effect dan satu posting ledger. Jumlah delivery boleh dua atau lebih; yang harus satu adalah effect yang dilindungi constraint.",
+          "Exactly-once delivery adalah klaim berbeda dan biasanya tidak dapat dibuat dari client retry. Timeout tidak memberi tahu apakah COMMIT sudah terjadi, sehingga retry perlu mencari identity yang sama sebelum membuat effect. Jangan membuat key baru setiap retry. Bila identity provider belum stabil, simpan correlation record dan kebijakan rekonsiliasi; random request ID hanya mengubah satu operasi menjadi beberapa identity."
+        ]
+      },
+      {
+        "title": "Transaction lokal dan external call berbeda boundary",
+        "paragraphs": [
+          "Transaction lokal dapat memasukkan payment effect, ledger entries, dan outbox event secara atomik. Setelah commit, worker membaca outbox dan memanggil provider dengan provider-side idempotency key bila tersedia. Worker dapat mengirim dua kali karena crash setelah provider menerima request tetapi sebelum worker menandai sukses. Provider yang memahami key dapat mengembalikan hasil yang sama; provider tanpa key membutuhkan reconciliation dan kompensasi yang eksplisit.",
+          "Jangan menahan transaction database ketika menunggu jaringan. External call tidak ikut ROLLBACK database, dan rollback database tidak membatalkan charge yang sudah diterima provider. Stable identity, outbox status, provider reference, dan audit response harus dapat menghubungkan dua sisi. Exactly-once effect lokal berarti local uniqueness plus transaction contract; ia tidak berarti uang provider bergerak sekali tanpa dukungan provider atau rekonsiliasi."
+        ]
+      },
+      {
+        "title": "Delivery duplicate pada fixture",
+        "paragraphs": [
+          "Dataset C memiliki dua delivery valid untuk merchant shop-a, provider_ref provider-77, dan key pay-2026-002 dengan payload sama. SQL memasukkan delivery 7001 lalu mencoba replay delivery 7002; payload-checked ON CONFLICT mempertahankan satu effect row. Hasil akhirnya memperlihatkan deliveries_seen 2 tetapi effect_count 1. Ini adalah property yang dapat diukur dari snapshot, bukan simulasi dua session atau bukti bahwa network tidak akan mengulang.",
+          "Signature_valid membatasi pesan yang boleh diproses, sedangkan UNIQUE (merchant_id, idempotency_key) dan UNIQUE (provider_account, provider_ref) membatasi identity lokal. Payload conflict pada key sama harus menjadi conflict, bukan overwrite. Jika record guard kedaluwarsa sebelum retry window selesai, exactly-once local effect kembali tidak dapat dijamin; retention dan reconciliation adalah bagian dari desain, bukan cleanup tanpa batas."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset C — duplicate payment delivery: dua delivery TEMP yang valid dan identik untuk satu merchant/provider reference. Processor memilih attempt pertama, memakai unique guard, dan melaporkan dua delivery versus satu local effect.",
+      "setupSql": "CREATE TEMP TABLE lesson_payment_deliveries (\n  delivery_id BIGINT PRIMARY KEY,\n  merchant_id TEXT NOT NULL,\n  provider_account TEXT NOT NULL,\n  provider_ref TEXT NOT NULL,\n  idempotency_key TEXT NOT NULL,\n  payload_hash TEXT NOT NULL,\n  amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),\n  signature_valid BOOLEAN NOT NULL,\n  attempt_no INTEGER NOT NULL CHECK (attempt_no > 0)\n);\nINSERT INTO pg_temp.lesson_payment_deliveries VALUES\n (7001,'shop-a','provider-main','provider-77','pay-2026-002','h-c1',125000.00,true,1),\n (7002,'shop-a','provider-main','provider-77','pay-2026-002','h-c1',125000.00,true,2);\nCREATE TEMP TABLE lesson_payment_effects (\n  effect_id BIGINT PRIMARY KEY,\n  merchant_id TEXT NOT NULL,\n  provider_account TEXT NOT NULL,\n  provider_ref TEXT NOT NULL,\n  idempotency_key TEXT NOT NULL,\n  payload_hash TEXT NOT NULL,\n  amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),\n  UNIQUE (merchant_id, idempotency_key),\n  UNIQUE (provider_account, provider_ref)\n);",
+      "sql": "INSERT INTO pg_temp.lesson_payment_effects\n    (effect_id, merchant_id, provider_account, provider_ref, idempotency_key, payload_hash, amount)\nSELECT 9001, merchant_id, provider_account, provider_ref, idempotency_key, payload_hash, amount\nFROM pg_temp.lesson_payment_deliveries\nWHERE delivery_id = 7001 AND signature_valid\nON CONFLICT (merchant_id, idempotency_key) DO UPDATE\n  SET payload_hash = EXCLUDED.payload_hash\nWHERE lesson_payment_effects.payload_hash = EXCLUDED.payload_hash;\n\nINSERT INTO pg_temp.lesson_payment_effects\n    (effect_id, merchant_id, provider_account, provider_ref, idempotency_key, payload_hash, amount)\nSELECT 9002, merchant_id, provider_account, provider_ref, idempotency_key, payload_hash, amount\nFROM pg_temp.lesson_payment_deliveries\nWHERE delivery_id = 7002 AND signature_valid\nON CONFLICT (merchant_id, idempotency_key) DO UPDATE\n  SET payload_hash = EXCLUDED.payload_hash\nWHERE lesson_payment_effects.payload_hash = EXCLUDED.payload_hash;\n\nSELECT e.merchant_id, e.idempotency_key, e.provider_ref, e.amount,\n       (SELECT COUNT(*) FROM pg_temp.lesson_payment_deliveries d\n        WHERE d.merchant_id = e.merchant_id AND d.idempotency_key = e.idempotency_key) AS deliveries_seen,\n       (SELECT COUNT(*) FROM pg_temp.lesson_payment_effects x\n        WHERE x.merchant_id = e.merchant_id AND x.idempotency_key = e.idempotency_key) AS effect_count,\n       'local_once' AS local_outcome\nFROM pg_temp.lesson_payment_effects e\nORDER BY e.effect_id;",
+      "columns": [
+        "merchant_id",
+        "idempotency_key",
+        "provider_ref",
+        "amount",
+        "deliveries_seen",
+        "effect_count",
+        "local_outcome"
+      ],
+      "rows": [
+        [
+          "shop-a",
+          "pay-2026-002",
+          "provider-77",
+          "125000.00",
+          "2",
+          "1",
+          "local_once"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Dua delivery valid memiliki identity dan payload sama. INSERT pertama membuat effect delivery 7001; INSERT kedua mereplay delivery 7002 dan payload-checked ON CONFLICT mempertahankan effect row pertama. Laporan menunjukkan deliveries_seen 2 versus effect_count 1. Fixture ini sengaja identik dan SQL tidak membuktikan jalur conflict payload berbeda. Ini membuktikan exactly-once effect lokal untuk input fixture dan guard tersebut; tidak membuktikan exactly-once network delivery, provider charge, atau concurrency engine."
+    },
+    "checks": [
+      {
+        "id": "l4m04l03-check-1",
+        "question": "Apa arti tepat dari deliveries_seen = 2 dan effect_count = 1 pada Dataset C?",
+        "options": [
+          "Network hanya mengirim satu pesan, tetapi database menghitungnya dua kali.",
+          "Dua delivery diterima, namun stable identity dan unique guard menghasilkan satu effect lokal.",
+          "Provider pasti menagih dua kali lalu database menghapus salah satunya."
+        ],
+        "answer": 1,
+        "explanation": "Delivery at-least-once boleh berulang; target yang dijaga adalah jumlah effect lokal untuk identity yang sama.",
+        "feedback": [
+          "Fixture memang memiliki dua row delivery.",
+          "Benar: dua pengiriman tidak berubah menjadi dua effect lokal.",
+          "Database fixture tidak membuktikan atau menghapus charge provider eksternal."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l4m04l03-check-2",
+        "question": "Mengapa provider signature valid belum cukup untuk exactly-once effect?",
+        "options": [
+          "Signature autentikasi dapat valid pada dua delivery identik; deduplikasi membutuhkan stable identity dan unique guard.",
+          "Signature valid otomatis membuat UNIQUE constraint pada semua table.",
+          "Signature hanya berguna jika key idempotency dibuat random setiap retry."
+        ],
+        "answer": 0,
+        "explanation": "Authentication dan idempotency menangani dimensi berbeda: asal/integritas pesan versus apakah operasi yang sama sudah menghasilkan efek.",
+        "feedback": [
+          "Benar: callback retry yang autentik tetap membutuhkan guard lokal.",
+          "Constraint harus didefinisikan database; signature tidak mengubah schema.",
+          "Key random tiap retry justru menghancurkan stable identity."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi jumlah delivery dan local effect setelah response hilang lalu request atau callback diulang.",
+      "setup": "Dataset C memiliki dua delivery identik untuk satu provider_ref dan idempotency_key. Semua signature valid, amount 125000, dan effect table awal kosong. Aktivitas menilai effect lokal, bukan menjanjikan provider/network exactly-once.",
+      "starterSql": "SELECT merchant_id, provider_ref, idempotency_key, amount, attempt_no\nFROM pg_temp.lesson_payment_deliveries\nORDER BY attempt_no;",
+      "variants": [
+        {
+          "id": "l4m04l03-variant-1",
+          "question": "Response hilang setelah local effect commit, lalu client mengirim ulang key pay-2026-002 dengan payload sama. Apa yang harus dilakukan?",
+          "options": [
+            "Buat key baru agar retry selalu diproses sebagai operasi segar.",
+            "Cari stable identity yang sama dan kembalikan effect yang sudah ada tanpa menambah posting.",
+            "Rollback database lama dari client walaupun COMMIT mungkin sudah selesai."
+          ],
+          "answer": 1,
+          "explanation": "Outcome client tidak diketahui, sehingga retry harus melakukan idempotent lookup/upsert berdasarkan identity yang sama.",
+          "feedback": [
+            "Key baru dapat membuat duplicate effect.",
+            "Benar: lookup identity stabil membedakan retry dari operasi baru.",
+            "Client tidak dapat membatalkan COMMIT yang sudah diterima hanya dengan mengirim rollback."
+          ]
+        },
+        {
+          "id": "l4m04l03-variant-2",
+          "question": "Dua delivery memakai key sama tetapi payload_hash berbeda. Apa outcome lokal yang paling aman?",
+          "options": [
+            "Silently overwrite effect pertama dengan payload terakhir.",
+            "Terima keduanya karena delivery berasal dari provider yang sama.",
+            "Tandai payload conflict dan jangan membuat atau mengubah effect kedua sebelum investigasi."
+          ],
+          "answer": 2,
+          "explanation": "Stable key mengklaim operasi yang sama, sedangkan payload berbeda menunjukkan key reuse, bug, atau pesan yang tidak sesuai.",
+          "feedback": [
+            "Overwrite dapat mengubah amount atau tujuan tanpa bukti.",
+            "Provider identity tidak menghilangkan conflict payload.",
+            "Benar: conflict harus terlihat, diaudit, dan tidak menghasilkan duplicate atau overwrite diam-diam."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l4m04l03-edge-1",
+          "question": "Provider reference 77 dapat muncul pada dua merchant. Constraint identity mana yang sesuai?",
+          "options": [
+            "UNIQUE(provider_ref) global tanpa merchant karena reference selalu global.",
+            "UNIQUE(merchant_id, provider_ref) atau scope provider_account yang sesuai kontrak provider.",
+            "Tidak perlu UNIQUE karena signature provider sudah unik."
+          ],
+          "answer": 1,
+          "explanation": "Scope constraint harus mengikuti domain. Reference yang hanya unik per merchant tidak boleh dipaksakan global, dan signature tidak menjadi unique guard.",
+          "feedback": [
+            "Global constraint dapat menolak dua operasi sah dari merchant berbeda.",
+            "Benar: pilih scope provider/merchant berdasarkan kontrak identity yang sebenarnya.",
+            "Signature mengautentikasi pesan, bukan mengatur uniqueness lokal."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l4m04l03-edge-2",
+          "question": "Apa risiko jika effect guard dihapus sebelum retry window provider berakhir?",
+          "options": [
+            "Retry lama dapat terlihat baru dan menghasilkan effect lokal kedua.",
+            "Penghapusan membuat provider otomatis mengingat hasil lama.",
+            "Tidak ada risiko karena response sukses selalu menghentikan delivery."
+          ],
+          "answer": 0,
+          "explanation": "Exactly-once local effect bergantung pada identity yang masih dapat dikenali. Retention atau arsip harus mencakup jendela delivery dan rekonsiliasi.",
+          "feedback": [
+            "Benar: cleanup terlalu cepat membuka kembali duplicate effect.",
+            "Database cleanup tidak memberi provider memory baru.",
+            "Delivery at-least-once dapat datang terlambat atau diulang setelah response."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Bedakan delivery count dari effect count; yang dijaga satu adalah effect untuk stable business identity.",
+        "Simpan key dan provider reference dalam scope yang benar, lalu lindungi INSERT dengan UNIQUE dalam transaction lokal.",
+        "External call berada di boundary lain: gunakan provider idempotency, outbox, atau reconciliation, bukan klaim network exactly-once."
+      ],
+      "solutionSql": "INSERT INTO pg_temp.lesson_payment_effects\n    (effect_id, merchant_id, provider_account, provider_ref, idempotency_key, payload_hash, amount)\nSELECT 9001, merchant_id, provider_account, provider_ref, idempotency_key, payload_hash, amount\nFROM pg_temp.lesson_payment_deliveries\nWHERE delivery_id = 7001 AND signature_valid\nON CONFLICT (merchant_id, idempotency_key) DO UPDATE\n  SET payload_hash = EXCLUDED.payload_hash\nWHERE lesson_payment_effects.payload_hash = EXCLUDED.payload_hash;\n\nINSERT INTO pg_temp.lesson_payment_effects\n    (effect_id, merchant_id, provider_account, provider_ref, idempotency_key, payload_hash, amount)\nSELECT 9002, merchant_id, provider_account, provider_ref, idempotency_key, payload_hash, amount\nFROM pg_temp.lesson_payment_deliveries\nWHERE delivery_id = 7002 AND signature_valid\nON CONFLICT (merchant_id, idempotency_key) DO UPDATE\n  SET payload_hash = EXCLUDED.payload_hash\nWHERE lesson_payment_effects.payload_hash = EXCLUDED.payload_hash;\n\nSELECT e.merchant_id, e.idempotency_key, e.provider_ref, e.amount,\n       (SELECT COUNT(*) FROM pg_temp.lesson_payment_deliveries d\n        WHERE d.merchant_id = e.merchant_id AND d.idempotency_key = e.idempotency_key) AS deliveries_seen,\n       (SELECT COUNT(*) FROM pg_temp.lesson_payment_effects x\n        WHERE x.merchant_id = e.merchant_id AND x.idempotency_key = e.idempotency_key) AS effect_count,\n       'local_once' AS local_outcome\nFROM pg_temp.lesson_payment_effects e\nORDER BY e.effect_id;",
+      "solutionExplanation": "Reference memasukkan delivery 7001, lalu menjalankan INSERT kedua untuk replay delivery 7002 dengan ON CONFLICT yang hanya menerima payload sama. Result akhir melaporkan dua delivery dan satu effect; fixture curated ini tidak membuktikan jalur conflict delivery berbeda, yang harus dipisahkan dan dikarantina sebelum effect. Stable business identity dan unique constraints memberi exactly-once effect lokal untuk fixture ini. Signature filter bukan deduplikasi, database transaction tidak meng-rollback provider, dan worker/provider delivery tetap at-least-once tanpa idempotency provider atau reconciliation.",
+      "critical": true
+    },
+    "reflection": "Jelaskan perbedaan exactly-once effect lokal, at-least-once delivery, dan network exactly-once. Gambarkan boundary transaction payment/outbox versus provider call, lalu sebutkan bagaimana stable identity, payload conflict, retention, dan rekonsiliasi mencegah double charge."
+  }
+]

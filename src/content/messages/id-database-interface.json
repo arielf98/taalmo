@@ -149,5 +149,14 @@
   "deadlock": "deadlock",
   "lock-timeout": "batas waktu lock",
   "retry": "coba ulang",
-  "lock-ordering": "urutan lock"
+  "lock-ordering": "urutan lock",
+  "idempotency": "idempotensi",
+  "unique-constraints": "constraint unik",
+  "webhooks": "webhook",
+  "payment": "pembayaran",
+  "double-entry": "entri ganda",
+  "mutable-balance": "saldo mutable",
+  "exactly-once": "exactly-once",
+  "at-least-once": "at-least-once",
+  "external-effects": "efek eksternal"
 }

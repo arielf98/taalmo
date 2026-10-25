@@ -24,13 +24,13 @@ Tidak memerlukan `.env`, database, akun, API key, Docker, atau layanan berbayar.
 
 Satu jalur tersedia melalui dashboard atau `/learn/database-engineering`, menggabungkan kurikulum database dan praktik transaksi yang sebelumnya terpisah. Tautan lama `/learn/database-transactions` dan `/learn/database-zero-to-master` diarahkan ke jalur ini.
 
-Bagian SQL/database memakai paket sumber Database Zero to Master dengan **10 level, 40 modul, dan 120 lesson**. **54 lesson published: L0–L3 dan L4M01–L4M03; 66 lesson lainnya masih draft.** Materi Indonesia–Inggris mencakup penjelasan, worked example PostgreSQL, tabel hasil, concept checks dengan feedback, variasi latihan, edge cases, hint, dan refleksi. Struktur tabel memakai UML/ERD; alur proses memakai React Flow bila sesuai. L4M03 membahas conditional UPDATE, zero-row outcome, write skew, deadlock, timeout, dan retry seluruh transaksi. Trace concurrent adalah skenario authored dengan isolation serta pilihan victim yang dinyatakan eksplisit, bukan hasil runtime. Materi setelah L2M01 ditinjau melalui source dan diff saja; SQL serta runtime belum diverifikasi sesuai aturan proyek.
+Bagian SQL/database memakai paket sumber Database Zero to Master dengan **10 level, 40 modul, dan 120 lesson**. **57 lesson published: L0–L3 dan L4M01–L4M04; 63 lesson lainnya masih draft.** Materi Indonesia–Inggris mencakup penjelasan, worked example PostgreSQL, tabel hasil, concept checks dengan feedback, variasi latihan, edge cases, hint, dan refleksi. Struktur tabel memakai UML/ERD; alur proses memakai React Flow bila sesuai. L4M04 membahas idempotency key berscope, konflik payload, ledger versus saldo mutable, dan batas efek lokal exactly-once. Signature valid pada fixture adalah input authored; UNIQUE dan database transaction tidak menjamin delivery eksternal exactly-once. Materi setelah L2M01 ditinjau melalui source dan diff saja; SQL serta runtime belum diverifikasi sesuai aturan proyek.
 
 Kelulusan lesson memerlukan aktivitas dan pemeriksaan wajib, bukan scroll atau Next. Modul memerlukan checkpoint ≥80%; level ≥85% dan seluruh pemeriksaan kritis lulus. Teori published tetap dapat dijelajahi; prasyarat berlaku untuk progres resmi. Progres per versi dan resume memakai penyimpanan browser yang sama tanpa mengubah milestone lab lama. Retake mempertahankan kelulusan terdahulu.
 
 Aktivitas saat ini memakai prediksi deterministik, **belum menjalankan SQL pengguna**. Ini merupakan fallback aman karena platform belum memiliki runner SQL terisolasi. Penilaian formatif berlangsung di client; belum ada sertifikasi terproteksi, akun, atau sinkronisasi lintas perangkat. Tidak ada seed database aplikasi: konten diimpor statis berdasarkan stable ID.
 
-Lihat [rencana dan evidence](docs/database-path-implementation.md), [panduan authoring dan validasi](docs/database-path-authoring.md), serta [checklist 66 lesson draft](docs/database-path-remaining.md).
+Lihat [rencana dan evidence](docs/database-path-implementation.md), [panduan authoring dan validasi](docs/database-path-authoring.md), serta [checklist 63 lesson draft](docs/database-path-remaining.md).
 
 ## Fitur yang tersedia
 
@@ -41,10 +41,10 @@ Lihat [rencana dan evidence](docs/database-path-implementation.md), [panduan aut
 - Lab Lost Update: mode unsafe dan atomic increment, pilihan urutan penulisan serta saldo awal, run/step/reset/replay, histori, inspector, dan kuis akhir.
 - Lab Duplicate Payment Callback: mode unsafe dan idempotent, run/step/reset/replay, histori, inspector, ledger, transactional outbox, dan opsi rollback sebelum commit.
 - Kuis akhir lab yang terbuka setelah kedua mode selesai dieksplorasi.
-- Pilihan bahasa Inggris–Indonesia untuk seluruh 54 lesson kurikulum published, katalog termasuk judul draft, diagram alur, antarmuka, lesson transaksi, kuis, timeline, dan penjelasan simulasi. ID lesson, urutan jawaban, SQL, expected result dan progres tidak berubah saat bahasa diganti.
+- Pilihan bahasa Inggris–Indonesia untuk seluruh 57 lesson kurikulum published, katalog termasuk judul draft, diagram alur, antarmuka, lesson transaksi, kuis, timeline, dan penjelasan simulasi. ID lesson, urutan jawaban, SQL, expected result dan progres tidak berubah saat bahasa diganti.
 - Progres lokal, tema terang/gelap, serta layout desktop, tablet, dan mobile.
 
-Bagian praktik transaksi memiliki tiga lesson dan tiga lab: Lost Update, Duplicate Payment Callback, dan Deadlock. Ringkasan Database Engineering menggabungkan **57 lesson tersedia dan 3 lab**, atau 60 milestone aktivitas; 66 lesson database masih draft. Kelulusan modul/level tetap mengikuti assessment masing-masing, terpisah dari persentase aktivitas. ID lesson, milestone transaksi, versi konten, dan data progres browser dipertahankan tanpa migrasi.
+Bagian praktik transaksi memiliki tiga lesson dan tiga lab: Lost Update, Duplicate Payment Callback, dan Deadlock. Ringkasan Database Engineering menggabungkan **60 lesson tersedia dan 3 lab**, atau 63 milestone aktivitas; 63 lesson database masih draft. Kelulusan modul/level tetap mengikuti assessment masing-masing, terpisah dari persentase aktivitas. ID lesson, milestone transaksi, versi konten, dan data progres browser dipertahankan tanpa migrasi.
 
 ## Alur belajar pertama
 
@@ -81,7 +81,7 @@ src/app/                    Halaman App Router, metadata, dan CSS responsif
 src/components/             UI learning, sandbox, diagram, dan kuis
 src/components/ui/          Komponen UI dasar
 src/content/lessons.ts       Konten sumber lesson dan checkpoint berbahasa Inggris
-src/content/database/        Adapter blueprint dan konten lengkap L0–L1 dan L2M01
+src/content/database/        Adapter blueprint, lesson published, dan metadata roadmap draft
 src/lib/curriculum.ts        Aturan kelulusan dan assessment kurikulum
 src/content/messages/       Kamus terjemahan Inggris dan Indonesia
 src/content/messages.ts     Pemilihan terjemahan dan interpolasi teks

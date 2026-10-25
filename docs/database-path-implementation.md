@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L3 and L4M01–L4M03: 54 published / 66 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L3 and L4M01–L4M04: 57 published / 63 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -194,3 +194,11 @@ Added three bilingual concurrency lessons. L4M03L01 predicts conditional debit u
 Totals: 18 authored modules, 54 published / 66 draft lessons; 57 combined lessons plus three labs (60 activity milestones). Existing E2E expectations only change the count and next draft route to l4m04l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
 
 Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L4M04**.
+
+## L4M04 continuation — 25 October 2026
+
+Added three bilingual payment lessons. L4M04L01 shows merchant-scoped keys and distinguishes same-payload replay, payload conflict and absent callbacks without changing a succeeded payment into a conflict. Signature flags and toy fingerprints are authored inputs, not provider authentication. L4M04L02 reconstructs wallet balances 55000/95000 from opening values and signed ledger effects. L4M04L03 processes two sequential identical deliveries with payload-checked ON CONFLICT into one local effect. Source review replaced same-snapshot target rereading and input preselection with separate INSERT statements and a final report, so the retry reaches the conflict branch. This does not establish concurrent-engine behavior, conflicting-payload resolution or external exactly-once effects. No provider connection, sender or new simulator was added.
+
+Totals: 19 authored modules, 57 published / 63 draft lessons; 60 combined lessons plus three labs (63 activity milestones). Existing E2E expectations only change the count and next draft route to l4m05l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
+
+Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L4M05**.

@@ -18,6 +18,7 @@ import englishEvolution from "./messages/en-database-evolution.json" with { type
 import englishAcid from "./messages/en-database-acid.json" with { type: "json" };
 import englishIsolation from "./messages/en-database-isolation.json" with { type: "json" };
 import englishConcurrency from "./messages/en-database-concurrency.json" with { type: "json" };
+import englishPayments from "./messages/en-database-payments.json" with { type: "json" };
 export type Locale = "en" | "id";
 const indonesian: Record<string, string> = {
   ...interfaceMessages,
@@ -42,6 +43,7 @@ const english: Record<string, string> = {
   ...englishAcid,
   ...englishIsolation,
   ...englishConcurrency,
+  ...englishPayments,
 };
 const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

@@ -1,16 +1,8 @@
 # Remaining curriculum authoring
 
-The following 66 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
+The following 63 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L4 — Transactions & Concurrency
-
-### L4M04 — Payments dan Idempotency
-
-Prerequisite: l4m03. Scenario: Payment Ledger.
-
-- [ ] `l4m04l01` — Idempotency key dan unique guard
-- [ ] `l4m04l02` — Ledger vs mutable balance
-- [ ] `l4m04l03` — Exactly-once effect sebagai tujuan
 
 ### L4M05 — Reliable Side Effects
 
