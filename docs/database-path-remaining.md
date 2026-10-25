@@ -1,16 +1,8 @@
 # Remaining curriculum authoring
 
-The following 39 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
+The following 36 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L6 — PostgreSQL Internals
-
-### L6M03 — Vacuum, Bloat, dan Autovacuum
-
-Prerequisite: l6m02. Scenario: PostgreSQL Lab.
-
-- [ ] `l6m03l01` — Dead tuples dan vacuum
-- [ ] `l6m03l02` — Long transactions dan bloat
-- [ ] `l6m03l03` — Autovacuum dan freeze
 
 ### L6M04 — Observability Engine
 

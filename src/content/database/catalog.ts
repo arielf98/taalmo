@@ -22,6 +22,7 @@ import largeData from "./l5-large-data.json";
 import tuning from "./l5-tuning.json";
 import storage from "./l6-storage.json";
 import wal from "./l6-wal.json";
+import vacuum from "./l6-vacuum.json";
 import type { AuthoredLesson, ConceptCheck } from "./types";
 import { pathHref } from "../lessons";
 export const databasePathHref = pathHref;
@@ -50,6 +51,7 @@ const authored = [
   ...tuning,
   ...storage,
   ...wal,
+  ...vacuum,
 ] as AuthoredLesson[];
 const byId = new Map(authored.map((lesson) => [lesson.id, lesson]));
 export const databaseLevels = blueprint.levels.map((level) => ({

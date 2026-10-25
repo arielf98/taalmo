@@ -252,5 +252,22 @@
   "fsync": "fsync",
   "full-page-writes": "full-page writes",
   "torn-page": "torn page",
-  "crash-recovery": "crash recovery"
+  "crash-recovery": "crash recovery",
+  "dead-tuples": "tuple mati",
+  "vacuum": "VACUUM",
+  "visibility-map": "visibility map",
+  "pruning": "pruning",
+  "vacuum-full": "VACUUM FULL",
+  "long-transactions": "transaksi panjang",
+  "idle-in-transaction": "idle in transaction",
+  "xmin-horizon": "horizon xmin",
+  "bloat": "bloat",
+  "autovacuum": "autovacuum",
+  "vacuum-threshold": "threshold vacuum",
+  "scale-factor": "scale factor",
+  "insert-trigger": "pemicu insert",
+  "freeze": "freeze",
+  "anti-wraparound": "anti-wraparound",
+  "transaction-id": "transaction ID",
+  "pg-stat-user-tables": "pg_stat_user_tables"
 }

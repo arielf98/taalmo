@@ -1,0 +1,701 @@
+[
+  {
+    "id": "l6m03l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "dead-tuples",
+      "vacuum",
+      "visibility-map",
+      "pruning",
+      "mvcc",
+      "vacuum-full",
+      "postgresql-lab"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/routine-vacuuming.html",
+      "https://www.postgresql.org/docs/17/storage-vm.html",
+      "https://www.postgresql.org/docs/17/sql-vacuum.html",
+      "https://www.postgresql.org/docs/17/storage-hot.html"
+    ],
+    "hook": "Sebuah tabel sering menerima UPDATE dan DELETE. Ukuran file tidak langsung turun setelah aplikasi menghapus row, tetapi query berikutnya masih dapat memakai ruang yang ditinggalkan. Kapan dead tuple sudah boleh dibersihkan, apa yang dilakukan visibility map, dan mengapa VACUUM FULL bukan tombol rutin untuk mengecilkan semua tabel?",
+    "objectives": [
+      "Menjelaskan lifecycle row version lama, dead tuple, pruning, dan syarat snapshot sebelum ruang dapat dipakai kembali.",
+      "Membedakan fungsi standard VACUUM untuk cleanup, visibility map, dan reuse dari VACUUM FULL yang menulis ulang relation.",
+      "Menyusun kesimpulan storage yang tidak menyamakan ruang reusable di relation dengan disk space yang langsung dikembalikan ke OS."
+    ],
+    "sections": [
+      {
+        "title": "UPDATE dan DELETE meninggalkan lifecycle MVCC",
+        "paragraphs": [
+          "Dalam PostgreSQL, UPDATE dan DELETE tidak langsung menghapus versi lama karena snapshot transaksi lain mungkin masih perlu melihatnya. Versi yang sudah tidak terlihat oleh snapshot yang relevan dapat menjadi dead tuple. PostgreSQL dapat melakukan pruning pada page dalam kondisi yang aman, dan VACUUM memproses dead row versions serta index entries agar ruangnya tersedia untuk reuse. “Dead” berarti tidak lagi diperlukan oleh snapshot yang masih dipertimbangkan; ia bukan sinonim untuk “dibuat oleh DELETE beberapa detik lalu”.",
+          "Ruang reuse biasanya dipakai oleh insert atau update berikutnya pada relation yang sama. Standard VACUUM umumnya tidak mengecilkan main file dan tidak membuat aplikasi langsung melihat disk host turun. Karena itu laporan maintenance harus memisahkan dead tuples, free space internal, object size, dan OS filesystem space. DELETE yang sukses adalah perubahan data; ia bukan perintah pengembalian ruang ke OS."
+        ]
+      },
+      {
+        "title": "Visibility map membantu skip dan index-only scan",
+        "paragraphs": [
+          "VACUUM memelihara visibility map dengan bit all-visible dan all-frozen per heap page. Bit all-visible menyatakan bahwa tuple pada page diketahui terlihat oleh semua transaksi aktif dan transaksi mendatang sampai page berubah. Bit all-frozen menyatakan tuple telah frozen untuk tujuan visibility transaction ID. VM bersifat konservatif: bit yang menyala adalah evidence positif, sedangkan bit yang mati tidak membuktikan page pasti memiliki dead tuple. Tuple live yang telah frozen tetap terlihat; freeze tidak menghapus atau menyembunyikan row bisnis. Row frozen_page pada fixture mewakili tuple live tersebut.",
+          "Visibility map dapat membantu VACUUM melewati page tertentu dan membantu index-only scan menghindari heap fetch ketika visibility sudah diketahui. Ia bukan daftar semua dead tuple, bukan ukuran bloat, dan bukan bukti bahwa page sudah dikompaksi. Data-modifying operation dapat membersihkan bit. Worked fixture hanya memodelkan state dan batas kesimpulan; ia tidak membaca fork `_vm` atau memeriksa page."
+        ]
+      },
+      {
+        "title": "VACUUM FULL menulis ulang dan memiliki biaya berbeda",
+        "paragraphs": [
+          "Standard VACUUM menjaga relation tetap dapat digunakan sambil membersihkan versi yang aman dan menandai ruang untuk reuse. VACUUM FULL menulis complete new copy dengan layout yang lebih padat, membutuhkan extra disk sementara, dan memperoleh ACCESS EXCLUSIVE lock. Karena rewrite dan blocking itu, VACUUM FULL adalah alat khusus untuk kasus reclaim yang signifikan, bukan default cure setiap kali aplikasi melakukan DELETE.",
+          "Jika workload akan mengisi ruang yang sama lagi, standard VACUUM yang teratur biasanya lebih tepat daripada mengecilkan file berulang kali. Keputusan operasional perlu melihat dead tuple, snapshot horizon, relation growth, workload, lock window, dan kebutuhan disk. Lesson ini tidak menjalankan VACUUM atau mengklaim perubahan ukuran; learner hanya menghubungkan lifecycle dengan pilihan maintenance."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset V1 — model authored lifecycle heap/VM. State menjelaskan eligibility dan efek ruang secara konseptual; tidak ada pg_stat_user_tables, raw page, atau ukuran filesystem yang diobservasi.",
+      "setupSql": "CREATE TEMP TABLE lesson_vacuum_lifecycle (\n  state_id TEXT PRIMARY KEY,\n  tuple_state TEXT NOT NULL,\n  visible_to_needed_snapshot BOOLEAN NOT NULL,\n  visibility_state TEXT NOT NULL,\n  maintenance_action TEXT NOT NULL,\n  space_effect TEXT NOT NULL,\n  evidence_kind TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_vacuum_lifecycle VALUES\n ('current_live','current_version',true,'all_visible_candidate','retain','relation space remains in use','authored_state'),\n ('dead_reclaimable','old_version',false,'not_all_visible','standard_vacuum','space reusable inside relation','authored_state'),\n ('dead_needed','old_version',true,'not_all_visible','defer_until_snapshot_moves','not yet reusable','authored_state'),\n ('frozen_page','live_frozen_versions',true,'all_frozen','skip_or_process_by_vm','no OS shrink implied','authored_state');",
+      "sql": "SELECT state_id, tuple_state, visible_to_needed_snapshot, visibility_state,\n       maintenance_action, space_effect, evidence_kind\nFROM pg_temp.lesson_vacuum_lifecycle\nORDER BY state_id;",
+      "columns": [
+        "state_id",
+        "tuple_state",
+        "visible_to_needed_snapshot",
+        "visibility_state",
+        "maintenance_action",
+        "space_effect",
+        "evidence_kind"
+      ],
+      "rows": [
+        [
+          "current_live",
+          "current_version",
+          "t",
+          "all_visible_candidate",
+          "retain",
+          "relation space remains in use",
+          "authored_state"
+        ],
+        [
+          "dead_needed",
+          "old_version",
+          "t",
+          "not_all_visible",
+          "defer_until_snapshot_moves",
+          "not yet reusable",
+          "authored_state"
+        ],
+        [
+          "dead_reclaimable",
+          "old_version",
+          "f",
+          "not_all_visible",
+          "standard_vacuum",
+          "space reusable inside relation",
+          "authored_state"
+        ],
+        [
+          "frozen_page",
+          "live_frozen_versions",
+          "t",
+          "all_frozen",
+          "skip_or_process_by_vm",
+          "no OS shrink implied",
+          "authored_state"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "V1 membedakan row current, dead yang masih dibutuhkan snapshot, dead yang reclaimable, dan page all-frozen sebagai model authored. `space reusable inside relation` tidak berarti filesystem mengecil. `all_frozen` juga bukan bukti page dikompaksi; fixture tidak membaca visibility map, page, index, atau ukuran relation."
+    },
+    "checks": [
+      {
+        "id": "l6m03l01-check-1",
+        "question": "Apa yang biasanya dilakukan standard VACUUM terhadap dead tuple yang sudah tidak diperlukan snapshot?",
+        "options": [
+          "Membersihkan versi yang aman dan membuat ruang tersedia untuk reuse dalam relation, tanpa menjanjikan shrink OS.",
+          "Selalu menulis ulang seluruh relation dan mengembalikan semua ruang ke OS.",
+          "Menghapus current row yang terlihat agar page menjadi kosong."
+        ],
+        "answer": 0,
+        "explanation": "Standard VACUUM melakukan cleanup yang aman dan umumnya mempertahankan ruang untuk dipakai relation yang sama. Rewrite dan reclaim OS adalah karakteristik VACUUM FULL, bukan standard default.",
+        "feedback": [
+          "Benar: bedakan reuse internal relation dari disk shrink pada OS.",
+          "Belum tepat: menulis ulang seluruh table dan ACCESS EXCLUSIVE lock adalah VACUUM FULL.",
+          "Belum tepat: current row yang masih terlihat tidak boleh dihapus oleh cleanup biasa."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l6m03l01-check-2",
+        "question": "Apa batas aman dari bit all-visible pada visibility map?",
+        "options": [
+          "Bit adalah hitungan tepat semua dead tuple dan selalu menunjukkan ukuran bloat.",
+          "Bit menyatakan page diketahui visible untuk scope transaksi yang relevan sampai page berubah; bit mati tidak otomatis berarti dead tuple.",
+          "Bit menjamin page sudah dikompaksi dan space filesystem sudah dikembalikan ke OS."
+        ],
+        "answer": 1,
+        "explanation": "Visibility map bersifat konservatif dan membantu skip atau index-only scan. Ia bukan bloat counter atau compaction report.",
+        "feedback": [
+          "Belum tepat: VM tidak menghitung semua dead tuple sebagai angka bloat.",
+          "Benar: nyatakan arti positif bit dan keterbatasan ketika bit tidak menyala.",
+          "Belum tepat: visibility dan compaction/OS reclaim adalah pertanyaan berbeda."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Klasifikasikan state V1 sebagai current, dead-but-needed, dead-reclaimable, atau frozen lalu pilih maintenance conclusion yang tidak berlebihan.",
+      "setup": "Dataset V1 adalah model authored. Tidak ada VACUUM, pageinspect, pg_stat_user_tables, filesystem measurement, atau perubahan relation yang dijalankan.",
+      "starterSql": "SELECT state_id, tuple_state, visible_to_needed_snapshot, visibility_state,\n       maintenance_action, space_effect\nFROM pg_temp.lesson_vacuum_lifecycle\nORDER BY state_id;",
+      "variants": [
+        {
+          "id": "l6m03l01-variant-1",
+          "question": "Aplikasi baru saja DELETE banyak row dan ingin disk host langsung turun. Respons teknis yang tepat apa?",
+          "options": [
+            "DELETE mengubah data tetapi tidak langsung mengembalikan ruang OS; cleanup dan kebutuhan shrink harus dianalisis terpisah.",
+            "DELETE selalu menjalankan VACUUM FULL secara otomatis pada table yang sama.",
+            "Cukup membaca jumlah row agar filesystem space pasti diketahui."
+          ],
+          "answer": 0,
+          "explanation": "Old versions perlu aman untuk snapshot lalu dapat direclaim oleh VACUUM; standard VACUUM biasanya membuat reuse internal, bukan OS shrink langsung.",
+          "feedback": [
+            "Benar: pisahkan data deletion, vacuum cleanup, relation reuse, dan filesystem reclaim.",
+            "Belum tepat: autovacuum tidak menjalankan VACUUM FULL sebagai respons default.",
+            "Belum tepat: row count tidak memberi object overhead atau filesystem usage."
+          ]
+        },
+        {
+          "id": "l6m03l01-variant-2",
+          "question": "V1 menunjukkan `dead_needed` dan `visible_to_needed_snapshot = true`. Apa tindakan model yang benar?",
+          "options": [
+            "Hapus segera agar bloat hilang.",
+            "Tunda cleanup sampai snapshot horizon tidak lagi membutuhkan versi tersebut; jangan menyebut dead sebagai reclaimable sekarang.",
+            "Jalankan VACUUM FULL karena visibility map pasti salah."
+          ],
+          "answer": 1,
+          "explanation": "Dead tuple yang masih diperlukan snapshot belum aman dibuang. Horizon, bukan umur wall-clock saja, menentukan eligibility.",
+          "feedback": [
+            "Belum tepat: penghapusan premature melanggar kebutuhan MVCC snapshot.",
+            "Benar: tunggu horizon bergerak lalu biarkan cleanup memproses versi yang aman.",
+            "Belum tepat: state authored tidak menunjukkan VM corruption atau kebutuhan rewrite."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l6m03l01-edge-1",
+          "question": "Mengapa VACUUM FULL bukan default cure untuk setiap laporan bloat?",
+          "options": [
+            "Ia menulis ulang table, memerlukan ACCESS EXCLUSIVE lock dan extra disk, serta dapat mengulang pertumbuhan jika workload tetap sama.",
+            "Ia hanya mengubah planner statistics dan tidak pernah menyentuh file table.",
+            "Ia aman dijalankan bersamaan dengan semua SELECT/INSERT/UPDATE/DELETE tanpa blocking."
+          ],
+          "answer": 0,
+          "explanation": "VACUUM FULL berguna untuk reclaim signifikan tetapi berbiaya dan blocking. Routine standard VACUUM biasanya menjaga steady-state reuse.",
+          "feedback": [
+            "Benar: lock, extra disk, rewrite, dan workload masa depan harus masuk keputusan.",
+            "Belum tepat: VACUUM FULL menulis complete new copy dan bukan sekadar ANALYZE.",
+            "Belum tepat: ACCESS EXCLUSIVE lock dapat memblokir penggunaan normal table."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l6m03l01-edge-2",
+          "question": "Page tidak memiliki bit all-visible. Kesimpulan apa yang tidak boleh langsung dibuat?",
+          "options": [
+            "Page pasti berisi dead tuple yang dapat dibersihkan.",
+            "Bit yang mati hanya berarti visibility belum dibuktikan untuk skip; perlu evidence lain untuk dead tuple dan eligibility.",
+            "Page tidak boleh dibaca oleh index-only scan dalam semua keadaan."
+          ],
+          "answer": 1,
+          "explanation": "VM bersifat konservatif: all-visible yang menyala memberi bukti positif, sedangkan bit mati tidak mengklasifikasikan isi page secara lengkap.",
+          "feedback": [
+            "Belum tepat: page dapat tidak all-visible karena alasan lain dan dead tuple belum tentu reclaimable.",
+            "Benar: minta evidence tuple/snapshot/maintenance sebelum menyimpulkan.",
+            "Belum tepat: planner dan visibility dapat memilih heap fetch, tetapi pernyataan absolut terlalu luas."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Tanyakan apakah old version masih dibutuhkan snapshot sebelum menyebutnya dead yang reclaimable.",
+        "Bedakan ruang yang tersedia untuk reuse di relation dari ruang yang dikembalikan ke filesystem.",
+        "Visibility map membantu skip dan index-only scan; ia bukan counter bloat atau raw-page report."
+      ],
+      "solutionSql": "SELECT state_id, tuple_state, visible_to_needed_snapshot, visibility_state,\n       maintenance_action, space_effect, evidence_kind\nFROM pg_temp.lesson_vacuum_lifecycle\nORDER BY state_id;",
+      "solutionExplanation": "Reference mempertahankan empat state authored. `dead_reclaimable` cocok dengan standard VACUUM dan reuse internal; `dead_needed` harus ditunda; `current_live` dipertahankan; `frozen_page` hanya menyatakan visibility state authored dan tidak menjanjikan compaction. Tidak ada kesimpulan tentang page count, filesystem shrink, atau lock runtime.",
+      "critical": true
+    },
+    "reflection": "Jelaskan lifecycle UPDATE/DELETE, dead tuple, pruning, visibility map, standard VACUUM, dan VACUUM FULL. Sebutkan mengapa DELETE tidak langsung mengembalikan disk OS serta batas evidence Dataset V1."
+  },
+  {
+    "id": "l6m03l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "long-transactions",
+      "idle-in-transaction",
+      "snapshot",
+      "xmin-horizon",
+      "bloat",
+      "mvcc",
+      "postgresql-lab"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/functions-info.html",
+      "https://www.postgresql.org/docs/17/routine-vacuuming.html",
+      "https://www.postgresql.org/docs/17/transaction-iso.html",
+      "https://www.postgresql.org/docs/17/monitoring-stats.html"
+    ],
+    "hook": "Dashboard menunjukkan transaksi `idle in transaction` yang sudah lama dan bloat meningkat. Tim langsung menyimpulkan semua transaksi idle menahan VACUUM, padahal sebagian tidak memiliki snapshot lama. Bagaimana membaca horizon snapshot, membedakan status session dari xmin yang relevan, dan menjelaskan kapan dead tuple benar-benar tertahan?",
+    "objectives": [
+      "Menjelaskan hubungan snapshot xmin/horizon dengan kemampuan VACUUM membersihkan row version lama.",
+      "Membedakan active reader, idle in transaction, dan transaksi pendek tanpa menyatakan status session saja sebagai bukti blocker.",
+      "Membaca model authored bloat tanpa mengklaim pg_stat views, page count, atau reclaim delay sebagai observasi engine."
+    ],
+    "sections": [
+      {
+        "title": "Horizon lebih penting daripada label status saja",
+        "paragraphs": [
+          "VACUUM harus mempertahankan row version yang mungkin masih terlihat oleh snapshot transaksi. Secara konseptual, horizon xmin yang lebih tua dapat menahan tuple dengan transaction ID yang belum aman menurut snapshot tersebut. Ini adalah alasan long-running snapshot dapat memperbesar jumlah dead tuple yang belum dapat direclaim. Namun “long” bukan ukuran wall-clock semata; pertanyaan utamanya adalah apakah snapshot atau xmin yang relevan masih hidup dan lebih tua daripada versi yang hendak dibersihkan.",
+          "Status `idle in transaction` adalah sinyal untuk investigasi, bukan vonis otomatis. Dalam READ COMMITTED, snapshot biasanya terkait statement; dalam repeatable-read atau serializable, snapshot dapat dipertahankan lebih lama. Session idle tanpa snapshot lama yang menahan horizon tidak boleh diklasifikasikan sama dengan active old snapshot. Periksa evidence xmin/horizon dan transaction mode sebelum menyimpulkan cleanup terhalang."
+        ]
+      },
+      {
+        "title": "Old snapshot dapat memperbesar bloat yang terlihat",
+        "paragraphs": [
+          "Bayangkan update menghasilkan tuple baru dan menandai versi lama tidak terlihat bagi transaksi yang mulai kemudian. Jika transaksi lama masih dapat melihat versi lama, VACUUM harus berhati-hati. Selama periode itu, ruang versi lama tetap berada di relation dan statistik bloat dapat tampak memburuk. Setelah horizon bergerak, cleanup dapat menjadi eligible; tetapi kapan dan seberapa banyak ruang yang dipakai tetap bergantung pada page layout, update pattern, index, dan workload.",
+          "Bloat bukan satu angka universal. View statistics dapat memberi estimasi row atau dead-tuple counts, sedangkan page/object size memberi scope lain. Dataset V2 sengaja menggunakan angka XID dan flag eligibility yang ditulis untuk latihan. Ia tidak meniru `pg_stat_activity`, `pg_stat_user_tables`, `pg_class`, atau dua session engine. Learner harus menyebut “needed_by_snapshot” sebagai alasan retensi, bukan menyamakan authored count dengan hasil production. Angka XID kecil hanya berada pada jendela urutan ilustratif tanpa wraparound; jangan memakai perbandingan integer biasa ini sebagai algoritma cleanup PostgreSQL."
+        ]
+      },
+      {
+        "title": "Idle transaction perlu diagnosis dan remediation yang aman",
+        "paragraphs": [
+          "Remediation harus mempertimbangkan owner session, apakah transaksi masih dibutuhkan, isolation level, timeout policy, dan dampak rollback. Menutup koneksi secara sembrono dapat membatalkan kerja bisnis atau menyebabkan retry; membiarkan old snapshot hidup tanpa batas dapat menahan cleanup. Observability yang baik menghubungkan session, xmin/horizon, query, age transaction, dan dead tuple evidence sebelum mengambil tindakan.",
+          "Jangan menjadikan VACUUM FULL sebagai respons otomatis terhadap transaksi lama. VACUUM FULL menulis ulang dan membutuhkan lock yang lebih berat; ia tidak memperbaiki akar masalah jika snapshot berikutnya kembali menahan versi. Putuskan dulu apakah snapshot selesai, transaksi perlu di-commit/rollback oleh owner, atau workload perlu batasan. Lesson ini membandingkan state, bukan menjalankan kill session, VACUUM, atau perubahan timeout."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset V2 — model authored snapshot horizon. XID, status, dan eligibility ditulis untuk reasoning; bukan output pg_stat_activity/pg_stat_user_tables atau pengukuran bloat.",
+      "setupSql": "CREATE TEMP TABLE lesson_snapshot_horizons (\n  case_id TEXT PRIMARY KEY,\n  session_state TEXT NOT NULL,\n  isolation_label TEXT NOT NULL,\n  old_snapshot BOOLEAN NOT NULL,\n  horizon_xmin INTEGER NOT NULL,\n  dead_tuple_xmax INTEGER NOT NULL,\n  cleanup_eligible BOOLEAN NOT NULL,\n  interpretation TEXT NOT NULL,\n  evidence_kind TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_snapshot_horizons VALUES\n ('short_finished','finished','read_committed',false,1100,950,true,'no old snapshot is modeled','authored_state'),\n ('active_old_snapshot','active','repeatable_read',true,900,950,false,'old snapshot can still need the old version','authored_state'),\n ('idle_unknown','idle_in_transaction','read_committed',false,1100,950,true,'status alone is not a blocker proof','authored_state'),\n ('idle_repeatable','idle_in_transaction','repeatable_read',true,900,950,false,'retained snapshot horizon can delay cleanup','authored_state');",
+      "sql": "SELECT case_id, session_state, isolation_label, old_snapshot,\n       horizon_xmin, dead_tuple_xmax, cleanup_eligible, interpretation,\n       evidence_kind\nFROM pg_temp.lesson_snapshot_horizons\nORDER BY case_id;",
+      "columns": [
+        "case_id",
+        "session_state",
+        "isolation_label",
+        "old_snapshot",
+        "horizon_xmin",
+        "dead_tuple_xmax",
+        "cleanup_eligible",
+        "interpretation",
+        "evidence_kind"
+      ],
+      "rows": [
+        [
+          "active_old_snapshot",
+          "active",
+          "repeatable_read",
+          "t",
+          "900",
+          "950",
+          "f",
+          "old snapshot can still need the old version",
+          "authored_state"
+        ],
+        [
+          "idle_repeatable",
+          "idle_in_transaction",
+          "repeatable_read",
+          "t",
+          "900",
+          "950",
+          "f",
+          "retained snapshot horizon can delay cleanup",
+          "authored_state"
+        ],
+        [
+          "idle_unknown",
+          "idle_in_transaction",
+          "read_committed",
+          "f",
+          "1100",
+          "950",
+          "t",
+          "status alone is not a blocker proof",
+          "authored_state"
+        ],
+        [
+          "short_finished",
+          "finished",
+          "read_committed",
+          "f",
+          "1100",
+          "950",
+          "t",
+          "no old snapshot is modeled",
+          "authored_state"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "V2 memakai hubungan authored sederhana: horizon_xmin 900 lebih tua daripada dead_tuple_xmax 950 sehingga cleanup_eligible false ketika old snapshot dipertahankan; horizon 1100 membuat versi contoh eligible. Baris idle_unknown sengaja menunjukkan status idle saja tidak cukup. Angka bukan XID database atau bloat measurement nyata."
+    },
+    "checks": [
+      {
+        "id": "l6m03l02-check-1",
+        "question": "Apa yang paling menentukan apakah dead tuple masih perlu dipertahankan?",
+        "options": [
+          "Apakah snapshot/horizon yang relevan masih mungkin melihat versi tersebut, bukan sekadar umur wall-clock transaksi.",
+          "Apakah nama session mengandung kata idle, tanpa memeriksa isolation atau xmin.",
+          "Apakah table memiliki primary key, karena primary key selalu membuang versi lama."
+        ],
+        "answer": 0,
+        "explanation": "MVCC cleanup mengikuti visibility terhadap snapshot yang relevan. Status session adalah petunjuk investigasi, bukan aturan tunggal.",
+        "feedback": [
+          "Benar: horizon snapshot adalah alasan versi lama dapat ditahan.",
+          "Belum tepat: idle status perlu dikaitkan dengan snapshot/xmin dan isolation.",
+          "Belum tepat: primary key tidak menghapus kebutuhan MVCC version retention."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l6m03l02-check-2",
+        "question": "Bagaimana membaca `idle_unknown` pada Dataset V2?",
+        "options": [
+          "Semua idle in transaction selalu menahan VACUUM sampai koneksi dibunuh.",
+          "Status idle saja tidak membuktikan blocker; fixture memodelkan tidak ada old snapshot sehingga state eligible.",
+          "Karena eligible true, filesystem pasti langsung mengecil setelah VACUUM."
+        ],
+        "answer": 1,
+        "explanation": "V2 sengaja memisahkan session_state dari old_snapshot/horizon. Eligibility authored tidak sama dengan OS reclaim.",
+        "feedback": [
+          "Belum tepat: isolation dan snapshot state menentukan apakah cleanup tertahan.",
+          "Benar: lihat snapshot/horizon, bukan label status saja.",
+          "Belum tepat: eligible berarti dapat diproses, bukan jaminan file shrink."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Bandingkan empat horizon authored dan pisahkan status session, old snapshot, cleanup eligibility, serta limitation bloat evidence.",
+      "setup": "Dataset V2 adalah state authored. Tidak ada session nyata, pg_stat views, VACUUM, kill connection, atau page/object-size measurement.",
+      "starterSql": "SELECT case_id, session_state, isolation_label, old_snapshot,\n       horizon_xmin, dead_tuple_xmax, cleanup_eligible, interpretation\nFROM pg_temp.lesson_snapshot_horizons\nORDER BY case_id;",
+      "variants": [
+        {
+          "id": "l6m03l02-variant-1",
+          "question": "Dua session sama-sama berlabel `idle in transaction`, tetapi satu repeatable-read memiliki old_snapshot dan satu read-committed tidak. Apa kesimpulan authored yang tepat?",
+          "options": [
+            "State repeatable-read dapat menahan horizon pada fixture; label idle read-committed saja belum membuktikan hal yang sama.",
+            "Keduanya pasti menahan cleanup dengan durasi yang sama karena status text identik.",
+            "Tidak ada yang dapat menahan cleanup karena idle berarti executor sudah selesai."
+          ],
+          "answer": 0,
+          "explanation": "V2 menguji perbedaan status session dengan snapshot state. Isolation dan snapshot lifetime memberi konteks tambahan.",
+          "feedback": [
+            "Benar: old_snapshot/horizon, bukan label idle saja, mendukung blocker claim.",
+            "Belum tepat: status sama dapat memiliki snapshot state berbeda.",
+            "Belum tepat: transaksi dapat tetap mempertahankan snapshot setelah statement selesai."
+          ]
+        },
+        {
+          "id": "l6m03l02-variant-2",
+          "question": "Horizon authored bergerak dari 900 ke 1100 setelah transaksi lama selesai. Apa yang berubah untuk dead_tuple_xmax 950?",
+          "options": [
+            "Versi pasti langsung dihapus dari semua index dan page tanpa pekerjaan VACUUM.",
+            "Versi menjadi eligible pada model karena horizon 1100 melewati Xmax 950; itu belum menjanjikan cleanup atau file shrink runtime.",
+            "Horizon baru membuat tuple menjadi current row dan mengubah nilai bisnisnya."
+          ],
+          "answer": 1,
+          "explanation": "Perubahan horizon mengubah eligibility konseptual. Cleanup tetap memerlukan maintenance dan hasil fisik bergantung pada workload.",
+          "feedback": [
+            "Belum tepat: VACUUM/pruning dan index handling tetap memiliki aturan sendiri.",
+            "Benar: bedakan eligibility dari eksekusi cleanup dan disk result.",
+            "Belum tepat: horizon tidak mengubah nilai bisnis row."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l6m03l02-edge-1",
+          "question": "Mengapa pernyataan “semua transaksi lama selalu membuat bloat” terlalu sederhana?",
+          "options": [
+            "Yang relevan adalah snapshot/xmin horizon dan versi yang ditahan; transaksi lama tanpa old horizon yang relevan tidak otomatis menjadi blocker.",
+            "Karena transaksi lama tidak pernah memakai snapshot dalam PostgreSQL.",
+            "Karena bloat hanya ditentukan oleh jumlah primary key dan tidak berkaitan dengan MVCC."
+          ],
+          "answer": 0,
+          "explanation": "Age wall-clock adalah sinyal, tetapi cleanup eligibility ditentukan oleh visibility/horizon dan data lifecycle.",
+          "feedback": [
+            "Benar: cari alasan visibility, bukan hanya durasi session.",
+            "Belum tepat: transaksi dan isolation dapat mempertahankan snapshot.",
+            "Belum tepat: MVCC row versions adalah bagian penting dari cleanup."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l6m03l02-edge-2",
+          "question": "Apa yang belum dibuktikan oleh `cleanup_eligible = true` pada V2?",
+          "options": [
+            "Ia membuktikan VACUUM FULL sudah memperoleh ACCESS EXCLUSIVE lock.",
+            "Ia belum membuktikan VACUUM sudah berjalan, dead tuple count nyata, relation bloat, atau filesystem space turun.",
+            "Ia membuktikan semua page memiliki all-visible dan all-frozen bits."
+          ],
+          "answer": 1,
+          "explanation": "Eligibility adalah property input authored, bukan event runtime atau raw storage result.",
+          "feedback": [
+            "Belum tepat: tidak ada VACUUM FULL atau lock pada fixture.",
+            "Benar: evidence execution, statistics, dan filesystem harus diukur terpisah.",
+            "Belum tepat: eligibility satu row tidak menentukan VM state seluruh page."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Bandingkan horizon_xmin dengan dead_tuple_xmax pada model, lalu sebutkan mengapa angka itu authored.",
+        "Pisahkan session_state idle dari old_snapshot dan isolation; status text saja bukan proof.",
+        "Setelah eligibility, masih ada langkah VACUUM, page/index behavior, relation reuse, dan filesystem evidence."
+      ],
+      "solutionSql": "SELECT case_id, session_state, isolation_label, old_snapshot,\n       horizon_xmin, dead_tuple_xmax, cleanup_eligible, interpretation,\n       evidence_kind\nFROM pg_temp.lesson_snapshot_horizons\nORDER BY case_id;",
+      "solutionExplanation": "Reference memperlihatkan active_old_snapshot dan idle_repeatable dengan horizon 900 menahan versi Xmax 950, sedangkan idle_unknown dan short_finished memakai horizon 1100 sehingga eligible pada model. Kesimpulan tidak boleh menyebut semua idle transaction sebagai blocker, dan tidak boleh mengubah eligible menjadi pengukuran bloat atau filesystem reclaim.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa snapshot horizon dapat menahan dead tuple, mengapa idle in transaction bukan bukti blocker tunggal, dan apa batas angka authored V2 terhadap pg_stat views, bloat, VACUUM, serta disk."
+  },
+  {
+    "id": "l6m03l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "autovacuum",
+      "vacuum-threshold",
+      "scale-factor",
+      "insert-trigger",
+      "freeze",
+      "anti-wraparound",
+      "transaction-id",
+      "pg-stat-user-tables",
+      "postgresql-lab"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/runtime-config-autovacuum.html",
+      "https://www.postgresql.org/docs/17/routine-vacuuming.html",
+      "https://www.postgresql.org/docs/17/sql-vacuum.html",
+      "https://www.postgresql.org/docs/17/functions-info.html"
+    ],
+    "hook": "Tim ingin mematikan autovacuum karena mengira ia hanya menambah I/O. Di sisi lain, tabel kecil bisa memiliki banyak INSERT, tabel update-heavy bisa melewati threshold, dan table tua dapat memerlukan anti-wraparound vacuum. Bagaimana membaca threshold, insert trigger, transaction-age freeze, dan rekomendasi maintenance tanpa menyalin default secara sembrono atau mengeluarkan command berbahaya?",
+    "objectives": [
+      "Menghitung vacuum threshold dan insert threshold dari base threshold, scale factor, serta reltuples pada model authored.",
+      "Membedakan trigger dead-tuple, insert-driven vacuum, routine maintenance, dan anti-wraparound berdasarkan transaction age, bukan wall-clock age.",
+      "Menjelaskan freezing sebagai perlindungan transaction ID dan membedakannya dari DELETE, cleanup, disk shrink, serta toggle autovacuum yang unsafe."
+    ],
+    "sections": [
+      {
+        "title": "Threshold menggabungkan base, scale factor, dan reltuples",
+        "paragraphs": [
+          "Autovacuum memilih table berdasarkan pekerjaan dan age yang relevan. Untuk vacuum akibat UPDATE/DELETE, model threshold memakai base threshold ditambah vacuum scale factor dikalikan reltuples. Insert-heavy table juga memiliki insert threshold dengan base dan insert scale factor. Formula membantu membuat hipotesis; ia bukan janji bahwa satu pembacaan statistik langsung membuat daemon berjalan karena worker availability, naptime, permissions, per-table settings, dan kondisi lain tetap berpengaruh.",
+          "Dataset V3 memakai angka bulat yang sengaja dipilih agar perhitungan dapat diaudit: reltuples 1000 dengan threshold 50 + 0.20 × 1000 menghasilkan 250, sedangkan insert threshold 1000 + 0.20 × 1000 menghasilkan 1200. Row berbeda dapat melewati threshold yang berbeda. `n_dead_tup` dan `n_ins_since_vacuum` di sini adalah authored inputs, bukan salinan pg_stat_user_tables."
+        ]
+      },
+      {
+        "title": "Freeze berbicara tentang transaction age, bukan jam",
+        "paragraphs": [
+          "Transaction IDs memiliki umur dalam jumlah transaksi. Ketika relfrozenxid atau row age mendekati batas configured, vacuum dapat dipaksa untuk mencegah transaction ID wraparound. Anti-wraparound maintenance memiliki prioritas integrity; autovacuum disable biasa tidak boleh diperlakukan sebagai cara untuk menghilangkan kebutuhan tersebut. Transaction age 210000 pada model bukan berarti 210000 detik atau tanggal tertentu.",
+          "Freezing menandai tuple lama agar visibility transaction ID tetap aman; ia bukan DELETE historical rows, bukan pruning otomatis semua dead tuple, dan bukan VACUUM FULL. Page yang all-frozen dapat membantu vacuum berikutnya skip sampai page berubah, tetapi itu bukan bukti filesystem shrink. Perbedaan vocabulary ini penting agar engineer tidak mencampur correctness safety dengan bloat compaction."
+        ]
+      },
+      {
+        "title": "Rekomendasi maintenance harus bounded dan evidence-led",
+        "paragraphs": [
+          "Mulai dari table statistics, transaction age, workload pattern, last vacuum/analyze, locks, dan evidence visibility. Jika threshold authored terlewati, rekomendasinya adalah investigasi atau routine vacuum yang aman, bukan command global tanpa ownership. Insert-driven trigger tidak sama dengan dead-tuple trigger; freeze pressure tidak sama dengan bloat. Setiap alasan harus menunjuk metric yang mendukungnya.",
+          "Jangan mematikan autovacuum secara global sebagai shortcut dan jangan langsung mengubah scale factor tanpa baseline. Jangan menjalankan VACUUM FULL hanya karena age tinggi: FULL menulis ulang dan lock, sementara anti-wraparound dapat membutuhkan ordinary vacuum/freeze. Lesson ini tidak mengubah setting, membaca pg_stat_user_tables, atau menjamin kapan daemon akan memilih case."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset V3 — authored autovacuum decision inputs. Threshold dan age values adalah angka latihan untuk formula, bukan hasil pg_stat_user_tables, pg_class, relfrozenxid, atau daemon observation.",
+      "setupSql": "CREATE TEMP TABLE lesson_autovacuum_cases (\n  case_id TEXT PRIMARY KEY,\n  reltuples INTEGER NOT NULL CHECK (reltuples > 0),\n  n_dead_tup INTEGER NOT NULL CHECK (n_dead_tup >= 0),\n  n_ins_since_vacuum INTEGER NOT NULL CHECK (n_ins_since_vacuum >= 0),\n  vacuum_threshold INTEGER NOT NULL,\n  insert_threshold INTEGER NOT NULL,\n  rel_age_xacts INTEGER NOT NULL CHECK (rel_age_xacts >= 0),\n  freeze_max_age INTEGER NOT NULL CHECK (freeze_max_age > 0),\n  trigger_label TEXT NOT NULL,\n  evidence_kind TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_autovacuum_cases VALUES\n ('busy_updates',1000,260,10,250,1200,100000,200000,'vacuum_dead_tuple_threshold','authored_input'),\n ('insert_heavy',1000,40,1250,250,1200,100000,200000,'vacuum_insert_threshold','authored_input'),\n ('anti_wrap_pressure',1000,0,0,250,1200,210000,200000,'forced_by_transaction_age','authored_input'),\n ('below_threshold',1000,80,200,250,1200,100000,200000,'no_modeled_trigger','authored_input');",
+      "sql": "SELECT case_id, reltuples, n_dead_tup, n_ins_since_vacuum,\n       vacuum_threshold, insert_threshold, rel_age_xacts,\n       freeze_max_age, trigger_label, evidence_kind\nFROM pg_temp.lesson_autovacuum_cases\nORDER BY case_id;",
+      "columns": [
+        "case_id",
+        "reltuples",
+        "n_dead_tup",
+        "n_ins_since_vacuum",
+        "vacuum_threshold",
+        "insert_threshold",
+        "rel_age_xacts",
+        "freeze_max_age",
+        "trigger_label",
+        "evidence_kind"
+      ],
+      "rows": [
+        [
+          "anti_wrap_pressure",
+          "1000",
+          "0",
+          "0",
+          "250",
+          "1200",
+          "210000",
+          "200000",
+          "forced_by_transaction_age",
+          "authored_input"
+        ],
+        [
+          "below_threshold",
+          "1000",
+          "80",
+          "200",
+          "250",
+          "1200",
+          "100000",
+          "200000",
+          "no_modeled_trigger",
+          "authored_input"
+        ],
+        [
+          "busy_updates",
+          "1000",
+          "260",
+          "10",
+          "250",
+          "1200",
+          "100000",
+          "200000",
+          "vacuum_dead_tuple_threshold",
+          "authored_input"
+        ],
+        [
+          "insert_heavy",
+          "1000",
+          "40",
+          "1250",
+          "250",
+          "1200",
+          "100000",
+          "200000",
+          "vacuum_insert_threshold",
+          "authored_input"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "V3 menghitung threshold authored untuk reltuples 1000: dead threshold 250 dan insert threshold 1200. `busy_updates` melewati dead threshold, `insert_heavy` melewati insert threshold, `anti_wrap_pressure` melewati freeze max age dalam transaction count, dan `below_threshold` tidak melewati tiga trigger model. Ini bukan observasi autovacuum atau bukti command akan berjalan saat itu."
+    },
+    "checks": [
+      {
+        "id": "l6m03l03-check-1",
+        "question": "Dengan reltuples 1000, base vacuum threshold 50, dan scale factor 0.20, berapa threshold dead-tuple pada V3?",
+        "options": [
+          "250, karena 50 + (0.20 × 1000).",
+          "200, karena scale factor saja yang dihitung.",
+          "1200, karena insert threshold selalu menggantikan vacuum threshold."
+        ],
+        "answer": 0,
+        "explanation": "Formula authored adalah base threshold + scale factor × reltuples: 50 + 200 = 250.",
+        "feedback": [
+          "Benar: base dan proporsi table size masuk ke vacuum threshold.",
+          "Belum tepat: base threshold tidak boleh dihilangkan dari formula.",
+          "Belum tepat: 1200 adalah insert threshold pada model, bukan dead-tuple threshold."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l6m03l03-check-2",
+        "question": "Apa arti `rel_age_xacts = 210000` dan `freeze_max_age = 200000` pada anti_wrap_pressure?",
+        "options": [
+          "Model menunjukkan table pasti berumur 210000 detik dan harus dihapus.",
+          "Model menunjukkan pressure berdasarkan transaction age yang melewati batas; angka itu bukan umur wall-clock.",
+          "Model membuktikan semua dead tuple sudah dibersihkan oleh VACUUM FULL."
+        ],
+        "answer": 1,
+        "explanation": "Freeze/anti-wraparound berbicara tentang umur transaction ID. Ia adalah integrity maintenance, bukan timestamp atau compaction proof.",
+        "feedback": [
+          "Belum tepat: rel_age_xacts bukan detik dan tidak menyuruh menghapus table.",
+          "Benar: bedakan transaction count age dari waktu kalender dan bloat.",
+          "Belum tepat: anti-wrap pressure tidak membuktikan VACUUM FULL atau dead-tuple cleanup."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Gunakan formula V3 untuk mengklasifikasikan trigger authored dan tuliskan rekomendasi maintenance yang bounded tanpa mengubah konfigurasi global.",
+      "setup": "Dataset V3 adalah input formula. Tidak ada pembacaan pg_stat_user_tables, perubahan autovacuum, VACUUM, FREEZE, VACUUM FULL, atau command server yang dijalankan.",
+      "starterSql": "SELECT case_id, reltuples, n_dead_tup, n_ins_since_vacuum,\n       vacuum_threshold, insert_threshold, rel_age_xacts,\n       freeze_max_age, trigger_label\nFROM pg_temp.lesson_autovacuum_cases\nORDER BY case_id;",
+      "variants": [
+        {
+          "id": "l6m03l03-variant-1",
+          "question": "Case `insert_heavy` memiliki n_dead_tup 40 dan n_ins_since_vacuum 1250. Mengapa trigger model tetap vacuum?",
+          "options": [
+            "Insert count 1250 melewati insert threshold 1200 walaupun dead-tuple count 40 belum melewati 250.",
+            "Dead-tuple threshold 250 sudah dilewati oleh angka 40.",
+            "Insert trigger hanya berlaku bila rel_age_xacts melewati freeze_max_age."
+          ],
+          "answer": 0,
+          "explanation": "Autovacuum memiliki insert threshold terpisah. Insert-heavy table dapat menjadi kandidat walaupun dead tuple belum tinggi.",
+          "feedback": [
+            "Benar: bedakan insert-driven trigger dari update/delete vacuum threshold.",
+            "Belum tepat: 40 lebih kecil dari 250 pada model.",
+            "Belum tepat: insert trigger dan anti-wrap age adalah alasan berbeda."
+          ]
+        },
+        {
+          "id": "l6m03l03-variant-2",
+          "question": "Case `below_threshold` belum melewati trigger model. Rekomendasi paling aman apa?",
+          "options": [
+            "Jalankan VACUUM FULL global untuk memastikan semua table mengecil.",
+            "Catat sebagai no_modeled_trigger, lalu tetap pertimbangkan monitoring, workload, age, dan policy tanpa mengubah setting sembarangan.",
+            "Matikan autovacuum agar threshold tidak pernah diperiksa."
+          ],
+          "answer": 1,
+          "explanation": "Tidak melewati angka authored bukan bukti tidak perlu maintenance selamanya. Ia hanya membatasi kesimpulan case dan mendorong observability yang aman.",
+          "feedback": [
+            "Belum tepat: FULL mahal, blocking, dan bukan default cure.",
+            "Benar: pertahankan bounded conclusion dan cari evidence nyata sebelum tuning.",
+            "Belum tepat: mematikan autovacuum dapat merusak maintenance dan tidak menghapus anti-wraparound duty."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l6m03l03-edge-1",
+          "question": "Mengapa freeze tidak boleh dijelaskan sebagai DELETE terhadap historical rows?",
+          "options": [
+            "Freeze menandai tuple lama untuk keamanan visibility transaction ID; ia bukan penghapusan row bisnis atau dead-tuple compaction.",
+            "Freeze selalu menghapus current row dan mengembalikan semua disk ke OS.",
+            "Freeze hanya mengganti primary key dengan transaction ID baru."
+          ],
+          "answer": 0,
+          "explanation": "Freezing melindungi dari transaction ID wraparound dengan menandai status visibility. Data lifecycle dan disk reclaim adalah konsep berbeda.",
+          "feedback": [
+            "Benar: bedakan anti-wraparound safety dari DELETE, pruning, dan shrink.",
+            "Belum tepat: freeze tidak identik dengan delete atau filesystem reclaim.",
+            "Belum tepat: primary key bisnis tidak diganti oleh proses freeze."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l6m03l03-edge-2",
+          "question": "Apa yang belum dibuktikan oleh trigger_label `vacuum_dead_tuple_threshold`?",
+          "options": [
+            "Ia membuktikan VACUUM FULL sudah menulis file baru dan memegang lock.",
+            "Ia belum membuktikan daemon telah memilih table, worker tersedia, VACUUM selesai, atau bloat turun.",
+            "Ia membuktikan autovacuum setting global pasti sama dengan nilai model."
+          ],
+          "answer": 1,
+          "explanation": "Label adalah hasil klasifikasi authored dari input formula. Scheduler, statistics, locks, dan execution harus diamati terpisah.",
+          "feedback": [
+            "Belum tepat: tidak ada VACUUM FULL atau lock dalam fixture.",
+            "Benar: trigger hypothesis bukan engine observation atau completion evidence.",
+            "Belum tepat: fixture tidak membaca atau mengubah configuration."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Hitung base + scale factor × reltuples untuk dead dan insert threshold secara terpisah.",
+        "Bandingkan rel_age_xacts dengan freeze_max_age dalam transaction count, bukan detik atau tanggal.",
+        "Tulis recommendation sebagai hypothesis dan next evidence; jangan mematikan autovacuum atau memilih VACUUM FULL sebagai default."
+      ],
+      "solutionSql": "SELECT case_id, reltuples, n_dead_tup, n_ins_since_vacuum,\n       vacuum_threshold, insert_threshold, rel_age_xacts,\n       freeze_max_age, trigger_label, evidence_kind\nFROM pg_temp.lesson_autovacuum_cases\nORDER BY case_id;",
+      "solutionExplanation": "Reference mengklasifikasikan busy_updates sebagai dead-tuple threshold, insert_heavy sebagai insert threshold, anti_wrap_pressure sebagai transaction-age pressure, dan below_threshold sebagai no modeled trigger. Angka threshold adalah formula authored; hasil tidak membuktikan daemon scheduling, VACUUM completion, bloat, disk reclaim, atau setting server.",
+      "critical": true
+    },
+    "reflection": "Jelaskan vacuum threshold, insert threshold, scale factor, transaction-age freeze, anti-wraparound, dan mengapa freeze bukan DELETE. Sebutkan mengapa autovacuum tidak boleh dimatikan sebagai shortcut dan batas evidence V3."
+  }
+]

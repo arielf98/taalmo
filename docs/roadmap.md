@@ -13,13 +13,13 @@
 
 ## Database Engineering — database curriculum
 
-The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L5 and L6M01–L6M02 provide 81 published bilingual lessons; 39 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
+The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L5 and L6M01–L6M03 provide 84 published bilingual lessons; 36 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
 
-## Recommended next milestone: L6M03 authoring
+## Recommended next milestone: L6M04 authoring
 
-L6M02 follows L6M01. L6 remains incomplete and its level assessment stays unavailable. Recovery traces teach ordering and visibility; no crash, flush, replica or hardware behavior was observed.
+L6M03 follows L6M02. L6 still lacks its observability module and its level assessment remains unavailable. Authored lifecycle and maintenance states do not prove cleanup, exact bloat or active autovacuum behavior.
 
-Continue with L6M03 — Vacuum, Bloat, dan Autovacuum: dead tuple versions and reusable space, snapshot horizons and retained versions, autovacuum triggers and freezing. Keep estimated/authored cleanup cases separate from measured bloat and distinguish plain VACUUM from a blocking table rewrite. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
+Continue with L6M04 — Observability Engine: activity/wait states, cumulative statistics and query patterns, and bounded diagnosis using multiple signals. Keep authored activity snapshots separate from live server evidence and respect privilege, reset and sampling limits. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
 
 ## Later learning improvements
 

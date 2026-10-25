@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L5 and L6M01–L6M02: 81 published / 39 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L5 and L6M01–L6M03: 84 published / 36 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -266,3 +266,11 @@ Added three bilingual WAL and recovery lessons. The first separates durable WAL,
 Totals: 27 authored modules, 81 published / 39 draft lessons; 84 combined lessons plus three labs (87 activity milestones). Existing E2E expectations only change the count and next draft route to l6m03l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
 
 Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L6M03**.
+
+## L6M03 continuation — 25 October 2026
+
+Added three bilingual vacuum lessons. Lifecycle examples distinguish currently live versions, versions retained by a needed snapshot, reclaimable versions and frozen visibility. Snapshot cases distinguish an actual retained horizon from idle-in-transaction status alone. The trigger example separates dead-tuple, insert and transaction-age pressure under explicitly authored threshold values. Prose explains pruning, reusable space, visibility maps, blocking rewrite costs and anti-wraparound safety without claiming exact bloat or daemon execution. No storage maintenance or server configuration was run.
+
+Totals: 28 authored modules, 84 published / 36 draft lessons; 87 combined lessons plus three labs (90 activity milestones). Existing E2E expectations only change the count and next draft route to l6m04l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
+
+Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L6M04**.
