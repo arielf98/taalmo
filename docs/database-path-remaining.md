@@ -1,16 +1,8 @@
 # Remaining curriculum authoring
 
-The following 45 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
+The following 42 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L6 — PostgreSQL Internals
-
-### L6M01 — Physical Storage dan Buffering
-
-Prerequisite: l5m05. Scenario: PostgreSQL Lab.
-
-- [ ] `l6m01l01` — Heap pages dan tuple
-- [ ] `l6m01l02` — Shared buffers dan OS cache
-- [ ] `l6m01l03` — TOAST dan data lebar
 
 ### L6M02 — WAL dan Durability
 

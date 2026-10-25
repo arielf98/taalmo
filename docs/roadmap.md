@@ -13,13 +13,13 @@
 
 ## Database Engineering — database curriculum
 
-The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L5 provide 75 published bilingual lessons; 45 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
+The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L5 and L6M01 provide 78 published bilingual lessons; 42 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
 
-## Recommended next milestone: L6M01 authoring
+## Recommended next milestone: L6M02 authoring
 
-L5M05 completes publication of L5. Its level assessment follows the existing publication and learner-mastery gates. Authored durations, query counts and evidence labels do not certify a production performance improvement.
+L6M01 follows the completed L5 curriculum. L6 remains incomplete and its level assessment stays unavailable. Authored physical/cache models and logical value lengths do not establish observed engine internals or physical capacity.
 
-Continue with L6M01 — Physical Storage dan Buffering: heap pages and tuple versions, shared buffers versus OS cache, and wide-value/TOAST behavior. Distinguish logical value lengths from physical storage and use labeled illustrative storage/cache traces instead of invented engine observations. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
+Continue with L6M02 — WAL dan Durability: write-ahead ordering, commit acknowledgement and checkpoints/fsync, plus crash recovery under MVCC. Distinguish ordinary logged tables from TEMP/unlogged exceptions and preserve the boundary between illustrative recovery traces and actual crash experiments. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
 
 ## Later learning improvements
 

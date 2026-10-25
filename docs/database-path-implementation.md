@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L5: 75 published / 45 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L5 and L6M01: 78 published / 42 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -250,3 +250,11 @@ Added three bilingual tuning-clinic lessons. L5M05L01 computes explicitly define
 Totals: 25 authored modules, 75 published / 45 draft lessons; 78 combined lessons plus three labs (81 activity milestones). Existing E2E expectations only change the count and next draft route to l6m01l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
 
 Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L6M01**.
+
+## L6M01 continuation — 25 October 2026
+
+Added three bilingual PostgreSQL storage lessons. Authored heap regions illustrate page metadata, line pointers, free space and tuple items; prose distinguishes tuple-version ctid from application identity. Authored buffer traces separate shared-cache accounting from OS/storage evidence. The value-width example uses four deterministic UTF-8 strings to compute characters/bytes (5/5,1/2,1/3,16/16), without asserting physical datum or relation sizes. TOAST/storage policy, compression and narrow projection are discussed with explicit limits. No extension, raw page, engine introspection, cache-clearing operation or physical storage measurement was used.
+
+Totals: 26 authored modules, 78 published / 42 draft lessons; 81 combined lessons plus three labs (84 activity milestones). Existing E2E expectations only change the count and next draft route to l6m02l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
+
+Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L6M02**.

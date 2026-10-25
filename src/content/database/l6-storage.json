@@ -1,0 +1,643 @@
+[
+  {
+    "id": "l6m01l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "physical-storage",
+      "heap-page",
+      "tuple-header",
+      "null-bitmap",
+      "alignment",
+      "line-pointer",
+      "ctid",
+      "mvcc",
+      "postgresql-lab"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/storage-page-layout.html",
+      "https://www.postgresql.org/docs/17/ddl-system-columns.html",
+      "https://www.postgresql.org/docs/17/storage-hot.html",
+      "https://www.postgresql.org/docs/17/transaction-iso.html"
+    ],
+    "hook": "Sebuah tim menemukan bahwa dua SELECT yang membaca row bisnis yang sama dapat melihat ctid berbeda setelah UPDATE. Mereka juga melihat kolom nullable dan row dengan tipe berbeda tidak dapat diperlakukan sebagai rangkaian byte sederhana. Bagaimana page heap, line pointer, tuple header, null bitmap, alignment, dan MVCC menjelaskan perubahan itu tanpa menjadikan ctid sebagai business key?",
+    "objectives": [
+      "Menjelaskan bagian konseptual heap page: page header, line pointer, free space, dan tuple item.",
+      "Menghubungkan tuple header, null bitmap, alignment, serta t_hoff dengan cara PostgreSQL menemukan atribut row.",
+      "Membedakan ctid sebagai lokasi tuple version dari primary key bisnis dan menjelaskan mengapa UPDATE dapat menghasilkan versi row baru."
+    ],
+    "sections": [
+      {
+        "title": "Heap page adalah wadah item, bukan identitas bisnis",
+        "paragraphs": [
+          "Heap table PostgreSQL disimpan sebagai kumpulan page. Pada tingkat konsep, page memiliki metadata page, array line pointer atau ItemIdData, free space, dan item tuple. Line pointer memberi slot yang menunjuk ke offset serta panjang item; ia membantu backend menemukan tuple di page tanpa menjadi kolom aplikasi. Page dan slot adalah alamat fisik yang dapat berubah ketika row dipindahkan atau ditulis ulang. Ukuran page, alignment, dan detail access method adalah detail implementasi yang harus dibaca dari dokumentasi versi serta build yang relevan, bukan ditebak dari ukuran satu tabel.",
+          "Worked table di lesson ini sengaja hanya menyimpan miniatur struktur heap sebagai baris biasa. `ordinal` memberi urutan konsep, sedangkan `evidence_kind = authored_model` menyatakan bahwa tidak ada raw page yang dibaca. Learner dapat menunjuk bagian yang menampung pointer dan tuple tanpa mengklaim bahwa page tertentu di disk mempunyai jumlah slot atau offset yang sama. Ini membangun vocabulary sebelum memakai alat inspeksi yang lebih rendah tingkatnya; ordinary table bukan pengganti page image."
+        ]
+      },
+      {
+        "title": "Tuple header mengatur cara atribut dibaca",
+        "paragraphs": [
+          "Sebuah heap tuple memiliki fixed header yang berisi informasi transaksi dan bentuk tuple, lalu dapat memiliki null bitmap, object identifier lama pada kondisi tertentu, padding alignment, dan user data. Dokumentasi PostgreSQL menjelaskan bahwa `t_hoff` menunjuk awal user data dan harus mengikuti MAXALIGN platform. Null bitmap hanya ada bila tuple memiliki NULL; bitnya memberi tahu atribut mana yang tidak mempunyai value sehingga pembaca tidak boleh mengambil byte berikutnya seolah-olah semua kolom hadir. Alignment juga berarti tipe fixed-width tidak selalu dimulai tepat setelah byte sebelumnya.",
+          "Kesalahan pemula adalah menjumlahkan panjang teks dan integer lalu menyebutnya ukuran tuple. Header, bitmap, padding, varlena representation, dan kemungkinan TOAST ikut menentukan layout. Detail `attlen` dan `attalign` berasal dari metadata atribut, bukan dari nama kolom. Kita tidak mengarang byte total di fixture ini. Targetnya adalah reasoning: NULL mengubah jalur pembacaan, alignment mengubah offset, dan tuple header membawa informasi yang diperlukan MVCC serta decoding."
+        ]
+      },
+      {
+        "title": "ctid mengikuti tuple version, bukan row bisnis",
+        "paragraphs": [
+          "`ctid` adalah system column yang menunjuk lokasi tuple version pada saat itu. UPDATE dapat membuat versi baru di lokasi lain; HOT update dapat memakai page yang sama bila syaratnya terpenuhi, sedangkan rewrite seperti VACUUM FULL dapat memindahkan row. Karena itu ctid dapat berubah walaupun primary key dan nilai bisnis tetap sama. MVCC juga membuat versi lama relevan untuk snapshot yang masih membutuhkannya. Jangan menyimpan ctid sebagai foreign key, cursor permanen, atau deduplication key bisnis.",
+          "Jika aplikasi perlu menemukan invoice, gunakan identity yang memang dikontrak, misalnya `invoice_id`, lalu baca ulang row sesuai kebutuhan. `ctid` berguna untuk operasi diagnostik yang sempit dan cepat, tetapi validitasnya terikat pada tuple version dan operasi rewrite. Lesson ini tidak membaca page raw atau membuktikan urutan versi; ia meminta learner menyebut batas evidence sebelum menarik kesimpulan dari alamat fisik."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset S1 — miniatur authored layout heap page. Baris hanya memetakan region konseptual dan tipe evidence; tidak ada page image, offset disk, atau ukuran tuple hasil observasi.",
+      "setupSql": "CREATE TEMP TABLE lesson_heap_layout (\n  region TEXT PRIMARY KEY,\n  ordinal INTEGER NOT NULL CHECK (ordinal > 0),\n  purpose TEXT NOT NULL,\n  evidence_kind TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_heap_layout VALUES\n ('page_header',1,'page metadata and free-space boundaries','authored_model'),\n ('line_pointers',2,'ItemIdData entries point to tuple items','authored_model'),\n ('free_space',3,'unallocated area between pointer and item growth','authored_model'),\n ('tuple_items',4,'heap tuple headers and user data','authored_model');",
+      "sql": "SELECT ordinal, region, purpose, evidence_kind\nFROM pg_temp.lesson_heap_layout\nORDER BY ordinal;",
+      "columns": [
+        "ordinal",
+        "region",
+        "purpose",
+        "evidence_kind"
+      ],
+      "rows": [
+        [
+          "1",
+          "page_header",
+          "page metadata and free-space boundaries",
+          "authored_model"
+        ],
+        [
+          "2",
+          "line_pointers",
+          "ItemIdData entries point to tuple items",
+          "authored_model"
+        ],
+        [
+          "3",
+          "free_space",
+          "unallocated area between pointer and item growth",
+          "authored_model"
+        ],
+        [
+          "4",
+          "tuple_items",
+          "heap tuple headers and user data",
+          "authored_model"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Dataset S1 mengurutkan empat region konseptual heap page. `line_pointers` adalah vocabulary untuk slot ItemIdData yang menunjuk item, bukan primary key. `tuple_items` mencakup header dan user data tanpa mengklaim byte layout tertentu. Semua row diberi `authored_model`; query ini tidak membaca page image, pageinspect, file relation, atau ukuran disk."
+    },
+    "checks": [
+      {
+        "id": "l6m01l01-check-1",
+        "question": "Apa peran line pointer pada heap page?",
+        "options": [
+          "Menjadi slot yang menunjuk offset dan panjang item tuple pada page, bukan identitas bisnis.",
+          "Menyimpan primary key aplikasi agar ctid tidak pernah berubah.",
+          "Menjadi cache PostgreSQL yang selalu sama dengan OS cache."
+        ],
+        "answer": 0,
+        "explanation": "Line pointer atau ItemIdData membantu menemukan item pada page. Ia adalah metadata alamat fisik, bukan key aplikasi atau cache layer.",
+        "feedback": [
+          "Benar: slot menunjuk item pada page dan dapat berubah bersama layout fisik.",
+          "Belum tepat: primary key adalah kontrak relasional; line pointer bukan identitas bisnis.",
+          "Belum tepat: line pointer berada di layout page dan tidak mendefinisikan cache OS."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l6m01l01-check-2",
+        "question": "Mengapa tuple dengan NULL perlu memperhatikan null bitmap?",
+        "options": [
+          "Karena NULL selalu memakai tepat satu byte user data untuk nilai nol.",
+          "Karena NULL berarti atribut tidak memiliki value dan pembaca harus mengetahui kolom mana yang dilewati.",
+          "Karena null bitmap menyimpan semua primary key agar tuple dapat dipindahkan."
+        ],
+        "answer": 1,
+        "explanation": "Null bitmap memberi status NULL per atribut ketika tuple memilikinya. NULL bukan angka nol dan bukan byte payload biasa.",
+        "feedback": [
+          "Belum tepat: NULL tidak sama dengan nilai nol dan ukuran byte tidak boleh ditebak begitu saja.",
+          "Benar: bitmap mencegah pembaca memperlakukan atribut NULL sebagai byte value yang ada.",
+          "Belum tepat: bitmap berkaitan dengan status atribut, bukan penyimpanan primary key."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Baca miniatur heap page, lalu jelaskan bagian mana yang bersifat alamat fisik dan mengapa UPDATE dapat membuat tuple version baru.",
+      "setup": "Gunakan Dataset S1 sebagai model authored. Tidak ada raw page, pageinspect, atau observasi disk; learner hanya menalar peran region, tuple header, NULL, alignment, dan ctid.",
+      "starterSql": "SELECT ordinal, region, purpose\nFROM pg_temp.lesson_heap_layout\nORDER BY ordinal;",
+      "variants": [
+        {
+          "id": "l6m01l01-variant-1",
+          "question": "Row invoice memiliki primary key yang sama setelah UPDATE, tetapi ctid berubah. Penjelasan paling tepat apa?",
+          "options": [
+            "UPDATE dapat menghasilkan tuple version baru; ctid mengikuti lokasi version, sedangkan primary key mengikuti identitas bisnis.",
+            "Primary key otomatis berubah setiap kali line pointer berpindah.",
+            "ctid adalah hash stabil dari primary key sehingga perubahan berarti data korup."
+          ],
+          "answer": 0,
+          "explanation": "ctid adalah lokasi tuple version dan dapat berubah karena UPDATE atau rewrite. Primary key tetap menjadi identity yang dikontrak aplikasi.",
+          "feedback": [
+            "Benar: alamat fisik dan identitas relasional memiliki umur serta tujuan berbeda.",
+            "Belum tepat: perpindahan slot tidak mengubah nilai primary key secara otomatis.",
+            "Belum tepat: ctid bukan hash primary key dan perubahan tidak otomatis berarti korupsi."
+          ]
+        },
+        {
+          "id": "l6m01l01-variant-2",
+          "question": "Apa kesimpulan yang aman dari `evidence_kind = authored_model` pada Dataset S1?",
+          "options": [
+            "PostgreSQL telah mengembalikan page disk persis dengan empat region dan urutan tersebut.",
+            "Tabel memodelkan vocabulary layout untuk latihan; ia tidak mengukur offset, jumlah tuple, atau ukuran page nyata.",
+            "Setiap heap page produksi pasti hanya mempunyai empat line pointer."
+          ],
+          "answer": 1,
+          "explanation": "Label authored membatasi claim pada model konsep. Page image dan ukuran nyata memerlukan evidence khusus pada environment yang diketahui.",
+          "feedback": [
+            "Belum tepat: tidak ada raw page yang dibaca atau diklaim oleh fixture.",
+            "Benar: model membantu belajar tanpa menyamar sebagai inspeksi raw storage.",
+            "Belum tepat: jumlah pointer bergantung pada page dan data, bukan angka tetap fixture."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l6m01l01-edge-1",
+          "question": "Aplikasi ingin menyimpan ctid sebagai referensi invoice permanen. Apa masalah utamanya?",
+          "options": [
+            "ctid dapat berubah ketika row version dibuat atau relation ditulis ulang sehingga tidak memenuhi kontrak identity permanen.",
+            "ctid selalu NULL untuk heap table sehingga tidak dapat dibaca sama sekali.",
+            "ctid adalah alias lain untuk primary key dan aman sebagai foreign key."
+          ],
+          "answer": 0,
+          "explanation": "ctid menunjuk tuple version pada lokasi saat ini. UPDATE dan operasi rewrite dapat mengubah lokasi tersebut.",
+          "feedback": [
+            "Benar: gunakan primary key atau business key yang dikontrak untuk identity.",
+            "Belum tepat: ctid dapat tersedia sebagai system column, tetapi bukan identity stabil.",
+            "Belum tepat: ctid dan primary key memiliki makna berbeda."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l6m01l01-edge-2",
+          "question": "Apa risiko menyimpulkan ukuran tuple hanya dari panjang kolom payload?",
+          "options": [
+            "Panjang payload selalu sama dengan ukuran row dan page.",
+            "Header, null bitmap, alignment, varlena, dan kemungkinan TOAST membuat panjang payload saja tidak cukup.",
+            "Null bitmap hanya muncul pada index sehingga tidak relevan untuk heap tuple."
+          ],
+          "answer": 1,
+          "explanation": "Layout tuple memiliki metadata serta aturan penempatan atribut. Ukuran payload bukan ukuran tuple, page, atau relation.",
+          "feedback": [
+            "Belum tepat: row dan page memiliki overhead serta banyak item lain.",
+            "Benar: klaim ukuran fisik memerlukan metadata dan evidence storage yang tepat.",
+            "Belum tepat: null bitmap adalah bagian yang dapat muncul pada heap tuple."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Pisahkan region page dari identity aplikasi: line pointer adalah alamat slot, bukan primary key.",
+        "Ingat urutan pembacaan tuple: header, kemungkinan null bitmap dan padding, lalu atribut sesuai attlen serta attalign.",
+        "Untuk UPDATE, tanyakan tuple version mana yang terlihat snapshot dan apakah ctid masih menjadi lokasi yang sama."
+      ],
+      "solutionSql": "SELECT ordinal, region, purpose, evidence_kind\nFROM pg_temp.lesson_heap_layout\nORDER BY ordinal;",
+      "solutionExplanation": "Reference mengembalikan empat region model authored secara deterministik. Interpretasi yang benar memisahkan page header, line pointer, free space, dan tuple item; lalu menyatakan bahwa header, null bitmap, alignment, MVCC, dan ctid adalah detail layout/version, bukan identity bisnis. Tidak ada raw page atau ukuran fisik yang dibuktikan.",
+      "critical": true
+    },
+    "reflection": "Jelaskan bagaimana heap page, line pointer, tuple header, null bitmap, alignment, dan ctid saling berhubungan. Berikan alasan mengapa ctid tidak boleh menjadi business key, dan sebutkan batas evidence dari miniatur authored ini."
+  },
+  {
+    "id": "l6m01l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "shared-buffers",
+      "os-cache",
+      "buffer-hit",
+      "buffer-read",
+      "explain-buffers",
+      "benchmarking",
+      "postgresql-lab"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/runtime-config-resource.html",
+      "https://www.postgresql.org/docs/17/using-explain.html",
+      "https://www.postgresql.org/docs/17/sql-explain.html",
+      "https://www.postgresql.org/docs/17/glossary.html"
+    ],
+    "hook": "Satu query yang sama melaporkan shared hit tinggi pada run berikutnya dan shared read pada run sebelumnya. Seorang engineer menyebut read sebagai physical disk read dan hit sebagai query gratis. Bagaimana shared buffers, OS cache, dan EXPLAIN BUFFERS harus dibaca agar benchmark tidak mengklaim lebih banyak daripada evidence?",
+    "objectives": [
+      "Menjelaskan perbedaan shared buffers PostgreSQL dan OS cache tanpa menyamakan shared read dengan physical disk.",
+      "Membaca shared hit, shared read, serta buffer accounting sebagai evidence authored atau runtime yang memiliki batas interpretasi.",
+      "Menyusun kesimpulan benchmark yang mengendalikan query, parameter, cache state, repeated runs, dan biaya EXPLAIN ANALYZE."
+    ],
+    "sections": [
+      {
+        "title": "Shared buffers dan OS cache adalah lapisan berbeda",
+        "paragraphs": [
+          "PostgreSQL memakai shared buffers untuk menyimpan sebagian page table dan index yang sedang digunakan oleh instance. Di bawahnya, sistem operasi juga dapat memiliki page cache untuk file. Ketika backend membutuhkan block, block dapat ditemukan di shared buffers; jika tidak, PostgreSQL membaca dari lapisan yang lebih bawah dan mengisi buffer. Lapisan bawah itu dapat melayani dari OS cache atau storage, sehingga label `shared read` tidak identik dengan physical disk read. Sebaliknya `shared hit` berarti kebutuhan page menemukan buffer yang sudah tersedia pada saat itu, bukan bahwa CPU, lock, dekompresi, atau output transfer menjadi gratis.",
+          "Ukuran `shared_buffers` adalah konfigurasi server dan bukan ukuran total RAM yang tersedia untuk semua proses. OS cache tetap menjadi bagian dari cerita, dan memory lain dipakai backend, extension, kernel, serta workload lain. Jangan menghitung hit rate satu query sebagai persentase global kesehatan cache tanpa denominator dan konteks. Lesson ini membedakan layer agar learner tidak mengubah satu counter menjadi klaim storage yang tidak didukung."
+        ]
+      },
+      {
+        "title": "BUFFERS memberi accounting, bukan sensor disk lengkap",
+        "paragraphs": [
+          "`EXPLAIN (ANALYZE, BUFFERS)` dapat menampilkan shared blocks hit, read, dirtied, dan written. Counter local mewakili buffer tabel dan indeks TEMP; counter temp read/written mewakili block file kerja sementara, misalnya spill sort atau hash, bukan buffer tabel TEMP. Field temp_read/temp_written pada fixture meniru counter file kerja tersebut. Counter membantu menunjukkan bagian plan yang menyentuh buffer atau file kerja. Namun ANALYZE menjalankan statement, sehingga mutasi atau fungsi dengan side effect adalah operasi nyata. Plain EXPLAIN tidak memberi actual buffer trace; contoh yang tidak diambil dari eksekusi harus diberi label authored.",
+          "Dataset S2 menyimpan tiga trace yang sengaja diberi label `authored_*`. Nilainya cukup untuk melatih perbedaan hit dan read, tetapi bukan hasil PostgreSQL, bukan cold-cache observation, dan bukan bukti OS atau disk. Trace warm-like dengan read nol hanya berarti fixture menuliskan tidak ada shared read pada skenario itu. Ia tidak membuktikan physical disk tidak bekerja di lapisan lain."
+        ]
+      },
+      {
+        "title": "Benchmark perlu menyebut kondisi pembanding",
+        "paragraphs": [
+          "Membandingkan query perlu mencatat SQL, parameter, data state, schema/index, versi PostgreSQL, plan, concurrency, cache state yang dimaksud, dan cara pengukuran. Repeated run dapat berubah karena cache, autovacuum, checkpoint, OS scheduling, background workload, dan timing. Satu output tidak menghasilkan p50 atau p95. Jika memakai EXPLAIN ANALYZE, catat bahwa pengukuran memiliki overhead dan tidak mengirim result set seperti eksekusi client biasa; untuk SELECT pun CPU, lock, dan cache dapat berubah.",
+          "Kesimpulan yang sehat lebih sempit: “trace authored ini menunjukkan lebih banyak shared hit daripada shared read pada skenario yang ditulis.” Kesimpulan yang tidak sah adalah “query kedua selalu membaca RAM” atau “read empat berarti storage melakukan tepat empat physical reads.” Untuk production, pilih statement aman, ulangi dengan protokol yang jelas, dan gunakan observability storage yang sesuai bila pertanyaan memang tentang physical I/O."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset S2 — authored buffer traces untuk satu query hipotetis. Angka hit/read/temp hanya input latihan; tidak diambil dari EXPLAIN, shared_buffers, OS cache, atau disk.",
+      "setupSql": "CREATE TEMP TABLE lesson_buffer_traces (\n  trace_id TEXT PRIMARY KEY,\n  sequence_label TEXT NOT NULL,\n  shared_hit INTEGER NOT NULL CHECK (shared_hit >= 0),\n  shared_read INTEGER NOT NULL CHECK (shared_read >= 0),\n  temp_read INTEGER NOT NULL CHECK (temp_read >= 0),\n  temp_written INTEGER NOT NULL CHECK (temp_written >= 0),\n  evidence_kind TEXT NOT NULL,\n  safe_conclusion TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_buffer_traces VALUES\n ('t1','authored_first_like',12,4,0,0,'authored_trace','some pages were not in shared buffers in this scenario'),\n ('t2','authored_repeat_like',16,0,0,0,'authored_trace','no shared read is written for this scenario'),\n ('t3','authored_temp_work',10,1,3,2,'authored_trace','temporary work-file blocks are separate from local TEMP-table buffers');",
+      "sql": "SELECT trace_id, sequence_label, shared_hit, shared_read,\n       temp_read, temp_written, evidence_kind, safe_conclusion\nFROM pg_temp.lesson_buffer_traces\nORDER BY trace_id;",
+      "columns": [
+        "trace_id",
+        "sequence_label",
+        "shared_hit",
+        "shared_read",
+        "temp_read",
+        "temp_written",
+        "evidence_kind",
+        "safe_conclusion"
+      ],
+      "rows": [
+        [
+          "t1",
+          "authored_first_like",
+          "12",
+          "4",
+          "0",
+          "0",
+          "authored_trace",
+          "some pages were not in shared buffers in this scenario"
+        ],
+        [
+          "t2",
+          "authored_repeat_like",
+          "16",
+          "0",
+          "0",
+          "0",
+          "authored_trace",
+          "no shared read is written for this scenario"
+        ],
+        [
+          "t3",
+          "authored_temp_work",
+          "10",
+          "1",
+          "3",
+          "2",
+          "authored_trace",
+          "temporary work-file blocks are separate from local TEMP-table buffers"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "S2 menunjukkan tiga baris trace authored, bukan pengukuran. t1 mempunyai shared_read empat dalam skenario tertulis; t2 tidak menulis shared_read; t3 menambahkan temporary activity yang harus dibaca terpisah. Tidak ada baris yang membuktikan physical disk read, OS cache hit, latency, atau memory consumption aktual."
+    },
+    "checks": [
+      {
+        "id": "l6m01l02-check-1",
+        "question": "Apa arti paling aman dari `shared_read = 4` pada trace EXPLAIN BUFFERS?",
+        "options": [
+          "Empat shared block dibaca ke shared buffers pada trace tersebut; physical disk read belum terbukti.",
+          "Storage pasti melakukan tepat empat physical disk read tanpa bantuan OS cache.",
+          "Query menggunakan empat byte RAM dan tidak melakukan kerja CPU."
+        ],
+        "answer": 0,
+        "explanation": "shared_read adalah accounting shared buffer. OS cache, storage, dan lapisan lain membuat physical I/O tidak identik dengan counter ini.",
+        "feedback": [
+          "Benar: counter menunjukkan jalur shared buffer dengan batas inferensi yang jelas.",
+          "Belum tepat: OS cache dapat melayani read tanpa physical disk access yang sama.",
+          "Belum tepat: block count bukan byte memory atau bukti CPU gratis."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l6m01l02-check-2",
+        "question": "Mengapa `shared_hit` tinggi tidak otomatis berarti query murah?",
+        "options": [
+          "Hit tinggi berarti PostgreSQL mengabaikan seluruh predicate dan mengembalikan cache mentah.",
+          "Hit hanya menjelaskan page tersedia di shared buffers; CPU, lock, tuple visibility, dan result transfer masih dapat mahal.",
+          "Hit hanya dihitung oleh OS sehingga tidak berkaitan dengan PostgreSQL."
+        ],
+        "answer": 1,
+        "explanation": "Buffer hit menghindari pembacaan page dari lapisan lebih bawah pada saat itu, bukan menghapus seluruh biaya query.",
+        "feedback": [
+          "Belum tepat: predicate dan executor tetap harus bekerja pada data.",
+          "Benar: hit mempersempit cerita I/O buffer, bukan seluruh biaya statement.",
+          "Belum tepat: shared hit adalah istilah accounting PostgreSQL."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Interpretasikan tiga trace buffer authored dan tuliskan claim yang boleh serta claim yang harus ditolak.",
+      "setup": "Dataset S2 hanya trace latihan. Jangan menyebutnya output EXPLAIN, cold/warm observation, physical disk measurement, atau memory measurement.",
+      "starterSql": "SELECT trace_id, sequence_label, shared_hit, shared_read, temp_read, temp_written\nFROM pg_temp.lesson_buffer_traces\nORDER BY trace_id;",
+      "variants": [
+        {
+          "id": "l6m01l02-variant-1",
+          "question": "Trace t2 memiliki shared_hit 16 dan shared_read 0. Claim apa yang paling tepat?",
+          "options": [
+            "Fixture menulis bahwa skenario t2 tidak membutuhkan shared read; itu belum membuktikan tidak ada physical I/O.",
+            "Query t2 pasti selalu served from RAM pada semua server dan parameter.",
+            "OS cache pasti kosong karena shared_read bernilai nol."
+          ],
+          "answer": 0,
+          "explanation": "Zero shared read adalah batas evidence pada layer shared buffers di trace, bukan kontrak semua cache layer.",
+          "feedback": [
+            "Benar: nyatakan layer dan scope trace sebelum membuat kesimpulan.",
+            "Belum tepat: plan, cache, data, dan server dapat berubah.",
+            "Belum tepat: counter nol tidak memberi isi OS cache."
+          ]
+        },
+        {
+          "id": "l6m01l02-variant-2",
+          "question": "Mengapa t3 harus membaca temp_read/temp_written terpisah dari shared_hit/shared_read?",
+          "options": [
+            "Temporary blocks selalu merupakan physical disk writes dan tidak pernah memakai memory.",
+            "Temporary blocks adalah kategori buffer berbeda; menggabungkannya langsung mengaburkan sumber kerja.",
+            "Shared counters otomatis mencakup semua temporary block sehingga kolom temp tidak berguna."
+          ],
+          "answer": 1,
+          "explanation": "EXPLAIN BUFFERS membedakan shared, local, dan temporary blocks. Kategori membantu membatasi interpretasi.",
+          "feedback": [
+            "Belum tepat: temporary block accounting tidak sendirinya membuktikan physical disk.",
+            "Benar: baca counter sesuai kategori resource yang dilaporkan.",
+            "Belum tepat: temporary counters tidak identik dengan shared counters."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l6m01l02-edge-1",
+          "question": "Engineer membandingkan satu run dengan hit tinggi dan satu run dengan read tinggi lalu menyebut query baru lebih cepat. Apa yang hilang?",
+          "options": [
+            "Query, parameter, data, plan, cache state, concurrency, dan repeated measurement harus disejajarkan sebelum klaim latency.",
+            "Tidak ada yang hilang karena shared counters langsung mengurutkan query berdasarkan latency.",
+            "Cukup mengganti nama trace menjadi cold dan warm agar perbandingan valid."
+          ],
+          "answer": 0,
+          "explanation": "Counter buffer bukan latency metric tunggal. Perbandingan perlu protokol dan konteks yang sebanding.",
+          "feedback": [
+            "Benar: evidence dan metode pembanding harus diketahui sebelum menyimpulkan performa.",
+            "Belum tepat: hit/read tidak memberi total elapsed time sendirian.",
+            "Belum tepat: label tidak menciptakan observasi cache."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l6m01l02-edge-2",
+          "question": "Mengapa EXPLAIN ANALYZE pada UPDATE bukan sekadar menambahkan angka pada plan?",
+          "options": [
+            "ANALYZE selalu rollback semua side effect sehingga aman tanpa membaca statement.",
+            "ANALYZE menjalankan statement; perubahan data atau side effect dapat terjadi walaupun output diganti menjadi plan.",
+            "ANALYZE hanya membaca OS cache dan tidak pernah memanggil executor."
+          ],
+          "answer": 1,
+          "explanation": "Dokumentasi PostgreSQL menekankan bahwa EXPLAIN ANALYZE menjalankan query. Keamanan statement harus dipastikan lebih dahulu.",
+          "feedback": [
+            "Belum tepat: rollback bukan otomatis dan tidak membatalkan side effect eksternal.",
+            "Benar: profiling mutasi adalah operasi nyata dan membutuhkan boundary aman.",
+            "Belum tepat: ANALYZE menjalankan executor untuk memperoleh actual evidence."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Baca shared_hit/read sebagai accounting pada layer PostgreSQL terlebih dahulu, lalu tanyakan apa yang masih tidak diketahui tentang OS cache dan storage.",
+        "Pisahkan shared, local, dan temporary blocks; angka dari kategori berbeda tidak boleh dijumlahkan tanpa kontrak.",
+        "Sebelum menyebut benchmark, tulis query, parameter, cache state, repeated runs, concurrency, dan risiko EXPLAIN ANALYZE."
+      ],
+      "solutionSql": "SELECT trace_id, sequence_label, shared_hit, shared_read, temp_read, temp_written, evidence_kind, safe_conclusion\nFROM pg_temp.lesson_buffer_traces\nORDER BY trace_id;",
+      "solutionExplanation": "Reference mempertahankan tiga trace authored. Interpretasi yang benar menyatakan t1 memiliki empat shared read pada skenario tertulis, t2 tidak memiliki shared read tertulis, dan t3 memiliki temporary activity terpisah. Tidak satu pun baris membuktikan physical disk access, OS cache state, latency, atau memory footprint aktual.",
+      "critical": true
+    },
+    "reflection": "Jelaskan perbedaan shared buffers dan OS cache, arti shared hit/read, alasan temporary blocks dibaca terpisah, serta bagaimana Anda mencegah satu trace authored berubah menjadi klaim benchmark atau physical disk yang tidak didukung."
+  },
+  {
+    "id": "l6m01l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "toast",
+      "wide-values",
+      "varlena",
+      "pg-column-size",
+      "utf8",
+      "projection-width",
+      "storage-policy",
+      "postgresql-lab"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/storage-toast.html",
+      "https://www.postgresql.org/docs/17/functions-admin.html",
+      "https://www.postgresql.org/docs/17/functions-string.html",
+      "https://www.postgresql.org/docs/17/sql-altertable.html",
+      "https://www.postgresql.org/docs/17/datatype-character.html"
+    ],
+    "hook": "Kolom `text` berisi emoji, aksara non-ASCII, atau payload panjang. Satu engineer memakai jumlah karakter sebagai ukuran, engineer lain memakai pg_column_size sebagai ukuran disk table. Bagaimana membedakan logical text length, UTF-8 bytes, stored datum, TOAST out-of-line data, dan biaya projection tanpa menjanjikan rasio kompresi yang pasti?",
+    "objectives": [
+      "Membedakan char_length, octet_length, pg_column_size, ukuran tuple, dan ukuran relation sebagai metrik yang tidak sama.",
+      "Menjelaskan kapan varlena dapat dikompresi atau dipindahkan out-of-line melalui TOAST dan mengapa kebijakan storage dapat bervariasi.",
+      "Menilai trade-off projection sempit versus SELECT * tanpa mengklaim rasio kompresi, jumlah chunk, atau ukuran disk dari fixture deterministik."
+    ],
+    "sections": [
+      {
+        "title": "Karakter, byte, datum, dan relation menjawab pertanyaan berbeda",
+        "paragraphs": [
+          "`char_length(text)` menghitung karakter menurut semantics text, sedangkan `octet_length(text)` menghitung byte encoded. Pada UTF-8, `é` adalah satu karakter tetapi dua byte, dan `猫` adalah satu karakter tetapi tiga byte. Angka ini adalah transformasi deterministik dari value yang dipilih; ia bukan ukuran tuple atau disk. `pg_column_size(value)` menjawab byte yang dipakai untuk menyimpan satu datum, dan ketika diterapkan pada kolom dapat mencerminkan compression yang sudah dilakukan. Itu masih bukan ukuran seluruh row, page, index, TOAST table, atau relation.",
+          "Worked fixture mengeluarkan hanya char length dan UTF-8 byte length supaya expected rows dapat dibaca tanpa mengarang hasil storage. Learner tetap perlu mengenali nama `pg_column_size` dan batasnya: datum size, logical text size, tuple size, serta relation size memiliki scope berbeda. Jika pertanyaan menyebut transfer API, octet length mungkin relevan; jika menyebut storage, perlu mempertimbangkan header, alignment, compression, TOAST, index, dan cache."
+        ]
+      },
+      {
+        "title": "TOAST menangani nilai besar dengan kebijakan yang tidak boleh ditebak",
+        "paragraphs": [
+          "PostgreSQL tidak membiarkan heap tuple membentang sembarang melintasi page. Untuk tipe varlena yang mendukungnya, TOAST dapat mencoba compression dan/atau memindahkan value out-of-line ke associated TOAST table. Storage mode seperti `PLAIN`, `MAIN`, `EXTERNAL`, dan `EXTENDED` mengubah kebijakan; compression method juga dapat dipengaruhi column option serta default server. Karena itu value besar tidak otomatis berarti satu ratio kompresi tertentu, satu jumlah chunk tertentu, atau pasti berada out-of-line.",
+          "`pg_column_size` dapat membantu membaca ukuran datum pada kondisi yang diperiksa, tetapi tidak menggantikan `pg_total_relation_size` untuk relation dan tidak menjelaskan semua index atau table overhead. `pg_column_compression` dan fungsi TOAST terkait juga hanya bermakna pada value serta environment yang benar-benar diperiksa. Lesson ini tidak memakai pageinspect, extension, atau raw file. Ia mengajarkan policy-aware reasoning: tipe, storage option, compression, data shape, versi, dan operasi write dapat mengubah evidence."
+        ]
+      },
+      {
+        "title": "Projection sempit mengurangi kontrak data yang dibawa",
+        "paragraphs": [
+          "`SELECT *` membawa semua kolom yang diizinkan query, termasuk kolom lebar yang mungkin tidak dibutuhkan caller. Projection sempit seperti `SELECT value_id, label` membuat kontrak result lebih jelas dan dapat mengurangi data yang harus diproses, dipindahkan, atau di-de-toast; namun tidak boleh dijual sebagai latency guarantee tanpa measurement. Index, visibility, filter, client protocol, planner, dan kebutuhan kolom lain tetap memengaruhi biaya.",
+          "Praktik yang aman adalah mulai dari kolom yang benar-benar dibutuhkan, lalu ukur dengan query dan environment yang diketahui bila optimisasi diperlukan. Jangan menghapus payload hanya karena `octet_length` besar, dan jangan menganggap payload panjang pasti menghabiskan ukuran heap yang sama dengan logical bytes. Jika storage policy atau compression berubah, expected physical result juga dapat berubah. Contract correctness dan kebutuhan data tetap lebih dulu daripada angka disk yang ditebak."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset S3 — nilai text deterministik untuk membedakan jumlah karakter dan byte UTF-8. Fixture tidak mengklaim pg_column_size, TOAST chunk, compression ratio, atau relation disk size.",
+      "setupSql": "CREATE TEMP TABLE lesson_wide_values (\n  value_id INTEGER PRIMARY KEY,\n  label TEXT NOT NULL,\n  payload TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_wide_values VALUES\n (1,'ascii','abcde'),\n (2,'accent','é'),\n (3,'cjk','猫'),\n (4,'repeated','abababababababab');",
+      "sql": "SELECT value_id, label,\n       char_length(payload)::integer AS logical_characters,\n       octet_length(payload)::integer AS utf8_bytes\nFROM pg_temp.lesson_wide_values\nORDER BY value_id;",
+      "columns": [
+        "value_id",
+        "label",
+        "logical_characters",
+        "utf8_bytes"
+      ],
+      "rows": [
+        [
+          "1",
+          "ascii",
+          "5",
+          "5"
+        ],
+        [
+          "2",
+          "accent",
+          "1",
+          "2"
+        ],
+        [
+          "3",
+          "cjk",
+          "1",
+          "3"
+        ],
+        [
+          "4",
+          "repeated",
+          "16",
+          "16"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Dataset S3 membuktikan transformasi text yang deterministik: `é` dan `猫` masing-masing satu karakter tetapi memiliki byte UTF-8 berbeda, sedangkan value repeated memiliki 16 karakter dan 16 byte pada fixture. Query tidak mengeluarkan `pg_column_size` atau ukuran relation karena angka physical dapat bergantung pada storage policy dan environment. Nilai repeated memberi alasan untuk membahas compression tanpa menetapkan ratio."
+    },
+    "checks": [
+      {
+        "id": "l6m01l03-check-1",
+        "question": "Apa yang ditunjukkan oleh `char_length('猫') = 1` dan `octet_length('猫') = 3` pada Dataset S3?",
+        "options": [
+          "Satu karakter dapat memakai tiga byte UTF-8; kedua fungsi mengukur hal berbeda.",
+          "Value itu pasti memakai tiga byte pada seluruh tuple dan relation tanpa overhead.",
+          "PostgreSQL menyimpan tiga karakter lalu menampilkan satu karakter."
+        ],
+        "answer": 0,
+        "explanation": "char_length menghitung karakter, sedangkan octet_length menghitung encoded bytes. Keduanya tidak menyatakan tuple atau disk size.",
+        "feedback": [
+          "Benar: encoding membuat logical character count dan byte count berbeda.",
+          "Belum tepat: datum, tuple, page, index, dan relation memiliki overhead serta scope lain.",
+          "Belum tepat: value tetap satu karakter; tiga adalah jumlah byte UTF-8 pada transformasi ini."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l6m01l03-check-2",
+        "question": "Mengapa `pg_column_size(payload)` tidak boleh langsung dipresentasikan sebagai ukuran disk table?",
+        "options": [
+          "Karena pg_column_size selalu menghitung jumlah karakter dan tidak pernah menghitung byte.",
+          "Ia mengukur satu datum pada kondisi tertentu; row header, page, index, TOAST, dan relation overhead berada di scope lain.",
+          "Karena semua value text selalu disimpan inline tanpa compression atau TOAST."
+        ],
+        "answer": 1,
+        "explanation": "pg_column_size adalah metrik value/datum. Ukuran relation membutuhkan scope object dan storage evidence yang lebih luas.",
+        "feedback": [
+          "Belum tepat: fungsi tersebut melaporkan bytes yang digunakan datum, bukan karakter saja.",
+          "Benar: scope datum tidak sama dengan row, page, index, TOAST, atau relation.",
+          "Belum tepat: varlena dapat memakai compression atau out-of-line storage sesuai policy dan kondisi."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Gunakan Dataset S3 untuk memilih metrik yang tepat, lalu jelaskan mengapa projection sempit dapat lebih aman daripada SELECT * tanpa menjanjikan angka performa.",
+      "setup": "Fixture S3 menghitung char_length dan octet_length secara deterministik. Starter dapat menunjukkan pg_column_size sebagai pertanyaan lab, tetapi player tidak mengklaim hasil datum atau disk yang tidak tersedia dan tidak menggunakan pageinspect.",
+      "starterSql": "SELECT value_id, label,\n       pg_column_size(payload) AS stored_datum_bytes,\n       char_length(payload)::integer AS logical_characters,\n       octet_length(payload)::integer AS utf8_bytes\nFROM pg_temp.lesson_wide_values\nORDER BY value_id;",
+      "variants": [
+        {
+          "id": "l6m01l03-variant-1",
+          "question": "API hanya memerlukan value_id dan label, bukan payload. Pilihan query yang paling tepat sebagai baseline adalah apa?",
+          "options": [
+            "Gunakan projection sempit yang menyebut value_id dan label, lalu ukur bila ada klaim optimisasi.",
+            "Gunakan SELECT * agar planner selalu dapat memilih storage paling kecil.",
+            "Hapus payload dari tabel karena octet_length menunjukkan byte lebih besar dari karakter."
+          ],
+          "answer": 0,
+          "explanation": "Projection sempit menjaga kontrak data dan menghindari membawa kolom yang tidak diperlukan. Dampak performa harus tetap diukur.",
+          "feedback": [
+            "Benar: pilih kolom sesuai kebutuhan API dan pisahkan baseline dari klaim latency.",
+            "Belum tepat: SELECT * memperluas result contract dan tidak memaksa storage lebih kecil.",
+            "Belum tepat: byte count bukan alasan menghapus fakta bisnis dari schema."
+          ]
+        },
+        {
+          "id": "l6m01l03-variant-2",
+          "question": "Value `repeated` memiliki 16 karakter dan 16 byte pada fixture. Apa kesimpulan storage yang aman?",
+          "options": [
+            "PostgreSQL pasti mengompres value menjadi delapan byte pada setiap installation.",
+            "Logical dan UTF-8 byte length sama pada value itu; compression atau TOAST physical result tetap belum diketahui.",
+            "Karena tidak ada perbedaan, value pasti inline dan tidak memiliki varlena header."
+          ],
+          "answer": 1,
+          "explanation": "Kesamaan dua transformasi hanya berlaku untuk value dan encoding fixture. Storage policy dapat menghasilkan evidence lain.",
+          "feedback": [
+            "Belum tepat: ratio kompresi dipengaruhi policy, method, dan data; tidak ada angka universal.",
+            "Benar: nyatakan hasil deterministik tanpa mengarang physical policy.",
+            "Belum tepat: kesamaan length tidak menghapus header atau aturan varlena."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l6m01l03-edge-1",
+          "question": "Tim melihat pg_column_size lebih kecil dari octet_length untuk satu value dan menyatakan disk relation pasti sama kecilnya. Apa koreksinya?",
+          "options": [
+            "Datum size dapat mencerminkan compression, tetapi relation juga mencakup tuple/page overhead, index, TOAST, dan object lain.",
+            "pg_column_size selalu salah bila hasilnya lebih kecil dari octet_length.",
+            "Relation size pasti sama dengan logical text bytes dikurangi compression ratio tersebut."
+          ],
+          "answer": 0,
+          "explanation": "Metrik value dan metrik relation memiliki scope berbeda. Compression pada satu datum tidak memberi total object size.",
+          "feedback": [
+            "Benar: tambah scope storage yang relevan sebelum menyimpulkan ukuran relation.",
+            "Belum tepat: compression dapat membuat stored datum lebih kecil daripada logical bytes.",
+            "Belum tepat: relation memiliki banyak overhead dan ratio tidak dapat diekstrapolasi begitu saja."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l6m01l03-edge-2",
+          "question": "Mengapa payload panjang tidak otomatis berarti setiap SELECT * akan membaca jumlah page yang sama?",
+          "options": [
+            "Karena PostgreSQL tidak pernah membaca kolom text dari heap.",
+            "TOAST, compression, projection, cache, plan, row layout, dan data distribution dapat mengubah jalur kerja.",
+            "Karena SELECT * selalu menghapus kolom lebar sebelum mengirim result."
+          ],
+          "answer": 1,
+          "explanation": "Wide value adalah input bagi beberapa kebijakan dan jalur storage. Page count atau I/O perlu evidence yang sesuai.",
+          "feedback": [
+            "Belum tepat: text tetap bagian dari row contract dan dapat perlu di-de-toast.",
+            "Benar: storage dan execution context menentukan evidence, bukan panjang logical value saja.",
+            "Belum tepat: SELECT * justru meminta seluruh kolom yang tersedia pada query."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Mulai dari scope metrik: karakter, encoded bytes, datum, tuple/page, dan relation tidak sinonim.",
+        "TOAST adalah kebijakan varlena yang dapat compression atau out-of-line; jangan menetapkan ratio atau chunk tanpa evidence.",
+        "Projection sempit memperjelas kontrak dan mungkin mengurangi kerja, tetapi performance claim tetap memerlukan measurement yang sebanding."
+      ],
+      "solutionSql": "SELECT value_id, label,\n       char_length(payload)::integer AS logical_characters,\n       octet_length(payload)::integer AS utf8_bytes\nFROM pg_temp.lesson_wide_values\nORDER BY value_id;",
+      "solutionExplanation": "Reference mengembalikan empat value dengan logical character dan UTF-8 byte length yang deterministik: ascii 5/5, accent 1/2, cjk 1/3, dan repeated 16/16. Ia tidak mengklaim pg_column_size, compression ratio, TOAST chunk count, tuple size, atau relation disk size. Kesimpulan projection yang aman adalah meminta kolom yang diperlukan, kemudian mengukur pada environment yang relevan bila optimisasi dibutuhkan.",
+      "critical": true
+    },
+    "reflection": "Bandingkan char_length, octet_length, pg_column_size, tuple/page size, dan relation size. Jelaskan peran TOAST serta mengapa SELECT * dan projection sempit memiliki trade-off, tetapi tidak menghasilkan rasio kompresi atau ukuran disk pasti dari fixture ini."
+  }
+]
