@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L5 and L6M01: 78 published / 42 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L5 and L6M01–L6M02: 81 published / 39 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -258,3 +258,11 @@ Added three bilingual PostgreSQL storage lessons. Authored heap regions illustra
 Totals: 26 authored modules, 78 published / 42 draft lessons; 81 combined lessons plus three labs (84 activity milestones). Existing E2E expectations only change the count and next draft route to l6m02l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
 
 Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L6M02**.
+
+## L6M02 continuation — 25 October 2026
+
+Added three bilingual WAL and recovery lessons. The first separates durable WAL, heap-page flush and commit acknowledgement. The checkpoint lesson explains redo anchors, fsync, full-page images and asynchronous-commit risk without changing server settings. The final trace groups committed transactions 900/902 and uncommitted 901 to distinguish physical replay from MVCC visibility and external-effect reconciliation. Review separated pre-commit visibility from final transaction status, checkpoint-record position from its redo pointer, and TEMP from the persistent UNLOGGED mode. Event labels and LSNs are authored inputs, not captured WAL or recovery evidence. No PostgreSQL process, storage setting, replica, checkpoint command or crash experiment was touched.
+
+Totals: 27 authored modules, 81 published / 39 draft lessons; 84 combined lessons plus three labs (87 activity milestones). Existing E2E expectations only change the count and next draft route to l6m03l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
+
+Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L6M03**.

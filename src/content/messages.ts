@@ -26,6 +26,7 @@ import englishJoinsRewrite from "./messages/en-database-joins-rewrite.json" with
 import englishLargeData from "./messages/en-database-large-data.json" with { type: "json" };
 import englishTuning from "./messages/en-database-tuning.json" with { type: "json" };
 import englishStorage from "./messages/en-database-storage.json" with { type: "json" };
+import englishWal from "./messages/en-database-wal.json" with { type: "json" };
 export type Locale = "en" | "id";
 const indonesian: Record<string, string> = {
   ...interfaceMessages,
@@ -58,6 +59,7 @@ const english: Record<string, string> = {
   ...englishLargeData,
   ...englishTuning,
   ...englishStorage,
+  ...englishWal,
 };
 const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

@@ -21,6 +21,7 @@ import joinsRewrite from "./l5-joins-rewrite.json";
 import largeData from "./l5-large-data.json";
 import tuning from "./l5-tuning.json";
 import storage from "./l6-storage.json";
+import wal from "./l6-wal.json";
 import type { AuthoredLesson, ConceptCheck } from "./types";
 import { pathHref } from "../lessons";
 export const databasePathHref = pathHref;
@@ -48,6 +49,7 @@ const authored = [
   ...largeData,
   ...tuning,
   ...storage,
+  ...wal,
 ] as AuthoredLesson[];
 const byId = new Map(authored.map((lesson) => [lesson.id, lesson]));
 export const databaseLevels = blueprint.levels.map((level) => ({

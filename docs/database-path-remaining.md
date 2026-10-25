@@ -1,16 +1,8 @@
 # Remaining curriculum authoring
 
-The following 42 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
+The following 39 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L6 — PostgreSQL Internals
-
-### L6M02 — WAL dan Durability
-
-Prerequisite: l6m01. Scenario: PostgreSQL Lab.
-
-- [ ] `l6m02l01` — Write-ahead logging
-- [ ] `l6m02l02` — Checkpoint dan fsync
-- [ ] `l6m02l03` — Crash recovery mental model
 
 ### L6M03 — Vacuum, Bloat, dan Autovacuum
 

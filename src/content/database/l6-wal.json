@@ -1,0 +1,656 @@
+[
+  {
+    "id": "l6m02l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "wal",
+      "write-ahead-logging",
+      "durability",
+      "commit",
+      "redo"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/wal-intro.html",
+      "https://www.postgresql.org/docs/17/runtime-config-wal.html",
+      "https://www.postgresql.org/docs/17/wal-async-commit.html",
+      "https://www.postgresql.org/docs/17/wal-reliability.html"
+    ],
+    "hook": "Payment 9101 sudah mengubah heap buffer, tetapi client hanya boleh menerima commit setelah WAL yang diperlukan aman. Apa yang terjadi jika data page belum flush ketika server crash, dan mengapa commit record tetap menentukan visibility?",
+    "objectives": [
+      "Menjelaskan aturan write-ahead: WAL record harus lebih dahulu durable daripada data page yang diubah.",
+      "Membedakan commit acknowledgement, flush heap page, dan replay REDO pada recovery.",
+      "Membaca trace LSN authored tanpa menganggapnya sebagai observasi engine atau bukti storage production."
+    ],
+    "sections": [
+      {
+        "title": "WAL mendahului data page",
+        "paragraphs": [
+          "PostgreSQL menyimpan perubahan tabel dan index melalui data page, tetapi durability tidak mengharuskan setiap heap page langsung ditulis pada setiap commit. Prinsip write-ahead logging adalah record perubahan harus ditulis dan di-flush ke storage durable sebelum data page yang memuat perubahan itu boleh dianggap aman untuk ditulis. Jika server berhenti setelah WAL flush tetapi sebelum heap flush, recovery dapat membaca WAL dan melakukan REDO. Karena itu, urutan mental yang berguna adalah perubahan membuat buffer dirty, record WAL mendapat posisi LSN, WAL yang dibutuhkan di-flush, lalu data page dapat menyusul.",
+          "Kolom authored_position memakai label bergaya LSN seperti 0/100 dan 0/150 untuk urutan latihan. Ini bukan posisi WAL yang dibaca dari server; khusus event heap flush, tidak ada record WAL tersendiri yang sedang diklaim. Learner memisahkan tiga pertanyaan: apakah WAL sudah durable, apakah heap page sudah menyusul, dan apakah transaksi mempunyai commit record durable. WAL perubahan tanpa commit record tidak membuat row committed. Sebaliknya, heap page yang belum flush tidak berarti commit hilang bila WAL commit sudah durable."
+        ]
+      },
+      {
+        "title": "Commit acknowledgement bukan heap flush",
+        "paragraphs": [
+          "Pada mode synchronous commit lokal yang lazim, server menunggu WAL commit record di-flush ke storage lokal sesuai konfigurasi sebelum melaporkan COMMIT sukses. Ia tidak perlu menunggu semua heap dan index page terkait ditulis pada saat itu. Inilah alasan commit dapat durable walaupun buffer masih dirty: recovery akan mengulang perubahan dari WAL. Walau demikian, durability commit tetap bergantung pada fsync, metode sinkronisasi WAL, hardware, dan konfigurasi yang benar; satu latihan trace tidak membuktikan perangkat penyimpanan.",
+          "synchronous_commit = off mengurangi kepastian lokal: server dapat memberi tahu client sebelum WAL transaction di-flush. Crash lokal dapat menghilangkan beberapa transaction yang baru dilaporkan sukses, walaupun database dipulihkan ke state konsisten, bukan otomatis corrupt. Ini berbeda dari asynchronous replication: replication menjelaskan kapan WAL dikirim atau diterapkan pada standby, sedangkan synchronous_commit mengatur kapan primary mengakui commit. Jangan menyamakan commit lokal, remote write, dan remote apply tanpa menyebut contract yang dipilih."
+        ]
+      },
+      {
+        "title": "REDO dan visibility MVCC",
+        "paragraphs": [
+          "Recovery PostgreSQL menggunakan WAL untuk mengulang perubahan yang diperlukan sejak redo point. Redo bukan generic undo log yang harus membalik setiap statement yang belum selesai. Record data dapat direplay agar page konsisten, lalu status transaction dan aturan MVCC menentukan apakah tuple terlihat oleh snapshot. Jika WAL memuat perubahan transaction tetapi tidak ada commit record durable, perubahan itu tidak boleh dibaca sebagai row committed setelah recovery. Jika commit record ada, perubahan dapat menjadi terlihat sesuai snapshot dan aturan visibility.",
+          "Redo harus aman ketika recovery memproses record dalam urutan LSN dan memeriksa state page yang relevan; trace authored memakai istilah redo sekali hanya untuk melatih urutan, bukan implementasi simulator. WAL juga tidak membatalkan webhook, transfer provider, atau side effect di luar database. Setelah crash, external effect dengan outcome tidak diketahui memerlukan business key, idempotency, dan rekonsiliasi. TEMP dan unlogged relation adalah pengecualian penting: keduanya bukan tempat menyimpan fakta yang menuntut crash durability atau replikasi."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Trace WAL authored: empat event payment 9101 dengan label urutan bergaya LSN. Status durability dan visibility adalah input pedagogis; heap flush bukan record WAL tersendiri dan tidak ada observasi server atau disk.",
+      "setupSql": "CREATE TEMP TABLE lesson_wal_trace (\n  step_no INTEGER PRIMARY KEY,\n  authored_position TEXT NOT NULL,\n  record_kind TEXT NOT NULL,\n  wal_durable BOOLEAN NOT NULL,\n  heap_page_durable BOOLEAN NOT NULL,\n  commit_record_seen BOOLEAN NOT NULL,\n  mvcc_visible_after_recovery BOOLEAN NOT NULL,\n  note TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_wal_trace VALUES\n  (1, '0/100', 'heap-change payment 9101', FALSE, FALSE, FALSE, FALSE, 'buffer dirty; no commit acknowledgement'),\n  (2, '0/120', 'WAL change record', TRUE, FALSE, FALSE, FALSE, 'change durable; transaction still uncommitted'),\n  (3, '0/150', 'commit record', TRUE, FALSE, TRUE, TRUE, 'commit acknowledgement can follow local WAL flush'),\n  (4, '0/180', 'heap page flush', TRUE, TRUE, TRUE, TRUE, 'data page catches up after WAL');",
+      "sql": "SELECT step_no, authored_position, record_kind, wal_durable::TEXT, heap_page_durable::TEXT, commit_record_seen::TEXT, mvcc_visible_after_recovery::TEXT\nFROM pg_temp.lesson_wal_trace\nORDER BY step_no;",
+      "columns": [
+        "step_no",
+        "authored_position",
+        "record_kind",
+        "wal_durable",
+        "heap_page_durable",
+        "commit_record_seen",
+        "mvcc_visible_after_recovery"
+      ],
+      "rows": [
+        [
+          "1",
+          "0/100",
+          "heap-change payment 9101",
+          "false",
+          "false",
+          "false",
+          "false"
+        ],
+        [
+          "2",
+          "0/120",
+          "WAL change record",
+          "true",
+          "false",
+          "false",
+          "false"
+        ],
+        [
+          "3",
+          "0/150",
+          "commit record",
+          "true",
+          "false",
+          "true",
+          "true"
+        ],
+        [
+          "4",
+          "0/180",
+          "heap page flush",
+          "true",
+          "true",
+          "true",
+          "true"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Trace memperlihatkan WAL change dan commit record durable sebelum heap page flush. Pada langkah 3, commit record sudah durable sehingga recovery dapat mempertahankan visibility transaksi; langkah 4 menunjukkan heap page menyusul. authored_position adalah label urutan ilustratif: heap flush bukan record WAL dan labelnya bukan LSN record tersendiri. Ini bukan hasil pg_current_wal_lsn atau pengukuran disk."
+    },
+    "checks": [
+      {
+        "id": "l6m02l01-check-1",
+        "question": "Mengapa heap page boleh belum flush ketika commit acknowledgement diberikan pada trace?",
+        "options": [
+          "Karena heap page tidak pernah perlu ditulis jika WAL ada.",
+          "Karena WAL durable dapat dipakai recovery untuk REDO sebelum heap page menyusul.",
+          "Karena commit record hanya berlaku setelah semua index page flush."
+        ],
+        "answer": 1,
+        "explanation": "WAL mendahului data page; commit tidak mengharuskan seluruh dirty heap page sudah berada di disk pada saat acknowledgement.",
+        "feedback": [
+          "Belum tepat. Heap dan index page tetap harus dipelihara; WAL adalah jalur pemulihan, bukan pengganti permanen data page.",
+          "Benar. WAL durable memberi bahan REDO ketika data page belum sempat flush.",
+          "Belum tepat. Commit acknowledgement dan flush semua data page adalah peristiwa berbeda."
+        ]
+      },
+      {
+        "id": "l6m02l01-check-2",
+        "question": "Apa kesimpulan paling aman dari WAL change record durable tanpa commit record durable?",
+        "options": [
+          "Row pasti terlihat setelah recovery karena semua WAL record selalu committed.",
+          "Heap page harus dihapus secara generic UNDO sebelum database dapat start.",
+          "Perubahan dapat direplay untuk konsistensi page, tetapi tidak dianggap transaction committed oleh MVCC."
+        ],
+        "answer": 2,
+        "explanation": "WAL replay dan commit visibility berbeda; tidak adanya commit record membuat perubahan transaction tidak terlihat sebagai committed.",
+        "feedback": [
+          "Belum tepat. WAL record perubahan tidak sama dengan commit record.",
+          "Belum tepat. Model recovery PostgreSQL bukan generic UNDO untuk setiap uncommitted statement.",
+          "Benar. REDO menjaga page, sementara MVCC tetap menyembunyikan transaction tanpa commit."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi visibility payment berdasarkan urutan WAL change, commit record, dan heap flush pada trace authored.",
+      "setup": "Gunakan Dataset WAL Trace. Learner membaca label urutan dan status authored; aktivitas tidak menjalankan crash, fungsi LSN, atau pengukuran flush storage.",
+      "starterSql": "SELECT step_no, authored_position, record_kind, commit_record_seen, mvcc_visible_after_recovery\nFROM pg_temp.lesson_wal_trace\nORDER BY step_no;",
+      "variants": [
+        {
+          "id": "l6m02l01-variant-1",
+          "question": "Jika trace berhenti setelah langkah 2 lalu server crash, apa status payment 9101 setelah recovery?",
+          "options": [
+            "Perubahan page dapat direplay, tetapi payment belum visible sebagai committed karena commit record belum ada.",
+            "Payment pasti visible karena WAL change record sudah durable.",
+            "Database pasti corrupt karena heap page belum flush."
+          ],
+          "answer": 0,
+          "explanation": "WAL change record cukup untuk REDO page, tetapi visibility transaction memerlukan commit record durable.",
+          "feedback": [
+            "Benar. Page dapat dipulihkan tanpa mengubah transaction yang belum committed menjadi visible.",
+            "Belum tepat. Change record bukan commit record.",
+            "Belum tepat. Heap page yang tertunda adalah kasus yang justru ditangani WAL, selama durability contract terpenuhi."
+          ]
+        },
+        {
+          "id": "l6m02l01-variant-2",
+          "question": "Jika langkah 3 sudah durable tetapi heap page baru flush pada langkah 4, apa peran recovery?",
+          "options": [
+            "Recovery harus menghapus commit record karena heap belum flush.",
+            "Recovery mengabaikan WAL karena heap page akan selalu lebih baru.",
+            "Recovery dapat REDO perubahan yang belum tercermin di heap, lalu MVCC mempertahankan committed visibility."
+          ],
+          "answer": 2,
+          "explanation": "Commit WAL dan data-page flush tidak harus selesai bersamaan; recovery menjembatani gap tersebut.",
+          "feedback": [
+            "Belum tepat. Commit record durable tidak dibatalkan hanya karena heap page tertunda.",
+            "Belum tepat. WAL justru dibutuhkan saat data page belum mengejar.",
+            "Benar. REDO mengisi perubahan page dan commit record menjaga visibility transaction."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l6m02l01-edge-1",
+          "question": "Provider menerima webhook payment sebelum database crash dan hasil COMMIT tidak diketahui. Apa yang dijamin WAL?",
+          "options": [
+            "WAL otomatis membatalkan webhook provider jika transaction database hilang.",
+            "WAL hanya membantu state database; webhook perlu reconciliation dan idempotency key terpisah.",
+            "WAL menjamin provider dan database selalu commit dalam satu atomic transaction."
+          ],
+          "answer": 1,
+          "explanation": "WAL menjaga pemulihan database, bukan rollback side effect eksternal atau koordinasi exactly-once dengan provider.",
+          "feedback": [
+            "Belum tepat. Database rollback tidak memiliki kuasa membatalkan provider.",
+            "Benar. Rekonsiliasi business key dan idempotency diperlukan saat outcome lintas sistem tidak diketahui.",
+            "Belum tepat. Atomicity WAL tidak meluas ke provider eksternal."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l6m02l01-edge-2",
+          "question": "Bagaimana menginterpretasikan TEMP atau unlogged table pada lesson WAL?",
+          "options": [
+            "Keduanya tidak boleh dijadikan bukti crash durability atau replication safety untuk permanent data.",
+            "Keduanya memakai WAL lengkap sehingga paling cocok untuk latihan recovery production.",
+            "Keduanya membuat external effect otomatis ikut rollback."
+          ],
+          "answer": 0,
+          "explanation": "TEMP bersifat session-local dan perubahan datanya tidak memakai WAL normal. UNLOGGED adalah mode relasi persisten yang berbeda, dengan batas crash recovery dan replikasi. Keduanya tidak membuktikan durability data logged pada latihan ini.",
+          "feedback": [
+            "Benar. Fixture aman untuk latihan bentuk data, bukan evidence recovery atau replikasi.",
+            "Belum tepat. Unlogged relation justru tidak menulis perubahan normalnya ke WAL.",
+            "Belum tepat. Tidak ada jenis table database yang otomatis mengendalikan provider eksternal."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Pisahkan WAL change record dari commit record; keduanya bukan sinonim.",
+        "Tanyakan secara berurutan: WAL durable, heap page durable, lalu commit terlihat oleh MVCC atau tidak.",
+        "External effect dan TEMP/unlogged exception berada di luar bukti durability trace ini."
+      ],
+      "solutionSql": "SELECT step_no, authored_position, record_kind, wal_durable::TEXT, heap_page_durable::TEXT, commit_record_seen::TEXT, mvcc_visible_after_recovery::TEXT\nFROM pg_temp.lesson_wal_trace\nORDER BY step_no;",
+      "solutionExplanation": "Reference membaca empat event authored tanpa menjalankan crash. Langkah 2 menunjukkan WAL change durable tetapi belum committed; langkah 3 menambahkan commit record sehingga visibility menjadi true; langkah 4 hanya menyatakan heap page sudah menyusul. Tidak ada klaim LSN, timing, disk flush, atau external provider yang diukur.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa WAL change record, commit record, heap flush, dan MVCC visibility harus dipisahkan. Sebutkan batas jaminan untuk synchronous_commit = off, asynchronous replication, TEMP/unlogged relation, dan external payment effect."
+  },
+  {
+    "id": "l6m02l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "wal",
+      "checkpoint",
+      "fsync",
+      "full-page-writes",
+      "torn-page"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/wal-configuration.html",
+      "https://www.postgresql.org/docs/17/sql-checkpoint.html",
+      "https://www.postgresql.org/docs/17/runtime-config-wal.html",
+      "https://www.postgresql.org/docs/17/runtime-config-error-handling.html"
+    ],
+    "hook": "Checkpoint bukan tombol yang membuat semua commit menunggu. Ia menjadi redo anchor setelah dirty pages di-flush. Mengapa checkpoint lebih sering dapat mengurangi REDO tetapi menambah I/O, dan bagaimana full_page_writes melindungi torn page?",
+    "objectives": [
+      "Menjelaskan checkpoint sebagai titik redo anchor, bukan barrier yang harus ditunggu setiap commit.",
+      "Membedakan fsync, full_page_writes, flush data page, dan perlindungan terhadap torn page.",
+      "Menilai trade-off checkpoint frequency dari trace authored tanpa mengubah setting server atau menjalankan crash."
+    ],
+    "sections": [
+      {
+        "title": "Checkpoint adalah redo anchor",
+        "paragraphs": [
+          "Checkpoint menandai titik dalam urutan WAL ketika heap dan index data files telah diperbarui dengan informasi sebelum titik itu, lalu checkpoint record ditulis ke WAL. Recovery dapat memulai REDO dari redo record yang terkait dengan checkpoint terbaru karena perubahan sebelum titik tersebut dijamin sudah tercermin pada data files. Ini bukan berarti semua transaction harus menunggu checkpoint. Commit biasa dapat mendapat acknowledgement setelah WAL commit durable, sementara dirty data page tetap menunggu checkpointer atau background writer.",
+          "Checkpoint juga bukan sinonim backup dan bukan bukti semua WAL lama telah aman dihapus tanpa mempertimbangkan archiving atau replica. Checkpoint yang lebih sering mengurangi jumlah WAL yang perlu dipindai setelah crash, tetapi memaksa dirty pages lebih sering ditulis dan dapat menambah I/O. Trace lesson memberi nama event dan status flush secara eksplisit agar learner menalar fungsi checkpoint, bukan menghafal angka interval tertentu."
+        ]
+      },
+      {
+        "title": "fsync dan full_page_writes",
+        "paragraphs": [
+          "fsync mengatur apakah PostgreSQL berusaha memastikan update benar-benar ditulis ke storage melalui fsync atau metode setara. Dengan fsync aktif, cluster dapat pulih konsisten setelah crash OS atau hardware sesuai contract storage. Mematikan fsync bukan eksperimen aman untuk database berisi data penting: kegagalan dapat menyebabkan corruption yang tidak dapat dipulihkan dari WAL. Lesson ini tidak memberi runbook untuk mengubah setting dan tidak menyarankan toggle tanpa otorisasi serta disposable cluster.",
+          "full_page_writes melindungi kasus torn page. Setelah checkpoint, perubahan pertama pada suatu page dapat menulis full-page image ke WAL. Jika power loss membuat page di disk hanya terisi sebagian sehingga memuat campuran byte lama dan baru, row-level WAL saja belum tentu cukup; full image memungkinkan recovery memulihkan page yang konsisten. Biayanya adalah lebih banyak WAL dan I/O, khususnya setelah checkpoint. Jangan menyimpulkan full_page_writes sebagai jaminan hardware tanpa data checksum, storage contract, dan operational evidence."
+        ]
+      },
+      {
+        "title": "Membaca trade-off tanpa mengubah server",
+        "paragraphs": [
+          "Trace authored memperlihatkan transaction A commit sebelum checkpoint, lalu checkpoint menulis dirty pages dan redo anchor, kemudian transaction B mengubah page setelah checkpoint. Jika crash terjadi setelah commit A tetapi sebelum checkpoint, recovery masih dapat mulai dari checkpoint sebelumnya dan REDO WAL A. Jika crash terjadi setelah checkpoint, recovery mulai dari anchor baru dan harus memperhatikan full-page image pada perubahan pertama page setelah checkpoint. Tidak ada angka trace yang boleh dibaca sebagai latency, flush count perangkat, atau default universal.",
+          "Checkpoint timeout dan max_wal_size adalah kebijakan operasional yang harus ditimbang bersama recovery time, I/O load, WAL volume, dan storage capacity. Mengurangi interval dapat memperpendek REDO tetapi menambah kerja flush dan full-page images. Synchronous commit off tetap berbeda: ia membuat commit acknowledgement berisiko hilang sebelum WAL flush, sedangkan checkpoint mengatur kemajuan data pages dan redo anchor. Pilihan produksi harus melalui review, observability, dan change control; lesson hanya melatih model sebab-akibat."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Checkpoint trace authored: label urutan menggambarkan transaksi A, checkpoint, full-page image, dan transaksi B. Pointer REDO yang tersimpan dalam checkpoint tidak disamakan dengan label posisi checkpoint record. Tidak ada observasi server atau storage.",
+      "setupSql": "CREATE TEMP TABLE lesson_checkpoint_trace (\n  event_order INTEGER PRIMARY KEY,\n  authored_position TEXT NOT NULL,\n  event TEXT NOT NULL,\n  wal_durable BOOLEAN NOT NULL,\n  dirty_pages_flushed BOOLEAN NOT NULL,\n  redo_anchor BOOLEAN NOT NULL,\n  interpretation TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_checkpoint_trace VALUES\n  (1, '0/200', 'transaction A change WAL', TRUE, FALSE, FALSE, 'A heap change is in WAL; page remains dirty'),\n  (2, '0/240', 'transaction A commit', TRUE, FALSE, FALSE, 'A may be acknowledged before checkpoint'),\n  (3, '0/300', 'checkpoint record', TRUE, TRUE, TRUE, 'recovery redo anchor advances'),\n  (4, '0/320', 'first page change after checkpoint with full image', TRUE, FALSE, FALSE, 'full page protects a possible torn page'),\n  (5, '0/360', 'transaction B commit', TRUE, FALSE, FALSE, 'B commit need not wait for next checkpoint');",
+      "sql": "SELECT event_order, authored_position, event, wal_durable::TEXT, dirty_pages_flushed::TEXT, redo_anchor::TEXT\nFROM pg_temp.lesson_checkpoint_trace\nORDER BY event_order;",
+      "columns": [
+        "event_order",
+        "authored_position",
+        "event",
+        "wal_durable",
+        "dirty_pages_flushed",
+        "redo_anchor"
+      ],
+      "rows": [
+        [
+          "1",
+          "0/200",
+          "transaction A change WAL",
+          "true",
+          "false",
+          "false"
+        ],
+        [
+          "2",
+          "0/240",
+          "transaction A commit",
+          "true",
+          "false",
+          "false"
+        ],
+        [
+          "3",
+          "0/300",
+          "checkpoint record",
+          "true",
+          "true",
+          "true"
+        ],
+        [
+          "4",
+          "0/320",
+          "first page change after checkpoint with full image",
+          "true",
+          "false",
+          "false"
+        ],
+        [
+          "5",
+          "0/360",
+          "transaction B commit",
+          "true",
+          "false",
+          "false"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Event 2 menunjukkan commit A authored durable sebelum checkpoint. Event 3 menandai checkpoint selesai dan kemajuan redo point. Checkpoint record menyimpan pointer ke redo point yang dapat lebih awal daripada posisi record itu sendiri; label 0/300 tidak menetapkan REDO harus mulai di sana. authored_position hanya label urutan latihan. Event 4 menunjukkan full-page image pada perubahan pertama setelah checkpoint; event 5 tidak menunggu checkpoint berikutnya. Tidak ada I/O atau perilaku server yang diamati."
+    },
+    "checks": [
+      {
+        "id": "l6m02l02-check-1",
+        "question": "Apa fungsi utama checkpoint record pada trace?",
+        "options": [
+          "Menjadi redo anchor setelah informasi sebelum titik itu tercermin pada data files.",
+          "Memaksa setiap COMMIT berikutnya menunggu sampai checkpoint selesai.",
+          "Menghapus semua transaction yang commit sebelum checkpoint."
+        ],
+        "answer": 0,
+        "explanation": "Checkpoint membantu recovery menentukan dari mana REDO dimulai; ia bukan barrier untuk semua commit dan bukan penghapus transaction.",
+        "feedback": [
+          "Benar. Recovery dapat memakai redo anchor untuk membatasi scan WAL yang diperlukan.",
+          "Belum tepat. Commit dapat acknowledge setelah WAL durable tanpa menunggu checkpoint berikutnya.",
+          "Belum tepat. Checkpoint tidak membatalkan committed transaction."
+        ]
+      },
+      {
+        "id": "l6m02l02-check-2",
+        "question": "Mengapa full_page_writes relevan setelah checkpoint?",
+        "options": [
+          "Agar setiap query SELECT otomatis lebih cepat setelah checkpoint.",
+          "Agar semua heap page dipaksa flush sebelum setiap row update.",
+          "Agar full-page image dapat memulihkan page yang mungkin tertulis sebagian saat crash."
+        ],
+        "answer": 2,
+        "explanation": "Torn page dapat berisi campuran byte lama dan baru; row-level change WAL saja belum tentu cukup untuk merekonstruksinya.",
+        "feedback": [
+          "Belum tepat. full_page_writes adalah perlindungan recovery, bukan optimasi SELECT.",
+          "Belum tepat. Ia tidak berarti semua page flush sebelum setiap update.",
+          "Benar. Full-page image membantu memulihkan page konsisten setelah partial write."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi redo anchor, dirty-page flush, dan risiko torn page dari checkpoint trace authored.",
+      "setup": "Gunakan Dataset Checkpoint Trace. Label urutan dan status adalah input pedagogis; jangan menjalankan CHECKPOINT, mengubah fsync/full_page_writes, atau mensimulasikan crash.",
+      "starterSql": "SELECT event_order, authored_position, event, wal_durable, dirty_pages_flushed, redo_anchor\nFROM pg_temp.lesson_checkpoint_trace\nORDER BY event_order;",
+      "variants": [
+        {
+          "id": "l6m02l02-variant-1",
+          "question": "Crash terjadi setelah transaction A commit pada event 2 tetapi sebelum event 3 checkpoint. Dari mana recovery menalar REDO?",
+          "options": [
+            "Dari checkpoint sebelumnya, lalu mengulang WAL A yang diperlukan; A tidak hilang hanya karena belum ada checkpoint baru.",
+            "Tidak ada recovery karena commit selalu menunggu checkpoint.",
+            "Recovery menghapus A karena heap page belum flush."
+          ],
+          "answer": 0,
+          "explanation": "Checkpoint terbaru menjadi anchor; WAL setelah anchor tetap dapat direplay sampai state konsisten.",
+          "feedback": [
+            "Benar. Checkpoint membatasi titik awal REDO, bukan syarat agar setiap commit bisa ada.",
+            "Belum tepat. Commit dan checkpoint tidak harus selesai bersamaan.",
+            "Belum tepat. WAL ada justru untuk menutup gap antara commit dan heap flush."
+          ]
+        },
+        {
+          "id": "l6m02l02-variant-2",
+          "question": "Apa trade-off utama jika checkpoint dibuat jauh lebih sering?",
+          "options": [
+            "Recovery selalu tidak membutuhkan WAL lagi.",
+            "Checkpoint otomatis menonaktifkan full_page_writes sehingga tidak ada tambahan WAL.",
+            "REDO pasca-crash dapat lebih pendek, tetapi dirty-page flush dan full-page image dapat menambah I/O/WAL."
+          ],
+          "answer": 2,
+          "explanation": "Checkpoint frequency menyeimbangkan recovery work dengan biaya flush dan WAL setelah checkpoint.",
+          "feedback": [
+            "Belum tepat. Recovery tetap membutuhkan WAL setelah redo anchor.",
+            "Belum tepat. full_page_writes bukan otomatis dimatikan oleh checkpoint.",
+            "Benar. Recovery lebih cepat dapat ditukar dengan lebih seringnya flush dan WAL overhead."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l6m02l02-edge-1",
+          "question": "Mengapa synchronous_commit = off tidak boleh disamakan dengan asynchronous replication?",
+          "options": [
+            "Keduanya selalu berarti commit primary tidak pernah durable.",
+            "synchronous_commit mengatur acknowledgement/flush pada transaction, sedangkan asynchronous replication mengatur pengiriman atau penerapan WAL di standby.",
+            "Asynchronous replication adalah cara mematikan fsync pada primary."
+          ],
+          "answer": 1,
+          "explanation": "Kedua setting berbicara tentang boundary berbeda: commit durability lokal versus remote propagation.",
+          "feedback": [
+            "Belum tepat. Synchronous commit on dapat durable lokal walau replication asynchronous.",
+            "Benar. Pisahkan contract primary acknowledgement dari lag/visibility standby.",
+            "Belum tepat. Replication asynchronous tidak sama dengan fsync off."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l6m02l02-edge-2",
+          "question": "Apa pernyataan aman tentang mematikan fsync atau full_page_writes pada database penting?",
+          "options": [
+            "Jangan toggle sebagai eksperimen rutin; fsync off berisiko corruption dan full_page_writes off mengurangi perlindungan torn page.",
+            "Aman selama checkpoint dibuat setiap detik.",
+            "Aman karena WAL selalu dapat memperbaiki setting apa pun tanpa storage contract."
+          ],
+          "answer": 0,
+          "explanation": "Dokumentasi PostgreSQL memperingatkan konsekuensi durability dan corruption; perubahan setting perlu otorisasi serta cluster disposable.",
+          "feedback": [
+            "Benar. Lesson tidak menjalankan atau memberi runbook untuk unsafe toggle.",
+            "Belum tepat. Frekuensi checkpoint tidak menghapus risiko fsync/full-page protection yang hilang.",
+            "Belum tepat. WAL tidak menjamin pemulihan dari konfigurasi dan hardware yang unsafe."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Checkpoint adalah titik referensi recovery; tanyakan apa yang sudah flushed sebelum anchor.",
+        "Pisahkan commit acknowledgement dari heap-page flush dan full-page image.",
+        "Bandingkan recovery work dengan flush/WAL overhead, lalu pertahankan setting safety sebagai constraint."
+      ],
+      "solutionSql": "SELECT event_order, authored_position, event, wal_durable::TEXT, dirty_pages_flushed::TEXT, redo_anchor::TEXT\nFROM pg_temp.lesson_checkpoint_trace\nORDER BY event_order;",
+      "solutionExplanation": "Reference membaca event authored: transaction A commit sebelum checkpoint, checkpoint menjadi redo anchor, perubahan pertama setelahnya memakai full-page image, dan transaction B commit tanpa menunggu checkpoint berikutnya. Tidak ada setting yang diubah atau crash yang dijalankan.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa checkpoint adalah redo anchor, bukan titik tunggu semua COMMIT. Bandingkan fsync, full_page_writes, synchronous_commit = off, dan asynchronous replication, lalu sebutkan mengapa trace kecil tidak membuktikan I/O atau crash recovery production."
+  },
+  {
+    "id": "l6m02l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "wal",
+      "crash-recovery",
+      "mvcc",
+      "redo",
+      "idempotency"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/wal-configuration.html",
+      "https://www.postgresql.org/docs/17/transaction-iso.html",
+      "https://www.postgresql.org/docs/17/hot-standby.html",
+      "https://www.postgresql.org/docs/17/wal-intro.html",
+      "https://www.postgresql.org/docs/17/sql-createtable.html"
+    ],
+    "hook": "Crash memotong recovery setelah beberapa WAL record dibaca. Mengapa PostgreSQL dapat mengulang perubahan page tanpa membuat transaction uncommitted terlihat, dan mengapa provider payment tidak otomatis ikut rollback?",
+    "objectives": [
+      "Menelusuri checkpoint, REDO, commit record, dan MVCC visibility pada trace recovery authored.",
+      "Menjelaskan mengapa replay physical change tidak sama dengan generic UNDO dan mengapa replay harus idempotent.",
+      "Merancang batas rekonsiliasi untuk external effect serta mengenali TEMP/unlogged sebagai pengecualian crash-safety."
+    ],
+    "sections": [
+      {
+        "title": "Recovery mulai dari checkpoint lalu REDO",
+        "paragraphs": [
+          "Saat database tidak berhenti bersih, recovery memakai checkpoint terbaru sebagai titik acuan dan membaca WAL berikutnya sampai state data files konsisten. Checkpoint bukan snapshot yang menyimpan semua keputusan bisnis; ia memberi redo record agar recovery tidak perlu memindai seluruh sejarah. Record WAL dapat memuat perubahan pada heap atau index page, dan recovery mengulang perubahan yang dibutuhkan berdasarkan urutan LSN serta metadata page. Trace di lesson ini membuat record, commit_seen, dan hasil visibility menjadi kolom terpisah agar learner tidak menyimpulkan dari satu flag saja.",
+          "Jika proses recovery sendiri berhenti, pemulihan berikutnya dapat mengulang sebagian langkah dari titik yang aman. Replaying record yang sama tidak boleh menggandakan row atau payment; operasi REDO menggunakan identitas record/page dan harus idempotent pada state yang sudah diproses. Istilah idempotent di sini merujuk pada recovery physical record, bukan izin bagi aplikasi untuk mengulang provider charge. Retry external effect memerlukan key dan rekonsiliasi sendiri."
+        ]
+      },
+      {
+        "title": "Committed redo dan uncommitted MVCC",
+        "paragraphs": [
+          "PostgreSQL bukan mengandalkan generic UNDO log yang membalik semua perubahan transaction yang belum commit. Recovery dapat melakukan REDO terhadap data-page changes yang tercatat, sementara commit status dan MVCC menentukan apa yang terlihat oleh snapshot. Transaction A dengan heap change dan commit record dapat terlihat setelah recovery. Transaction B yang hanya memiliki heap change dapat meninggalkan artefak fisik yang tidak visible sebagai committed row sampai proses cleanup sesuai lifecycle PostgreSQL. Yang penting bagi query adalah commit visibility, bukan asumsi bahwa setiap byte uncommitted langsung dihapus.",
+          "Synchronous replication memberi dimensi lain: standby dapat menerima dan replay record sebelum commit record membuat effect terlihat pada snapshot, karena MVCC menahan visibility sampai commit diterapkan. Ini bukan bukti bahwa primary dan standby memiliki latency sama, dan bukan bukti external provider telah menerima effect. Recovery mental model harus memisahkan durable WAL, physical redo, transaction visibility, dan external acknowledgement."
+        ]
+      },
+      {
+        "title": "Crash recovery tidak membatalkan dunia luar",
+        "paragraphs": [
+          "Jika aplikasi mengirim payment provider sebelum COMMIT dan crash membuat outcome database tidak diketahui, recovery hanya mengembalikan state database sesuai WAL. Ia tidak mengirim cancel ke provider dan tidak mengetahui apakah provider sudah menagih. Gunakan payment identity, idempotency key, outbox/inbox protocol, dan rekonsiliasi status sebelum retry. Bahkan jika local transaction terlihat rollback, external effect dapat tetap ada dan harus ditangani sebagai state lintas sistem.",
+          "TEMP table dan unlogged table tidak cocok sebagai sumber fakta durable: TEMP bersifat session-local dan unlogged relation tidak ditulis ke WAL seperti logged permanent relation, dapat dikosongkan setelah crash, serta tidak diperlakukan seperti data replikasi normal. Worked fixture sengaja memakai TEMP agar isolated. Semua row, LSN, dan outcome dalam contoh adalah authored trace; lesson tidak mematikan server, memeriksa pg_wal, memaksa recovery, atau memberi otorisasi eksperimen unsafe."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Recovery trace authored dari redo anchor 0/500: transaction 900 committed, transaction 901 tidak memiliki commit record, dan transaction 902 committed tetapi external effect belum diketahui.",
+      "setupSql": "CREATE TEMP TABLE lesson_recovery_trace (\n  record_no INTEGER PRIMARY KEY,\n  lsn TEXT NOT NULL,\n  txn_id INTEGER,\n  record_kind TEXT NOT NULL,\n  commit_record_seen BOOLEAN NOT NULL,\n  redo_replayed BOOLEAN NOT NULL,\n  mvcc_visible_after_recovery TEXT NOT NULL,\n  external_effect_after_db_recovery TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_recovery_trace VALUES\n  (1, '0/500', NULL, 'checkpoint redo anchor', FALSE, FALSE, 'n/a', 'n/a'),\n  (2, '0/540', 900, 'heap change', FALSE, TRUE, 'invisible', 'none'),\n  (3, '0/560', 900, 'commit record', TRUE, TRUE, 'visible', 'none'),\n  (4, '0/580', 901, 'heap change only', FALSE, TRUE, 'invisible', 'none'),\n  (5, '0/600', 902, 'heap change', FALSE, TRUE, 'invisible', 'unknown-reconcile'),\n  (6, '0/620', 902, 'commit record', TRUE, TRUE, 'visible', 'unknown-reconcile');",
+      "sql": "SELECT txn_id, COUNT(*) FILTER (WHERE txn_id IS NOT NULL)::TEXT AS wal_record_count, BOOL_OR(commit_record_seen)::TEXT AS commit_record_seen, BOOL_AND(redo_replayed)::TEXT AS all_records_replayed, CASE WHEN BOOL_OR(commit_record_seen) THEN 'visible' ELSE 'invisible' END AS mvcc_visibility, MIN(external_effect_after_db_recovery) AS external_effect\nFROM pg_temp.lesson_recovery_trace\nWHERE txn_id IS NOT NULL\nGROUP BY txn_id\nORDER BY txn_id;",
+      "columns": [
+        "txn_id",
+        "wal_record_count",
+        "commit_record_seen",
+        "all_records_replayed",
+        "mvcc_visibility",
+        "external_effect"
+      ],
+      "rows": [
+        [
+          "900",
+          "2",
+          "true",
+          "true",
+          "visible",
+          "none"
+        ],
+        [
+          "901",
+          "1",
+          "false",
+          "true",
+          "invisible",
+          "none"
+        ],
+        [
+          "902",
+          "2",
+          "true",
+          "true",
+          "visible",
+          "unknown-reconcile"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Trace dibaca berurutan: heap change 900 dan 902 belum melihat commit dan belum visible; record commit berikutnya mengubah state tersebut. Laporan akhir memakai BOOL_OR(commit_record_seen) untuk seluruh record transaksi: 900 dan 902 visible, sedangkan 901 tetap invisible. Ini model sederhana transaksi insert yang commit/abort, tanpa delete atau update lanjutan. External effect 902 tetap unknown-reconcile. Semua hasil adalah authored, bukan output crash recovery."
+    },
+    "checks": [
+      {
+        "id": "l6m02l03-check-1",
+        "question": "Mengapa transaction 901 tetap invisible walaupun heap change-nya direplay?",
+        "options": [
+          "Karena recovery selalu menghapus setiap WAL record tanpa commit.",
+          "Karena physical REDO dapat diproses, tetapi tanpa commit record MVCC tidak menganggap transaction committed.",
+          "Karena semua heap change hanya boleh direplay setelah checkpoint berikutnya."
+        ],
+        "answer": 1,
+        "explanation": "Physical page recovery dan transaction visibility adalah lapisan berbeda; commit status tetap menentukan apa yang terlihat.",
+        "feedback": [
+          "Belum tepat. WAL record dapat direplay untuk menjaga konsistensi page.",
+          "Benar. Tidak adanya commit record membuat perubahan tidak visible sebagai committed transaction.",
+          "Belum tepat. REDO dimulai dari checkpoint anchor dan tidak menunggu checkpoint baru."
+        ]
+      },
+      {
+        "id": "l6m02l03-check-2",
+        "question": "Apa yang harus dilakukan aplikasi untuk transaction 902 dengan external_effect = unknown-reconcile?",
+        "options": [
+          "Anggap provider pasti rollback karena database dapat REDO.",
+          "Ulangi charge tanpa business key agar provider menentukan hasil baru.",
+          "Rekonsiliasi status provider dan database memakai identity/idempotency sebelum retry atau kompensasi."
+        ],
+        "answer": 2,
+        "explanation": "Crash recovery hanya menjelaskan state database; outcome provider perlu protocol lintas sistem yang dapat diaudit.",
+        "feedback": [
+          "Belum tepat. REDO database tidak membatalkan external effect.",
+          "Belum tepat. Retry tanpa identity berisiko duplicate charge.",
+          "Benar. Rekonsiliasi dan idempotency mencegah blind retry pada outcome yang tidak diketahui."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi visibility transaction, idempotent REDO, dan langkah rekonsiliasi external effect dari recovery trace authored.",
+      "setup": "Gunakan Dataset Recovery Trace. Learner membaca agregasi trace; aktivitas tidak menyalakan crash recovery, tidak memeriksa WAL fisik, dan tidak memanggil provider.",
+      "starterSql": "SELECT txn_id, record_kind, commit_record_seen, redo_replayed, mvcc_visible_after_recovery, external_effect_after_db_recovery\nFROM pg_temp.lesson_recovery_trace\nWHERE txn_id IS NOT NULL\nORDER BY record_no;",
+      "variants": [
+        {
+          "id": "l6m02l03-variant-1",
+          "question": "Transaction 903 memiliki heap change dan commit record durable, tetapi heap page masih lama ketika crash. Apa hasil yang diharapkan?",
+          "options": [
+            "Recovery dapat REDO page dari WAL dan transaction menjadi visible sesuai MVCC.",
+            "Transaction pasti hilang karena heap page belum pernah ditulis.",
+            "Recovery membuat dua row agar heap lama dan WAL sama-sama dipertahankan."
+          ],
+          "answer": 0,
+          "explanation": "WAL commit dan change record menutup gap sebelum heap flush; REDO tidak menggandakan logical row.",
+          "feedback": [
+            "Benar. REDO mengejar data page dan commit status mempertahankan visibility.",
+            "Belum tepat. Heap flush tidak harus mendahului recovery jika WAL durable.",
+            "Belum tepat. Replay dirancang idempotent, bukan membuat duplicate row."
+          ]
+        },
+        {
+          "id": "l6m02l03-variant-2",
+          "question": "Recovery restart membaca record 0/580 dua kali. Apa interpretasi yang tepat untuk REDO idempotent?",
+          "options": [
+            "Aplikasi harus membuat payment kedua agar dua replay seimbang.",
+            "Transaction otomatis menjadi committed karena record dibaca dua kali.",
+            "Record yang sama tidak boleh menggandakan perubahan logical; replay mengikuti identitas LSN/page state."
+          ],
+          "answer": 2,
+          "explanation": "Idempotency recovery mencegah pengulangan proses physical record menjadi duplicate logical effect; ia tidak menciptakan commit record.",
+          "feedback": [
+            "Belum tepat. Recovery tidak meminta aplikasi menggandakan payment.",
+            "Belum tepat. Commit status berasal dari commit record, bukan jumlah replay.",
+            "Benar. LSN dan state page membuat REDO aman terhadap pembacaan ulang."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l6m02l03-edge-1",
+          "question": "Apa batas penting ketika worked trace memakai TEMP atau unlogged relation?",
+          "options": [
+            "Fixture tersebut membuktikan semua row akan kembali setelah crash dan tersedia di standby.",
+            "Fixture itu tidak boleh dipakai sebagai bukti crash durability, WAL replay, atau replication untuk permanent logged data.",
+            "Karena unlogged, external provider otomatis ikut di-rollback."
+          ],
+          "answer": 1,
+          "explanation": "TEMP bersifat session-local dan perubahan datanya tidak memakai WAL normal. UNLOGGED adalah mode relasi persisten yang berbeda, dengan batas crash recovery dan replikasi. Keduanya tidak membuktikan durability data logged pada latihan ini.",
+          "feedback": [
+            "Belum tepat. Fixture temporary justru mengecualikan klaim durability production.",
+            "Benar. Gunakan trace untuk konsep, bukan bukti server recovery atau standby.",
+            "Belum tepat. Persistence relation tidak mengendalikan provider."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l6m02l03-edge-2",
+          "question": "Jika proses recovery crash setelah beberapa record direplay, strategi mental yang aman adalah apa?",
+          "options": [
+            "Recovery dapat dimulai lagi dari checkpoint/redo state yang sesuai dan mengulang record tanpa duplicate logical effect.",
+            "Hapus semua WAL agar recovery tidak mengulang pekerjaan.",
+            "Anggap semua external payment sudah rollback karena recovery belum selesai."
+          ],
+          "answer": 0,
+          "explanation": "WAL dan checkpoint menyediakan titik untuk melanjutkan; external effects tetap memerlukan rekonsiliasi terpisah.",
+          "feedback": [
+            "Benar. Restart recovery boleh mengulang REDO secara idempotent dari state yang aman.",
+            "Belum tepat. Menghapus WAL merusak bahan recovery dan bukan prosedur aman.",
+            "Belum tepat. Recovery database tidak mengubah outcome provider."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Agregasikan record per txn_id, lalu lihat commit_record_seen sebelum membaca visibility.",
+        "Bedakan physical REDO idempotency dari application retry atau provider idempotency.",
+        "TEMP/unlogged dan external effect adalah batas evidence, bukan detail yang boleh diabaikan."
+      ],
+      "solutionSql": "SELECT txn_id, COUNT(*) FILTER (WHERE txn_id IS NOT NULL)::TEXT AS wal_record_count, BOOL_OR(commit_record_seen)::TEXT AS commit_record_seen, BOOL_AND(redo_replayed)::TEXT AS all_records_replayed, CASE WHEN BOOL_OR(commit_record_seen) THEN 'visible' ELSE 'invisible' END AS mvcc_visibility, MIN(external_effect_after_db_recovery) AS external_effect\nFROM pg_temp.lesson_recovery_trace\nWHERE txn_id IS NOT NULL\nGROUP BY txn_id\nORDER BY txn_id;",
+      "solutionExplanation": "Reference menghasilkan tiga hasil authored: 900 committed dan visible, 901 direplay tetapi invisible karena commit record tidak ada, dan 902 visible namun external effect perlu rekonsiliasi. Query tidak menjalankan recovery atau provider dan tidak menyatakan bahwa trace berasal dari engine.",
+      "critical": true
+    },
+    "reflection": "Jelaskan urutan checkpoint–REDO–commit visibility pada recovery PostgreSQL. Bedakan physical replay idempotent dari retry payment, lalu sebutkan mengapa unlogged/TEMP dan external effect membatasi kesimpulan lesson."
+  }
+]

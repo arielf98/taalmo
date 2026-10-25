@@ -244,5 +244,13 @@
   "pg-column-size": "pg_column_size",
   "utf8": "UTF-8",
   "projection-width": "lebar projection",
-  "storage-policy": "kebijakan storage"
+  "storage-policy": "kebijakan storage",
+  "write-ahead-logging": "write-ahead logging",
+  "commit": "commit",
+  "redo": "REDO",
+  "checkpoint": "checkpoint",
+  "fsync": "fsync",
+  "full-page-writes": "full-page writes",
+  "torn-page": "torn page",
+  "crash-recovery": "crash recovery"
 }
