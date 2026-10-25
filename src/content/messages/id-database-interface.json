@@ -126,5 +126,17 @@
   "payment-ledger": "ledger pembayaran",
   "consistency": "konsistensi",
   "transaction-boundary": "batas transaksi",
-  "error-recovery": "pemulihan error"
+  "error-recovery": "pemulihan error",
+  "isolation": "isolasi",
+  "mvcc": "MVCC",
+  "snapshot": "snapshot",
+  "visibility": "visibilitas",
+  "own-writes": "perubahan sendiri",
+  "row-lock": "row lock",
+  "read-committed": "READ COMMITTED",
+  "repeatable-read": "REPEATABLE READ",
+  "serializable": "SERIALIZABLE",
+  "select-for-update": "SELECT FOR UPDATE",
+  "nowait": "NOWAIT",
+  "skip-locked": "SKIP LOCKED"
 }

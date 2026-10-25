@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L3 and L4M01: 48 published / 72 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L3 and L4M01–L4M02: 51 published / 69 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -178,3 +178,11 @@ Added three bilingual ACID lessons in l4-acid.json with en-database-acid.json. L
 Totals: 16 authored modules, 48 published / 72 draft lessons; 51 combined lessons plus three labs (54 activity milestones). Existing E2E expectations only change the count and next draft route to l4m02l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
 
 Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L4M02**.
+
+## L4M02 continuation — 25 October 2026
+
+Added three bilingual isolation/MVCC lessons using explicitly authored deterministic traces. L4M02L01 contrasts RC statement snapshots with RR/Serializable stable snapshots:100000 versus125000 after an intervening commit; ORDER BY and expected row order agree. L4M02L02 separates snapshot reads on invoice501 from own writes to an untouched502, avoiding the invalid assumption that RR can successfully update a row concurrently changed after its snapshot; that path requires40001 recovery. L4M02L03 compares wait/NOWAIT/SKIP LOCKED policies and states that returned candidates are not actual claimed production jobs. No live SQL runner, MVCC engine validation, lock observation or new simulator is claimed. Earlier fixture/version/progress data remains unchanged. Current README publication metadata and empty remaining-level headings were also synchronized during integration.
+
+Totals: 17 authored modules, 51 published / 69 draft lessons; 54 combined lessons plus three labs (57 activity milestones). Existing E2E expectations only change the count and next draft route to l4m03l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
+
+Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L4M03**.

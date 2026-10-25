@@ -13,13 +13,13 @@
 
 ## Database Engineering — database curriculum
 
-The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L3 and L4M01 provide 48 published bilingual lessons; 72 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
+The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L3 and L4M01–L4M02 provide 51 published bilingual lessons; 69 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
 
-## Recommended next milestone: L4M02 authoring
+## Recommended next milestone: L4M03 authoring
 
-L0–L3 are fully authored. L4M01 follows L3M04, while later L4 modules remain draft and no L4 stage assessment is exposed yet. Existing completion, critical-question and versioned-progress rules are unchanged.
+L4M02 follows L4M01. L4 is still incomplete, so its stage assessment remains unavailable. Published earlier levels retain their existing prerequisite/mastery gates; trace predictions do not grant actual concurrent SQL execution evidence.
 
-Continue with L4M02 — Isolation dan MVCC: READ COMMITTED/REPEATABLE READ/SERIALIZABLE, row-version visibility and row-lock behavior. Distinguish authored two-session predictions from observed concurrency or a live SQL runner, and keep retry/error semantics explicit. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
+Continue with L4M03 — Concurrency Anomalies: conditional atomic updates and zero-row outcomes, cross-row write skew, deadlocks/timeouts and bounded whole-transaction retry. Clearly declare isolation assumptions and the difference between a possible authored victim choice and PostgreSQL scheduling guarantees. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
 
 ## Later learning improvements
 

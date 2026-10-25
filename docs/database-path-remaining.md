@@ -1,21 +1,8 @@
 # Remaining curriculum authoring
 
-The following 72 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
-
-## L3 — Data Modeling & Schema Evolution
-
-
+The following 69 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L4 — Transactions & Concurrency
-
-
-### L4M02 — Isolation dan MVCC
-
-Prerequisite: l4m01. Scenario: Payment Ledger.
-
-- [ ] `l4m02l01` — Isolation levels PostgreSQL
-- [ ] `l4m02l02` — MVCC snapshots
-- [ ] `l4m02l03` — SELECT FOR UPDATE dan row lock
 
 ### L4M03 — Concurrency Anomalies
 

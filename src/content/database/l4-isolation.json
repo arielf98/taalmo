@@ -1,0 +1,469 @@
+[
+  {
+    "id": "l4m02l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": ["isolation", "read-committed", "repeatable-read", "serializable", "payment-ledger"],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/transaction-iso.html",
+      "https://www.postgresql.org/docs/17/mvcc-intro.html",
+      "https://www.postgresql.org/docs/17/errcodes-appendix.html"
+    ],
+    "hook": "Session A sedang memeriksa saldo Payment Ledger ketika Session B menyelesaikan receipt sebesar 25000. Pada level isolasi yang berbeda, apakah SELECT kedua A harus tetap melihat saldo lama, melihat commit baru, atau gagal?",
+    "objectives": [
+      "Membandingkan snapshot per statement pada Read Committed dengan snapshot transaction pada Repeatable Read dan Serializable.",
+      "Menjelaskan bahwa PostgreSQL memetakan Read Uncommitted ke Read Committed dan Repeatable Read tidak mengizinkan phantom read pada implementasinya.",
+      "Membedakan visibilitas data dari jaminan serialisasi, retry SQLSTATE 40001, dan mekanisme row lock."
+    ],
+    "sections": [
+      {
+        "title": "Isolation mengatur apa yang boleh terlihat",
+        "paragraphs": [
+          "Isolation level adalah aturan tentang data committed mana yang boleh terlihat oleh statement dalam satu transaction ketika transaction lain berjalan. Ia bukan tombol yang otomatis membuat semua aturan bisnis benar, bukan sinonim row lock, dan bukan janji bahwa dua session akan berhenti saling menunggu. PostgreSQL memakai MVCC: statement membaca versi baris yang cocok dengan snapshot, sementara pembaca biasa tidak perlu menunggu penulis hanya karena penulis sedang membuat versi baru. Karena itu pertanyaan awal harus spesifik: snapshot ini diambil kapan, statement mana yang membacanya, dan apakah operasi juga mencoba mengunci atau mengubah baris?",
+          "Dalam lesson ini, angka saldo dan urutan event adalah trace authored. Tabel hasil menunjukkan prediksi visibility untuk jadwal yang ditulis eksplisit, bukan hasil dua koneksi PostgreSQL yang benar-benar dijalankan. Batas ini penting: learner boleh mengembangkan model mental tentang snapshot, tetapi tidak boleh menyimpulkan bahwa lock, commit, atau SQLSTATE telah diamati. Di produksi, pilihan isolation tetap harus dipasangkan dengan invariant, writer path, timeout, retry, dan bukti operasional yang sesuai."
+        ]
+      },
+      {
+        "title": "Read Committed mengambil snapshot baru untuk setiap statement",
+        "paragraphs": [
+          "Read Committed adalah default PostgreSQL. SELECT tanpa locking clause melihat baris yang committed sebelum SELECT itu dimulai. Jadi jika A melakukan SELECT pertama saat saldo 100000, lalu B commit receipt dan saldo menjadi 125000, SELECT kedua A dapat melihat 125000 karena statement kedua mengambil snapshot baru. A tidak melihat perubahan B yang masih uncommitted. Dua SELECT dalam satu transaction dapat berbeda; transaction boundary yang sama tidak mengubah Read Committed menjadi snapshot tunggal.",
+          "Untuk command yang mencari lalu mengubah baris, Read Committed memiliki detail tambahan: command menemukan target dari snapshot awal, dapat menunggu updater yang lebih dulu mengunci baris, lalu mengevaluasi ulang kondisi pada versi yang sudah diperbarui. Perilaku ini cocok untuk operasi sederhana pada baris yang sudah ditentukan, tetapi tidak otomatis aman untuk pemeriksaan aggregate yang melibatkan banyak baris. Jangan menerjemahkan “committed” sebagai “seluruh business invariant telah terjaga”; isolation dan desain guard menyelesaikan masalah yang berbeda."
+        ]
+      },
+      {
+        "title": "Repeatable Read dan Serializable bukan kata yang sama",
+        "paragraphs": [
+          "Repeatable Read memakai snapshot sejak statement non-control pertama pada transaction, lalu SELECT berikutnya tetap melihat commit sebelum snapshot itu. Perubahan yang dibuat transaction sendiri tetap terlihat oleh transaction tersebut walaupun belum commit. PostgreSQL juga mencegah phantom read pada Repeatable Read, meskipun standar SQL hanya mensyaratkan perlindungan minimum yang lebih rendah. Bila transaction Repeatable Read mencoba mengunci atau mengubah baris yang sudah berubah sejak snapshot, ia dapat menerima serialization failure dan harus mengulang seluruh transaction dari awal.",
+          "Serializable memakai visibility snapshot yang serupa, lalu memantau dependency untuk menolak hasil commit yang tidak konsisten dengan urutan serial mana pun. PostgreSQL tidak menjanjikan semua transaction Serializable akan berhasil atau tidak pernah menunggu: konflik dapat berakhir sebagai serialization failure, lazimnya SQLSTATE 40001, dan caller harus retry dengan transaction baru. Trace tiga level di bawah hanya memprediksi pembacaan read-only yang dituliskan; trace itu tidak membuktikan retry, tidak menguji write skew, dan tidak membuktikan bahwa semua anomaly bisnis telah hilang."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset A — authored two-session schedule untuk Payment Ledger. Saldo awal account 1 adalah 100000. Session B melakukan receipt +25000 dan commit di antara SELECT pertama dan kedua Session A. Baris berikut adalah trace yang ditulis untuk latihan, bukan output dua koneksi database yang diamati.",
+      "sql": "WITH authored_trace(session_label, isolation_level, step_no, actor, event, visible_balance, visibility_note) AS (\n  VALUES\n    ('A','READ COMMITTED',1,'A','SELECT sebelum B commit','100000.00','snapshot pada awal statement'),\n    ('A','READ COMMITTED',2,'A','SELECT setelah B commit','125000.00','statement baru melihat commit B'),\n    ('A','REPEATABLE READ',1,'A','SELECT sebelum B commit','100000.00','snapshot transaction A'),\n    ('A','REPEATABLE READ',2,'A','SELECT setelah B commit','100000.00','snapshot A tetap'),\n    ('A','SERIALIZABLE',1,'A','SELECT sebelum B commit','100000.00','snapshot transaction A'),\n    ('A','SERIALIZABLE',2,'A','SELECT setelah B commit','100000.00','snapshot A tetap; trace read-only'),\n    ('B','ALL',0,'B','UPDATE receipt +25000 lalu COMMIT','125000.00','event authored di antara SELECT A')\n)\nSELECT session_label, isolation_level, step_no, actor, event, visible_balance, visibility_note\nFROM authored_trace\nORDER BY CASE isolation_level WHEN 'READ COMMITTED' THEN 1 WHEN 'REPEATABLE READ' THEN 2 WHEN 'SERIALIZABLE' THEN 3 ELSE 4 END, session_label, step_no;",
+      "columns": ["session_label", "isolation_level", "step_no", "actor", "event", "visible_balance", "visibility_note"],
+      "rows": [
+        ["A", "READ COMMITTED", "1", "A", "SELECT sebelum B commit", "100000.00", "snapshot pada awal statement"],
+        ["A", "READ COMMITTED", "2", "A", "SELECT setelah B commit", "125000.00", "statement baru melihat commit B"],
+        ["A", "REPEATABLE READ", "1", "A", "SELECT sebelum B commit", "100000.00", "snapshot transaction A"],
+        ["A", "REPEATABLE READ", "2", "A", "SELECT setelah B commit", "100000.00", "snapshot A tetap"],
+        ["A", "SERIALIZABLE", "1", "A", "SELECT sebelum B commit", "100000.00", "snapshot transaction A"],
+        ["A", "SERIALIZABLE", "2", "A", "SELECT setelah B commit", "100000.00", "snapshot A tetap; trace read-only"],
+        ["B", "ALL", "0", "B", "UPDATE receipt +25000 lalu COMMIT", "125000.00", "event authored di antara SELECT A"]
+      ],
+      "ordered": true,
+      "explanation": "Trace authored memperlihatkan perbedaan snapshot, bukan eksekusi concurrent. Read Committed mengambil snapshot baru untuk SELECT kedua dan melihat 125000. Repeatable Read dan Serializable mempertahankan snapshot A sehingga tetap melihat 100000 pada kedua SELECT; baris B hanya menandai event commit yang terjadi di antara keduanya. Pembacaan read-only ini tidak menghasilkan bukti serialization failure atau jaminan bahwa transaction write akan commit."
+    },
+    "checks": [
+      {
+        "id": "l4m02l01-check-1",
+        "question": "Pada trace Dataset A, mengapa SELECT kedua Session A di Read Committed melihat 125000?",
+        "options": [
+          "Setiap statement Read Committed mengambil snapshot baru yang mencakup commit B sebelum statement itu dimulai.",
+          "Read Committed membaca data uncommitted agar selalu paling baru.",
+          "Session B memaksa snapshot lama A diperbarui dari dalam transaction."
+        ],
+        "answer": 0,
+        "explanation": "Read Committed tidak membaca uncommitted data, tetapi statement berikutnya dapat melihat commit yang selesai sebelum statement tersebut dimulai.",
+        "feedback": [
+          "Benar: statement kedua memiliki snapshot baru setelah B commit.",
+          "Salah: uncommitted data tetap tidak terlihat pada Read Committed.",
+          "Salah: B tidak mengubah snapshot internal A; statement kedua A memang membuat snapshot baru."
+        ]
+      },
+      {
+        "id": "l4m02l01-check-2",
+        "question": "Pernyataan mana yang paling aman tentang Serializable pada trace ini?",
+        "options": [
+          "Serializable menjamin semua transaction selalu commit tanpa menunggu atau retry.",
+          "Trace read-only memprediksi snapshot stabil; transaction write tetap dapat gagal dengan serialization failure dan perlu retry penuh.",
+          "Serializable sama dengan SELECT FOR UPDATE sehingga semua pembaca biasa memblokir writer."
+        ],
+        "answer": 1,
+        "explanation": "Serializable menolak dependency yang tidak punya urutan serial; ia tidak menghapus kemungkinan konflik atau mengganti row lock.",
+        "feedback": [
+          "Salah: Serializable dapat menolak transaction dengan serialization failure.",
+          "Benar: trace ini hanya visibility prediction, sedangkan retry write harus dirancang sebagai transaction baru.",
+          "Salah: MVCC dan explicit row lock adalah mekanisme berbeda; pembaca biasa tidak otomatis memblokir writer."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi saldo yang terlihat oleh SELECT kedua Session A untuk tiga isolation level, lalu pisahkan visibility snapshot dari jaminan commit.",
+      "setup": "Gunakan authored schedule Dataset A: account 1 mulai 100000, B menambah receipt 25000 dan commit di antara dua SELECT A. Pilih hasil berdasarkan aturan snapshot, bukan dengan menganggap player menjalankan dua session. Aktivitas ini tidak mengamati lock, concurrent SQL, atau SQLSTATE.",
+      "starterSql": "WITH authored_schedule(isolation_level, step_no, event, visible_balance) AS (\n  VALUES\n    ('READ COMMITTED',1,'A reads before B commit','100000.00'),\n    ('READ COMMITTED',2,'A reads after B commit','125000.00'),\n    ('REPEATABLE READ',1,'A reads before B commit','100000.00'),\n    ('REPEATABLE READ',2,'A reads after B commit','100000.00'),\n    ('SERIALIZABLE',1,'A reads before B commit','100000.00'),\n    ('SERIALIZABLE',2,'A reads after B commit','100000.00')\n)\nSELECT isolation_level, step_no, event, visible_balance\nFROM authored_schedule\nORDER BY CASE isolation_level WHEN 'READ COMMITTED' THEN 1 WHEN 'REPEATABLE READ' THEN 2 ELSE 3 END, step_no;",
+      "variants": [
+        {
+          "id": "l4m02l01-variant-1",
+          "question": "Jika B commit receipt sebelum SELECT kedua A pada Read Committed, tetapi A belum menulis apa pun, saldo yang terlihat adalah apa?",
+          "options": ["125000 karena snapshot statement kedua mencakup commit B", "100000 karena semua SELECT dalam transaction berbagi snapshot pertama", "NULL karena commit B berasal dari session lain"],
+          "answer": 0,
+          "explanation": "Read Committed membuat snapshot per statement, sehingga commit yang selesai sebelum SELECT kedua dimulai dapat terlihat.",
+          "feedback": [
+            "Benar: SELECT kedua dimulai setelah B commit dan melihat 125000.",
+            "Itu model Repeatable Read, bukan Read Committed.",
+            "Session lain tidak membuat nilai menjadi NULL; visibility ditentukan oleh commit dan snapshot."
+          ]
+        },
+        {
+          "id": "l4m02l01-variant-2",
+          "question": "Pada Repeatable Read, A melakukan UPDATE sendiri dari 100000 menjadi 90000 sebelum SELECT kedua. Nilai apa yang wajar diprediksi A lihat?",
+          "options": ["100000 karena snapshot selalu menyembunyikan perubahan sendiri", "90000 karena transaction melihat efek write-nya sendiri walaupun belum commit", "125000 karena B commit selalu mengalahkan write lokal A"],
+          "answer": 1,
+          "explanation": "Snapshot tidak menghapus perubahan yang dibuat transaction sendiri; own writes terlihat oleh transaction tersebut.",
+          "feedback": [
+            "Snapshot menyembunyikan concurrent uncommitted work, bukan perubahan A sendiri.",
+            "Benar: own write terlihat sehingga A memprediksi 90000.",
+            "Commit B tidak otomatis menggantikan versi yang baru ditulis A dalam transaction A."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l4m02l01-edge-1",
+          "question": "Transaction Serializable menulis berdasarkan pembacaan yang berkonflik dan menerima SQLSTATE 40001. Apa recovery yang benar?",
+          "options": ["Menelan error lalu COMMIT statement terakhir", "Membaca ulang hasil lama tanpa mengakhiri transaction aborted", "ROLLBACK transaction dan retry seluruh unit kerja dengan transaction baru"],
+          "answer": 2,
+          "explanation": "Serialization failure membatalkan transaction saat ini; retry harus mengulang seluruh unit dengan snapshot dan keputusan yang baru.",
+          "feedback": [
+            "COMMIT tidak membuat transaction yang gagal menjadi valid.",
+            "Transaction aborted harus diakhiri; membaca ulang tanpa rollback bukan recovery.",
+            "Benar: rollback dan retry penuh menjaga keputusan berada pada snapshot baru."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l4m02l01-edge-2",
+          "question": "Apa kesimpulan yang boleh diambil dari trace authored, tanpa menjalankan dua koneksi PostgreSQL?",
+          "options": ["Kita memiliki model visibility yang ditulis dan dapat ditinjau, bukan bukti runtime lock atau serialization behavior", "Kita telah membuktikan production Serializable selalu sukses", "Kita dapat menghapus retry karena trace menghasilkan urutan serial"],
+          "answer": 0,
+          "explanation": "Trace statis hanya menjelaskan schedule dan expected visibility yang menjadi bahan belajar.",
+          "feedback": [
+            "Benar: trace menjaga batas klaim dan tidak menyamar sebagai observasi runtime.",
+            "Tidak ada eksekusi production atau bukti success rate pada trace ini.",
+            "Retry tetap diperlukan untuk konflik yang hanya dapat muncul ketika transaction benar-benar berjalan."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Tandai kapan setiap SELECT mulai: Read Committed memakai awal statement, sedangkan dua level lain memakai snapshot transaction.",
+        "Pisahkan tiga kategori: concurrent uncommitted tidak terlihat, commit B dapat terlihat sesuai snapshot, dan own write A tetap terlihat oleh A.",
+        "Serializable adalah gate dependency, bukan sinonim lock; SQLSTATE 40001 berarti rollback lalu retry unit transaction penuh."
+      ],
+      "solutionSql": "WITH authored_schedule(isolation_level, step_no, event, visible_balance) AS (\n  VALUES\n    ('READ COMMITTED',1,'A reads before B commit','100000.00'),\n    ('READ COMMITTED',2,'A reads after B commit','125000.00'),\n    ('REPEATABLE READ',1,'A reads before B commit','100000.00'),\n    ('REPEATABLE READ',2,'A reads after B commit','100000.00'),\n    ('SERIALIZABLE',1,'A reads before B commit','100000.00'),\n    ('SERIALIZABLE',2,'A reads after B commit','100000.00')\n)\nSELECT isolation_level, step_no, event, visible_balance\nFROM authored_schedule\nORDER BY CASE isolation_level WHEN 'READ COMMITTED' THEN 1 WHEN 'REPEATABLE READ' THEN 2 ELSE 3 END, step_no;",
+      "solutionExplanation": "Reference SQL hanya memproyeksikan schedule authored sebagai satu result table. Hasil kunci adalah 125000 pada SELECT kedua Read Committed dan 100000 pada SELECT kedua Repeatable Read serta Serializable. Projection ini tidak menjalankan concurrent transaction, tidak membuktikan row lock, dan tidak menghapus kebutuhan retry untuk transaction write yang menerima SQLSTATE 40001.",
+      "critical": true
+    },
+    "reflection": "Jelaskan dengan kata-katamu sendiri kapan Read Committed mengambil snapshot, mengapa Repeatable Read dapat mempertahankan saldo lama, dan mengapa Serializable masih memerlukan rollback serta retry. Sebutkan satu hal yang trace authored ini tidak buktikan tentang database runtime."
+  },
+  {
+    "id": "l4m02l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": ["mvcc", "snapshot", "visibility", "own-writes", "payment-ledger"],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/mvcc-intro.html",
+      "https://www.postgresql.org/docs/17/transaction-iso.html",
+      "https://www.postgresql.org/docs/17/mvcc-caveats.html"
+    ],
+    "hook": "Session A mulai memeriksa invoice 501 ketika Session B menandainya paid dan commit. Mengapa A masih dapat melihat versi open pada row 501, lalu melihat perubahan A sendiri ketika A menulis status review pada row 502 yang tidak disentuh B?",
+    "objectives": [
+      "Menjelaskan MVCC sebagai pemilihan versi baris berdasarkan snapshot, bukan pembacaan dirty data atau satu salinan mutable.",
+      "Membedakan snapshot Repeatable Read dari efek write transaction sendiri yang tetap terlihat oleh penulisnya.",
+      "Menentukan batas klaim snapshot untuk trace authored, termasuk perbedaan antara visibility, lock, dan bukti runtime."
+    ],
+    "sections": [
+      {
+        "title": "MVCC menyimpan versi yang dapat dipilih snapshot",
+        "paragraphs": [
+          "PostgreSQL memakai multiversion concurrency control. Secara mental, UPDATE tidak sekadar mengganti satu angka di tempat yang sama; ia menghasilkan versi baru dan membuat snapshot memilih versi mana yang visible berdasarkan status transaction. Pembaca biasa dapat membaca versi committed yang sesuai tanpa harus mengambil row lock terhadap writer. Ini membantu concurrency, tetapi bukan berarti semua versi lama tersedia tanpa batas, semua query melihat keadaan historis yang sama, atau vacuum dan storage detail dapat diabaikan.",
+          "Snapshot juga bukan salinan yang boleh diedit sembarangan. Ia adalah aturan visibility untuk statement atau transaction. Data yang belum commit oleh session lain tidak menjadi visible hanya karena sudah ditulis di buffer. Sebaliknya, transaction biasanya melihat own writes karena keputusan berikutnya harus dapat bekerja dari perubahan yang dibuatnya sendiri. Lesson ini memakai status invoice agar perbedaan itu mudah ditunjuk: A dapat tetap melihat open dari snapshot lama, tetapi setelah A sendiri menulis review, A harus dapat membaca review tersebut."
+        ]
+      },
+      {
+        "title": "Snapshot Repeatable Read tetap melihat own writes",
+        "paragraphs": [
+          "Dalam Repeatable Read, snapshot utama diambil pada awal statement non-transaction-control pertama dan tidak bergerak mengikuti commit concurrent setelahnya. Pada schedule authored, A membaca row 501 sebagai open, B mengubah row 501 menjadi paid lalu commit, dan SELECT kedua A pada row 501 masih membaca open. Ini bukan dirty read; paid adalah versi committed yang nyata dalam cerita, tetapi commit itu terjadi setelah snapshot A. RR memberi pandangan stabil terhadap concurrent data, bukan akses untuk menebak fakta yang belum ada pada saat snapshot dibuat.",
+          "Ada aturan penting yang sebenarnya bukan pengecualian: perubahan A sendiri tetap visible untuk A. Karena row 502 tidak disentuh B, A dapat UPDATE row 502 dari pending menjadi review, lalu SELECT row 502 melihat review walaupun transaction A belum commit. Jika A justru mencoba UPDATE row 501 yang sudah diubah B, operasi itu bukan contoh own write yang sukses; Repeatable Read dapat membatalkan transaction dengan SQLSTATE 40001 dan seluruh unit harus diulang."
+        ]
+      },
+      {
+        "title": "Snapshot stabil bukan sertifikat konsistensi bisnis",
+        "paragraphs": [
+          "Snapshot yang stabil membantu pembacaan yang memerlukan jawaban konsisten, tetapi tidak otomatis menjamin invariant Payment Ledger. Dua transaction dapat sama-sama membaca kondisi yang sama lalu membuat keputusan berbeda; ketika masing-masing menulis row berbeda, pola ini dapat menjadi write skew di bawah snapshot isolation. Repeatable Read masih dapat memiliki serialization anomaly dan transaction write dapat menerima serialization failure ketika baris yang hendak diubah telah berubah. Serializable menambahkan pemantauan dependency untuk menolak hasil yang tidak punya urutan serial, sehingga salah satu transaction dapat menerima SQLSTATE 40001, tetapi caller tetap wajib menangani retry.",
+          "Trace ini juga tidak membuktikan snapshot database production, vacuum, tuple metadata, replication, atau lock observability. Ia hanya menyalin event dan expected visibility ke satu tabel `VALUES`. Jangan menggunakan snapshot sebagai alasan menghapus validasi business key, explicit locking, atau rekonsiliasi provider. Saat kebutuhan berubah dari membaca versi yang konsisten menjadi mencegah dua writer mengganggu invariant, pilih protocol yang sesuai dan tuliskan bukti yang benar-benar dapat dikumpulkan."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset B — authored MVCC trace dengan invoice 501 dan 502. A membuka transaction Repeatable Read saat row 501 berstatus open dan row 502 pending. B menulis paid pada row 501 lalu commit. A membaca kembali row 501, kemudian A sendiri menulis review pada row 502 yang tidak disentuh B sebelum membaca ulang. Semua event dan status di bawah adalah hasil schedule authored, bukan versi tuple yang diamati dari PostgreSQL.",
+      "sql": "WITH authored_trace(session_label, isolation_level, step_no, actor, row_id, event, visible_status, visibility_note) AS (\n  VALUES\n    ('A','REPEATABLE READ',1,'A','501','select_501_initial','open','versi committed sebelum snapshot A'),\n    ('B','READ COMMITTED',2,'B','501','b_update_501_paid_commit','paid','event concurrent committed setelah snapshot A'),\n    ('A','REPEATABLE READ',3,'A','501','select_501_after_b_commit','open','snapshot A tidak bergerak'),\n    ('A','REPEATABLE READ',4,'A','502','a_update_502_review','review','own write A'),\n    ('A','REPEATABLE READ',5,'A','502','select_502_after_own_update','review','own write visible bagi A')\n)\nSELECT session_label, isolation_level, step_no, actor, row_id, event, visible_status, visibility_note\nFROM authored_trace\nORDER BY step_no, session_label;",
+      "columns": ["session_label", "isolation_level", "step_no", "actor", "row_id", "event", "visible_status", "visibility_note"],
+      "rows": [
+        ["A", "REPEATABLE READ", "1", "A", "501", "select_501_initial", "open", "versi committed sebelum snapshot A"],
+        ["B", "READ COMMITTED", "2", "B", "501", "b_update_501_paid_commit", "paid", "event concurrent committed setelah snapshot A"],
+        ["A", "REPEATABLE READ", "3", "A", "501", "select_501_after_b_commit", "open", "snapshot A tidak bergerak"],
+        ["A", "REPEATABLE READ", "4", "A", "502", "a_update_502_review", "review", "own write A"],
+        ["A", "REPEATABLE READ", "5", "A", "502", "select_502_after_own_update", "review", "own write visible bagi A"]
+      ],
+      "ordered": true,
+      "explanation": "Trace authored memperlihatkan dua aturan visibility pada row yang diberi ID: commit B pada row 501 yang terjadi setelah snapshot A tidak terlihat oleh SELECT A berikutnya, sedangkan write A sendiri pada row 502 terlihat oleh A. Status paid tetap dicatat sebagai event B, bukan dihapus dari sejarah cerita. Result table ini bukan output MVCC engine dan tidak membuktikan bahwa A benar-benar memegang snapshot atau lock pada server tertentu."
+    },
+    "checks": [
+      {
+        "id": "l4m02l02-check-1",
+        "question": "Mengapa SELECT ketiga A pada Dataset B masih melihat open setelah B commit paid?",
+        "options": [
+          "Snapshot Repeatable Read A diambil sebelum commit B dan tidak bergerak mengikuti commit concurrent.",
+          "Repeatable Read selalu membaca dirty data dari transaction lain.",
+          "B sebenarnya tidak pernah commit sehingga status paid tidak ada dalam trace."
+        ],
+        "answer": 0,
+        "explanation": "Repeatable Read mempertahankan snapshot stabil terhadap perubahan concurrent setelah snapshot dibuat.",
+        "feedback": [
+          "Benar: paid adalah event committed setelah snapshot A, sehingga A tetap melihat open.",
+          "Salah: dirty data tidak terlihat pada Repeatable Read maupun Read Committed.",
+          "B commit dicatat jelas; yang berbeda adalah visibility A, bukan keberadaan event B."
+        ]
+      },
+      {
+        "id": "l4m02l02-check-2",
+        "question": "Apa yang harus terlihat pada SELECT row 502 setelah A sendiri UPDATE row 502 menjadi review?",
+        "options": ["open karena snapshot selalu mengalahkan perubahan lokal", "review karena transaction melihat efek perubahan yang dibuatnya sendiri", "paid karena commit B selalu merupakan versi terakhir"],
+        "answer": 1,
+        "explanation": "Snapshot menyaring perubahan concurrent, tetapi query transaction tetap melihat own writes yang belum commit.",
+        "feedback": [
+          "Snapshot tidak menyembunyikan update A sendiri dari A.",
+          "Benar: own write review menjadi visible bagi transaction A.",
+          "Paid adalah versi B yang tidak terlihat oleh snapshot A; ia bukan pengganti own write."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi status yang terlihat oleh Session A pada setiap langkah MVCC trace, lalu tandai mana yang berasal dari concurrent commit pada row 501 dan mana yang berasal dari own write pada row 502.",
+      "setup": "Gunakan Dataset B sebagai schedule authored: A mengambil Repeatable Read snapshot saat row 501 open dan row 502 pending, B commit paid pada row 501, A membaca row 501 lagi, lalu A menulis review pada row 502. Player tidak menjalankan SQL atau menginspeksi tuple metadata; hasil yang dipilih hanya expected trace.",
+      "starterSql": "WITH authored_trace(step_no, actor, row_id, event, visible_status) AS (\n  VALUES\n    (1,'A','501','select_501_initial','open'),\n    (2,'B','501','b_update_501_paid_commit','paid'),\n    (3,'A','501','select_501_after_b_commit','open'),\n    (4,'A','502','a_update_502_review','review')\n)\nSELECT step_no, actor, row_id, event, visible_status\nFROM authored_trace\nORDER BY step_no;",
+      "variants": [
+        {
+          "id": "l4m02l02-variant-1",
+          "question": "A mengambil snapshot saat amount invoice 90000. B kemudian mengubah amount menjadi 95000 dan commit. Pada SELECT A berikutnya di Repeatable Read, amount yang terlihat adalah apa?",
+          "options": ["95000 karena semua commit langsung masuk ke snapshot A", "90000 karena snapshot A mendahului commit B", "NULL karena B memakai session berbeda"],
+          "answer": 1,
+          "explanation": "Nilai concurrent yang commit setelah snapshot Repeatable Read tidak terlihat oleh SELECT berikutnya A.",
+          "feedback": [
+            "Itu model snapshot baru per statement, bukan Repeatable Read.",
+            "Benar: A tetap melihat 90000 dari snapshot awalnya.",
+            "Session berbeda tidak mengubah amount menjadi NULL; visibility hanya tetap pada versi snapshot."
+          ]
+        },
+        {
+          "id": "l4m02l02-variant-2",
+          "question": "A mengubah memo invoice 502 dari pending menjadi reviewed dalam transaction yang sama. Apa yang dilihat A saat membaca memo row 502 itu lagi sebelum COMMIT?",
+          "options": ["reviewed karena own write visible bagi transaction A", "pending karena MVCC menyembunyikan semua perubahan belum commit", "paid karena status dan memo selalu memakai versi B"],
+          "answer": 0,
+          "explanation": "Transaction harus dapat melihat perubahan yang dibuatnya sendiri untuk melanjutkan pekerjaan.",
+          "feedback": [
+            "Benar: own write reviewed terlihat oleh A walaupun belum commit.",
+            "Uncommitted concurrent write disembunyikan; aturan itu tidak menghapus own write.",
+            "B tidak menentukan memo A dan tidak menggantikan state lokal A."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l4m02l02-edge-1",
+          "question": "A Repeatable Read membaca row 501, B kemudian mengubah dan commit row 501, lalu A mencoba UPDATE row 501. Apa yang perlu disiapkan aplikasi?",
+          "options": ["Menganggap A pasti mendapat versi baru tanpa error", "Menangkap kemungkinan serialization failure, rollback, lalu retry seluruh transaction", "Menurunkan audit agar konflik tidak terlihat"],
+          "answer": 1,
+          "explanation": "Repeatable Read tidak dapat memodifikasi row 501 yang berubah setelah snapshot tanpa risiko serialization failure SQLSTATE 40001.",
+          "feedback": [
+            "Versi baru dapat membuat operasi A ditolak, bukan selalu otomatis diterapkan.",
+            "Benar: abort dan retry penuh diperlukan saat serialization failure terjadi.",
+            "Menghapus audit tidak memperbaiki konflik snapshot dan merusak bukti."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l4m02l02-edge-2",
+          "question": "Apa yang salah jika engineer menyebut status open pada trace A sebagai bukti bahwa status paid B gagal commit?",
+          "options": ["Snapshot A hanya membatasi visibility A; event paid B tetap bisa committed", "Benar, setiap snapshot lama membatalkan commit baru", "B commit selalu terlihat oleh semua snapshot sehingga trace mustahil"],
+          "answer": 0,
+          "explanation": "Perbedaan antara state yang committed dan state yang visible bagi session tertentu adalah inti MVCC.",
+          "feedback": [
+            "Benar: A dapat melihat open sementara B sudah commit paid pada dunia database.",
+            "Snapshot tidak membatalkan commit dan tidak mengontrol transaction B.",
+            "Commit B memang dapat tidak terlihat bagi snapshot A yang lebih lama."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Beri nama snapshot A sebelum mengikuti event: commit setelah snapshot tidak mengubah hasil SELECT A di Repeatable Read.",
+        "Tanyakan siapa yang menulis setiap nilai: concurrent write B dan own write A memiliki aturan visibility berbeda.",
+        "Jika row yang hendak diubah sudah berubah sejak snapshot, jangan menjanjikan success; siapkan rollback dan retry penuh."
+      ],
+      "solutionSql": "WITH authored_trace(step_no, actor, row_id, event, visible_status) AS (\n  VALUES\n    (1,'A','501','select_501_initial','open'),\n    (2,'B','501','b_update_501_paid_commit','paid'),\n    (3,'A','501','select_501_after_b_commit','open'),\n    (4,'A','502','a_update_502_review','review')\n)\nSELECT step_no, actor, row_id, event, visible_status\nFROM authored_trace\nORDER BY step_no;",
+      "solutionExplanation": "Reference SQL mengembalikan authored trace tunggal: A melihat open pada row 501 sebelum dan sesudah commit B, lalu melihat review pada row 502 setelah own write. Paid tetap menjadi event B; ia tidak menghilang, hanya berada di luar snapshot A. Jika A mencoba UPDATE row 501 yang berubah B, expected recovery adalah SQLSTATE 40001, rollback, dan retry penuh. Trace ini tidak menginspeksi tuple MVCC, tidak membuktikan lock lifetime, dan tidak menjamin transaction write bebas dari serialization failure.",
+      "critical": true
+    },
+    "reflection": "Jelaskan perbedaan antara versi paid pada row 501 yang sudah commit tetapi tidak visible bagi snapshot A dan versi review pada row 502 yang ditulis A sendiri. Apa yang terjadi jika A mencoba menulis kembali row 501, dan mengapa snapshot stabil belum cukup untuk menyatakan invariant Payment Ledger aman?"
+  },
+  {
+    "id": "l4m02l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": ["row-lock", "select-for-update", "nowait", "skip-locked", "payment-ledger"],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/explicit-locking.html",
+      "https://www.postgresql.org/docs/17/sql-select.html",
+      "https://www.postgresql.org/docs/17/transaction-iso.html"
+    ],
+    "hook": "Worker A memilih payment yang siap diproses, sementara Worker B sudah memegang row lock pada payment yang sama. Kapan `FOR UPDATE` menunggu, kapan `NOWAIT` gagal, dan kapan `SKIP LOCKED` sengaja melewati row?",
+    "objectives": [
+      "Membedakan pembacaan MVCC biasa dari SELECT FOR UPDATE yang mengambil row-level lock sampai akhir transaction.",
+      "Memprediksi perbedaan perilaku blocking, NOWAIT, dan SKIP LOCKED pada trace queue Payment Ledger.",
+      "Menjelaskan bahwa row lock mencegah writer atau locker yang konflik, bukan semua pembacaan biasa, serta tidak menjamin bebas deadlock."
+    ],
+    "sections": [
+      {
+        "title": "FOR UPDATE menambahkan koordinasi pada pembacaan",
+        "paragraphs": [
+          "SELECT biasa memakai MVCC snapshot dan umumnya tidak menunggu row writer. SELECT FOR UPDATE menambahkan niat: row yang ditemukan diperlakukan seolah akan di-update, sehingga transaction mengambil row-level lock. Lock ini mencegah transaction lain melakukan UPDATE, DELETE, atau locking clause yang konflik pada row tersebut sampai transaction pemegang lock berakhir. Lock bukan sekadar label di hasil SELECT; ia adalah koordinasi yang memengaruhi writer dan locker lain.",
+          "Row lock juga tidak berarti seluruh tabel atau semua pembaca berhenti. Dokumentasi PostgreSQL menyebut row-level lock tidak memengaruhi data querying biasa; ia memblokir writer dan locker pada row yang sama. Lock biasanya bertahan sampai akhir transaction, dan dapat dilepas ketika savepoint di-rollback. Karena itu transaction yang memegang lock harus singkat dan tidak menunggu input manusia atau network provider."
+        ]
+      },
+      {
+        "title": "NOWAIT dan SKIP LOCKED memilih trade-off berbeda",
+        "paragraphs": [
+          "Dengan NOWAIT, SELECT FOR UPDATE tidak menunggu row yang konflik; statement segera melaporkan error. Pada PostgreSQL, konflik row lock ini memakai SQLSTATE 55P03 dengan condition name `lock_not_available`. Ini cocok ketika caller lebih baik mengembalikan “coba lagi” atau memilih jalur lain daripada menahan request. Error itu bukan bukti payment gagal, bukan alasan menelan exception, dan bukan hasil yang dapat diubah menjadi sukses tanpa memutuskan transaction state. Aplikasi perlu memahami SQLSTATE atau error contract yang diterima dari driver dan menentukan retry/backoff secara terpisah.",
+          "Dengan SKIP LOCKED, row yang belum bisa dikunci dilewati. Ini berguna untuk beberapa consumer queue yang ingin mengambil pekerjaan lain, tetapi hasilnya sengaja tidak konsisten sebagai pandangan umum: row yang dikembalikan bukan daftar lengkap row yang cocok saat itu. Result set kosong juga tidak membuktikan queue kosong; semua row yang cocok mungkin sedang locked. SKIP LOCKED bukan pilihan tepat untuk laporan saldo lengkap, dan tidak membuktikan row yang dilewati sudah selesai diproses. Queue tetap membutuhkan status bisnis, lease atau timeout, retry, dan idempotensi."
+        ]
+      },
+      {
+        "title": "Lock tidak menghapus semua risiko concurrency",
+        "paragraphs": [
+          "FOR UPDATE mengunci row yang dipilih, bukan predikat abstrak untuk semua row yang mungkin muncul kemudian. Dua transaction yang mengunci beberapa row dalam urutan berbeda masih dapat deadlock; PostgreSQL akan mendeteksi dan membatalkan salah satunya. Urutan lock yang konsisten mengurangi risiko, tetapi caller tetap perlu retry untuk deadlock dan serialization failure. NOWAIT mengubah pengalaman menunggu menjadi error, sedangkan SKIP LOCKED mengubah hasil menjadi subset; keduanya bukan pengganti invariant dan business key.",
+          "Worked example lesson ini memakai tabel `VALUES` yang menggambarkan authored queue trace. Result table menyatakan row 501 dipegang B, lalu FOR UPDATE biasa menunggu, NOWAIT error, dan SKIP LOCKED memilih 502. Tidak ada lock yang benar-benar diambil, tidak ada dua worker yang berjalan, dan tidak ada claim bahwa payment 501 telah diproses. Tujuannya membangun keputusan yang dapat diaudit sebelum learner mempelajari bukti runtime seperti `pg_locks` atau metrics."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset C — authored queue trace. Row payment 501 berstatus ready tetapi sedang dipegang Worker B; row 502 juga ready dan tidak terkunci. Trace membandingkan tiga policy Worker A. Ini adalah scenario dan expected result yang ditulis untuk latihan, bukan observasi lock PostgreSQL.",
+      "sql": "WITH authored_trace(policy, worker, payment_id, initial_state, lock_state, outcome, sqlstate, returned_reason) AS (\n  VALUES\n    ('FOR UPDATE','A','501','ready','held by B','waits',NULL,'conflicting row lock'),\n    ('FOR UPDATE NOWAIT','A','501','ready','held by B','error','55P03','lock_not_available'),\n    ('FOR UPDATE SKIP LOCKED','A','501','ready','held by B','skipped',NULL,'locked row omitted'),\n    ('FOR UPDATE SKIP LOCKED','A','502','ready','free','claimed',NULL,'free matching row returned')\n)\nSELECT policy, worker, payment_id, initial_state, lock_state, outcome, sqlstate, returned_reason\nFROM authored_trace\nORDER BY CASE policy WHEN 'FOR UPDATE' THEN 1 WHEN 'FOR UPDATE NOWAIT' THEN 2 ELSE 3 END, payment_id;",
+      "columns": ["policy", "worker", "payment_id", "initial_state", "lock_state", "outcome", "sqlstate", "returned_reason"],
+      "rows": [
+        ["FOR UPDATE", "A", "501", "ready", "held by B", "waits", null, "conflicting row lock"],
+        ["FOR UPDATE NOWAIT", "A", "501", "ready", "held by B", "error", "55P03", "lock_not_available"],
+        ["FOR UPDATE SKIP LOCKED", "A", "501", "ready", "held by B", "skipped", null, "locked row omitted"],
+        ["FOR UPDATE SKIP LOCKED", "A", "502", "ready", "free", "claimed", null, "free matching row returned"]
+      ],
+      "ordered": true,
+      "explanation": "Authored trace memodelkan pilihan policy tanpa mengklaim lock runtime. FOR UPDATE biasa menunggu row 501 yang dipegang B; NOWAIT menghasilkan error segera dengan SQLSTATE 55P03 (`lock_not_available`); SKIP LOCKED melewati 501 dan dapat mengembalikan 502. Jika result set SKIP LOCKED kosong, itu juga tidak membuktikan queue kosong karena semua row yang cocok dapat sedang locked. Row 502 disebut claimed hanya sebagai hasil trace selection, bukan bukti bahwa worker telah menulis status atau commit payment."
+    },
+    "checks": [
+      {
+        "id": "l4m02l03-check-1",
+        "question": "Apa perbedaan utama FOR UPDATE dari SELECT biasa pada row payment yang sama?",
+        "options": [
+          "FOR UPDATE mengambil row-level lock sehingga writer atau locker konflik pada row itu dapat menunggu.",
+          "FOR UPDATE membuat semua SELECT biasa di seluruh database menunggu.",
+          "FOR UPDATE mengubah payment menjadi committed tanpa memerlukan COMMIT transaction."
+        ],
+        "answer": 0,
+        "explanation": "Locking clause menambahkan koordinasi row-level dan biasanya ditahan sampai transaction berakhir; ia tidak mengubah semua pembacaan menjadi blocking.",
+        "feedback": [
+          "Benar: konflik writer/locker pada row yang sama dipengaruhi oleh row lock.",
+          "Salah: row-level lock tidak memblokir pembacaan biasa yang tidak meminta lock.",
+          "Salah: SELECT FOR UPDATE tidak commit perubahan bisnis dan bukan pengganti COMMIT."
+        ]
+      },
+      {
+        "id": "l4m02l03-check-2",
+        "question": "Apa arti SKIP LOCKED pada trace payment queue?",
+        "options": ["Row 501 dihapus dari database agar worker lain tidak melihatnya", "Row yang tidak bisa dikunci dilewati dan row 502 yang bebas dapat dikembalikan", "Semua row ready pasti dikembalikan tanpa menunggu"],
+        "answer": 1,
+        "explanation": "SKIP LOCKED sengaja menghasilkan subset yang mengabaikan row konflik; ia tidak menghapus data atau menjamin hasil lengkap.",
+        "feedback": [
+          "SKIP LOCKED hanya memengaruhi hasil query saat itu; ia tidak menghapus row.",
+          "Benar: 501 dilewati dan 502 menjadi kandidat yang dapat dikembalikan.",
+          "Row konflik bisa hilang dari hasil, sehingga hasil bukan daftar lengkap."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Pilih outcome authored untuk Worker A ketika payment 501 dipegang Worker B dan payment 502 bebas: menunggu, error, melewati, atau mengklaim kandidat.",
+      "setup": "Gunakan Dataset C sebagai trace queue yang ditulis eksplisit. Row 501 ready tetapi lock state-nya held by B; row 502 ready dan free. Aktivitas tidak menjalankan FOR UPDATE, tidak mengamati pg_locks, dan tidak menulis status payment.",
+      "starterSql": "WITH authored_queue(policy, payment_id, lock_state, outcome, sqlstate) AS (\n  VALUES\n    ('FOR UPDATE','501','held by B','waits',NULL),\n    ('FOR UPDATE NOWAIT','501','held by B','error','55P03'),\n    ('FOR UPDATE SKIP LOCKED','501','held by B','skipped',NULL),\n    ('FOR UPDATE SKIP LOCKED','502','free','claimed',NULL)\n)\nSELECT policy, payment_id, lock_state, outcome, sqlstate\nFROM authored_queue\nORDER BY CASE policy WHEN 'FOR UPDATE' THEN 1 WHEN 'FOR UPDATE NOWAIT' THEN 2 ELSE 3 END, payment_id;",
+      "variants": [
+        {
+          "id": "l4m02l03-variant-1",
+          "question": "Worker A memakai FOR UPDATE NOWAIT pada payment 501 yang sedang dipegang B. Apa outcome authored?",
+          "options": ["A menunggu sampai B commit", "Statement A error segera karena row tidak dapat dikunci saat itu", "A membaca row 501 dan otomatis menganggap lock B selesai"],
+          "answer": 1,
+          "explanation": "NOWAIT meminta kegagalan segera jika row-level lock konflik, bukan antrean menunggu; pada PostgreSQL error ini menggunakan SQLSTATE 55P03 (`lock_not_available`).",
+          "feedback": [
+            "Menunggu adalah perilaku FOR UPDATE tanpa NOWAIT.",
+            "Benar: NOWAIT mengembalikan SQLSTATE 55P03 (`lock_not_available`) saat row belum dapat dikunci.",
+            "A tidak boleh mengarang bahwa lock B telah dilepas."
+          ]
+        },
+        {
+          "id": "l4m02l03-variant-2",
+          "question": "Worker A memakai FOR UPDATE SKIP LOCKED dan hanya payment 501 yang cocok tetapi masih dipegang B. Apa hasilnya?",
+          "options": ["Result set kosong untuk policy itu; row 501 dilewati", "A mendapat 501 karena SKIP LOCKED memaksa takeover", "A mendapat error 40001 setiap kali row terkunci"],
+          "answer": 0,
+          "explanation": "SKIP LOCKED tidak mengambil alih row; ia melewati row yang tidak dapat dikunci dan dapat mengembalikan set kosong. Set kosong tidak membuktikan queue kosong karena semua row yang cocok mungkin sedang locked.",
+          "feedback": [
+            "Benar: tidak ada kandidat lain yang bebas; result set dapat kosong meskipun row yang cocok masih ada dan locked.",
+            "SKIP LOCKED tidak merebut lock dari B.",
+            "Error serialization bukan arti umum dari row yang dilewati oleh SKIP LOCKED."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l4m02l03-edge-1",
+          "question": "Dua worker mengunci payment 501 lalu 502 dengan urutan berlawanan dan keduanya menunggu. Apa risiko yang harus ditangani?",
+          "options": ["Deadlock; database dapat membatalkan salah satu transaction dan aplikasi perlu retry yang aman", "Tidak ada risiko karena row lock selalu mengurutkan worker otomatis", "SKIP LOCKED akan otomatis memperbaiki semua lock yang berlawanan"],
+          "answer": 0,
+          "explanation": "Pengambilan lock multi-row dengan urutan berbeda dapat membentuk siklus tunggu; PostgreSQL mendeteksi deadlock dan membatalkan salah satu transaction.",
+          "feedback": [
+            "Benar: gunakan urutan lock konsisten dan siapkan retry transaction yang idempotent.",
+            "Row lock tidak memilih urutan global untuk application path yang berbeda.",
+            "SKIP LOCKED hanya berlaku pada query yang memintanya dan bukan penyembuh umum deadlock."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l4m02l03-edge-2",
+          "question": "Queue memakai SKIP LOCKED dan result set hanya berisi payment 502. Kesimpulan apa yang tidak boleh dibuat?",
+          "options": ["Payment 501 tidak berada dalam hasil query saat itu karena sedang locked", "Payment 501 pasti sudah selesai diproses dan tidak akan perlu retry", "Queue consumer dapat memproses 502 tanpa mengklaim bahwa daftar ready sudah lengkap"],
+          "answer": 1,
+          "explanation": "SKIP LOCKED hanya memberi subset bebas konflik pada saat query; result set kosong tidak membuktikan queue kosong karena semua row cocok dapat locked, dan row yang dilewati masih memerlukan status serta retry lifecycle.",
+          "feedback": [
+            "Itu sesuai makna trace: 501 dilewati karena lock state.",
+            "Benar: dilewati bukan berarti selesai, sukses, atau tidak perlu diproses.",
+            "Consumer boleh mengambil 502, tetapi tidak boleh menganggap hasilnya laporan lengkap."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Baca policy sebagai keputusan koordinasi: FOR UPDATE menunggu, NOWAIT error, SKIP LOCKED melewati.",
+        "Tanyakan apakah row yang dilewati benar-benar selesai atau hanya tidak tersedia pada snapshot/lock attempt saat itu.",
+        "Untuk lebih dari satu row, tentukan urutan lock konsisten dan siapkan retry setelah deadlock atau error concurrency."
+      ],
+      "solutionSql": "WITH authored_queue(policy, payment_id, lock_state, outcome, sqlstate) AS (\n  VALUES\n    ('FOR UPDATE','501','held by B','waits',NULL),\n    ('FOR UPDATE NOWAIT','501','held by B','error','55P03'),\n    ('FOR UPDATE SKIP LOCKED','501','held by B','skipped',NULL),\n    ('FOR UPDATE SKIP LOCKED','502','free','claimed',NULL)\n)\nSELECT policy, payment_id, lock_state, outcome, sqlstate\nFROM authored_queue\nORDER BY CASE policy WHEN 'FOR UPDATE' THEN 1 WHEN 'FOR UPDATE NOWAIT' THEN 2 ELSE 3 END, payment_id;",
+      "solutionExplanation": "Reference SQL mengembalikan trace authored yang memisahkan waiting, immediate error 55P03 (`lock_not_available`), skipped row, dan free candidate. `claimed` di sini hanya label expected result selection; ia bukan INSERT, UPDATE, lock observation, atau commit. Result set kosong dari SKIP LOCKED juga tidak membuktikan queue kosong. Implementasi nyata masih membutuhkan transaction boundary pendek, status/lease queue, deadlock handling, timeout, dan idempotent retry.",
+      "critical": true
+    },
+    "reflection": "Bandingkan FOR UPDATE, NOWAIT, dan SKIP LOCKED pada payment queue. Jelaskan mengapa row lock tidak memblokir semua SELECT biasa, mengapa SKIP LOCKED bukan laporan lengkap, dan bagaimana deadlock atau retry harus masuk ke desain worker."
+  }
+]
