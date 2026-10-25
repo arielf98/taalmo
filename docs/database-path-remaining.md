@@ -1,16 +1,6 @@
 # Remaining curriculum authoring
 
-The following 63 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
-
-## L4 — Transactions & Concurrency
-
-### L4M05 — Reliable Side Effects
-
-Prerequisite: l4m04. Scenario: Payment Ledger.
-
-- [ ] `l4m05l01` — Transactional outbox
-- [ ] `l4m05l02` — Worker retry dan deduplication
-- [ ] `l4m05l03` — Concurrency certification
+The following 60 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L5 — Performance Engineering
 

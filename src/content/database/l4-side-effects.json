@@ -1,0 +1,612 @@
+[
+  {
+    "id": "l4m05l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "transactional-outbox",
+      "side-effects",
+      "atomicity",
+      "payment-ledger"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/tutorial-transactions.html",
+      "https://www.postgresql.org/docs/17/dml-returning.html",
+      "https://www.postgresql.org/docs/17/queries-with.html"
+    ],
+    "hook": "Pembayaran berhasil commit, tetapi enqueue ke provider notifikasi gagal sesaat kemudian. Jika pembayaran tidak boleh hilang dan notifikasi tidak boleh dianggap sudah terkirim, fakta apa yang harus disimpan bersama commit database?",
+    "objectives": [
+      "Menjelaskan transactional outbox sebagai catatan niat side effect yang commit bersama perubahan bisnis.",
+      "Membedakan atomicity database dari delivery ke broker, provider, atau consumer eksternal.",
+      "Mengenali batas DML CTE dan memilih RETURNING atau statement terpisah untuk membaca hasil yang baru ditulis."
+    ],
+    "sections": [
+      {
+        "title": "Gap antara commit dan enqueue",
+        "paragraphs": [
+          "Menyimpan payment lalu langsung memanggil broker membuat dua sistem memiliki boundary berbeda. Payment dapat commit tetapi proses mati sebelum publish, atau publish terjadi tetapi transaction database rollback. Kedua urutan itu menghasilkan gap: ada fakta bisnis tanpa pesan, atau pesan tanpa fakta bisnis yang sudah commit. Transactional outbox memindahkan niat side effect ke tabel database yang ditulis dalam transaction yang sama dengan payment.",
+          "Outbox bukan broker dan bukan bukti pesan sudah dikirim. Baris outbox yang committed adalah pekerjaan yang harus ditemukan worker. Worker dapat mengirim lebih dari sekali, provider dapat timeout setelah menerima request, dan consumer perlu stable effect identity. Desain ini memberi sumber pekerjaan yang dapat direkonsiliasi; ia tidak membuat jaringan, broker, dan database menjadi satu transaction global."
+        ]
+      },
+      {
+        "title": "Satu commit, dua catatan internal",
+        "paragraphs": [
+          "Dalam contoh, payment 1001 dan outbox event 9001 berada di antara BEGIN dan COMMIT. Bila salah satu INSERT gagal sebelum commit, ROLLBACK membuang payment dan event bersama-sama. Bila commit sukses, worker boleh mengambil event berstatus ready. Status ready berarti siap dicoba, bukan delivered. Kolom effect_key harus stabil dan payload harus menyatakan fakta yang ingin diproses, bukan data yang berubah diam-diam setiap retry.",
+          "Fixture memakai TEMP table dan hanya memodelkan database internal. Tidak ada broker, worker, provider, signature, atau pengiriman jaringan yang benar-benar berjalan. Karena itu hasil SELECT menunjukkan pasangan catatan yang diharapkan, bukan bukti availability broker atau keberhasilan notifikasi. Di sistem nyata, worker membaca outbox setelah commit dan mencatat status percobaan dengan kebijakan retry yang terpisah."
+        ]
+      },
+      {
+        "title": "RETURNING sebagai komunikasi, bukan pembacaan ulang snapshot",
+        "paragraphs": [
+          "PostgreSQL menjalankan data-modifying statements dalam satu WITH memakai snapshot yang sama; statement lain tidak otomatis melihat perubahan target yang baru dibuat dalam statement tersebut. Karena itu pola INSERT ... RETURNING dapat meneruskan baris yang baru ditulis ke query lain, atau aplikasi dapat memisahkan INSERT dan SELECT menjadi statement berbeda dalam transaction. Jangan mengandalkan outer SELECT untuk membaca ulang target hasil INSERT pada DML CTE yang sama.",
+          "Worked script sengaja memakai statement terpisah: INSERT payment, INSERT outbox, COMMIT, lalu satu SELECT final. DML tidak menghasilkan resultset yang mengganggu tabel hasil. Pola ini mudah dibaca dan memenuhi tujuan latihan tanpa mengklaim bahwa query prediksi di browser mengeksekusi SQL atau mengantrekan event sungguhan."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Mini fixture Payment Ledger: dua TEMP table pg_temp untuk payment dan outbox. Payment 1001 serta event effect_key payment:pay-1001 ditulis dalam satu transaction, lalu dibaca setelah COMMIT.",
+      "setupSql": "CREATE TEMP TABLE lesson_outbox_payments (payment_id BIGINT PRIMARY KEY, payment_key TEXT NOT NULL UNIQUE, amount NUMERIC(12,2) NOT NULL CHECK (amount > 0), status TEXT NOT NULL CHECK (status IN ('captured','failed')));\nCREATE TEMP TABLE lesson_outbox_events (event_id BIGINT PRIMARY KEY, effect_key TEXT NOT NULL UNIQUE, payment_id BIGINT NOT NULL REFERENCES pg_temp.lesson_outbox_payments(payment_id), event_type TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('ready','sent')));",
+      "sql": "BEGIN;\nINSERT INTO pg_temp.lesson_outbox_payments (payment_id, payment_key, amount, status) VALUES (1001, 'pay-1001', 50000.00, 'captured');\nINSERT INTO pg_temp.lesson_outbox_events (event_id, effect_key, payment_id, event_type, payload, status) VALUES (9001, 'payment:pay-1001', 1001, 'payment.captured', '{\"amount\":50000}', 'ready');\nCOMMIT;\nSELECT p.payment_id, p.status, o.effect_key, o.status AS outbox_status, (o.payment_id IS NOT NULL) AS paired FROM pg_temp.lesson_outbox_payments p LEFT JOIN pg_temp.lesson_outbox_events o ON o.payment_id = p.payment_id ORDER BY p.payment_id;",
+      "columns": [
+        "payment_id",
+        "status",
+        "effect_key",
+        "outbox_status",
+        "paired"
+      ],
+      "rows": [
+        [
+          "1001",
+          "captured",
+          "payment:pay-1001",
+          "ready",
+          "t"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Satu payment dan satu event outbox terlihat bersama setelah COMMIT. status ready hanya menyatakan event siap diproses worker; ia bukan bukti broker menerima pesan atau provider mengirim notifikasi. Statement INSERT dan SELECT dipisahkan untuk menghindari asumsi salah tentang snapshot DML CTE."
+    },
+    "checks": [
+      {
+        "id": "l4m05l01-check-1",
+        "question": "Mengapa payment dan outbox event ditulis dalam transaction yang sama?",
+        "options": [
+          "Agar payment yang commit tidak meninggalkan gap internal ketika proses enqueue belum berjalan.",
+          "Agar COMMIT database otomatis mengirim event ke broker.",
+          "Agar worker tidak perlu retry karena event pasti delivered."
+        ],
+        "answer": 0,
+        "explanation": "Outbox mengikat fakta payment dan niat side effect pada atomicity database, sementara delivery tetap pekerjaan berikutnya.",
+        "feedback": [
+          "Benar: jika transaction rollback, kedua catatan hilang; jika commit, worker menemukan pekerjaan.",
+          "COMMIT hanya menyelesaikan perubahan database, bukan network publish.",
+          "Worker dan consumer tetap menghadapi timeout, retry, dan duplicate delivery."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l4m05l01-check-2",
+        "question": "Apa arti status ready pada event outbox 9001?",
+        "options": [
+          "Provider eksternal sudah mengirim notifikasi dan tidak boleh dicoba lagi.",
+          "Event tersedia untuk worker; delivery dan efek consumer belum terbukti.",
+          "Payment database belum commit sehingga worker harus membaca uncommitted row."
+        ],
+        "answer": 1,
+        "explanation": "Status ready adalah state internal pekerjaan, bukan acknowledgement dari sistem eksternal.",
+        "feedback": [
+          "ready bukan delivered; menganggap demikian dapat kehilangan retry yang dibutuhkan.",
+          "Benar: worker membaca event setelah commit dan mengelola outcome delivery.",
+          "Worker tidak boleh membaca uncommitted data; outbox menjadi terlihat setelah commit."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi pasangan payment dan outbox setelah commit atau rollback.",
+      "setup": "Gunakan TEMP tables pada worked example. Payment dan event adalah catatan internal; status ready tidak berarti pesan sudah dikirim. Aktivitas memprediksi hasil dan tidak menjalankan SQL learner.",
+      "starterSql": "SELECT p.payment_id, p.status, o.effect_key, o.status AS outbox_status\nFROM pg_temp.lesson_outbox_payments p\nLEFT JOIN pg_temp.lesson_outbox_events o ON o.payment_id = p.payment_id\nORDER BY p.payment_id;",
+      "variants": [
+        {
+          "id": "l4m05l01-variant-1",
+          "question": "Payment 1101 captured dan event effect_key payment:pay-1101 sama-sama commit. Apa state internal yang tepat?",
+          "options": [
+            "Payment berpasangan dengan outbox ready; worker masih perlu memprosesnya.",
+            "Payment dianggap delivered karena outbox row sudah ada.",
+            "Payment harus dihapus sampai provider mengirim acknowledgement."
+          ],
+          "answer": 0,
+          "explanation": "Outbox row membuktikan niat side effect tersimpan bersama payment, bukan delivery eksternal.",
+          "feedback": [
+            "Benar: pasangan internal tersedia dan status ready menunggu worker.",
+            "Row outbox tidak sama dengan acknowledgement provider.",
+            "Menghapus payment menghilangkan fakta bisnis yang sudah commit."
+          ]
+        },
+        {
+          "id": "l4m05l01-variant-2",
+          "question": "INSERT payment 1102 berhasil tetapi INSERT outbox gagal sebelum COMMIT, lalu aplikasi melakukan ROLLBACK. Apa yang terlihat setelahnya?",
+          "options": [
+            "Payment tetap ada karena INSERT pertama sudah berhasil.",
+            "Outbox tetap ada tanpa payment agar worker dapat menebak payload.",
+            "Payment dan outbox sama-sama tidak terlihat karena satu transaction dibatalkan."
+          ],
+          "answer": 2,
+          "explanation": "Atomicity menghapus seluruh perubahan database dalam transaction yang di-rollback.",
+          "feedback": [
+            "INSERT pertama masih uncommitted ketika rollback terjadi.",
+            "Outbox tanpa payment akan menjadi pekerjaan yatim dan bukan hasil atomic yang diinginkan.",
+            "Benar: rollback menghapus dua catatan internal bersama-sama."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l4m05l01-edge-1",
+          "question": "Provider berhasil charge sebelum transaction database rollback. Apa batas jaminan transactional outbox?",
+          "options": [
+            "Rollback database otomatis membatalkan charge provider.",
+            "Outbox menjadikan provider bagian dari transaction global.",
+            "Database hanya menjamin catatan internal; charge eksternal perlu rekonsiliasi atau kompensasi."
+          ],
+          "answer": 2,
+          "explanation": "Outbox menutup gap internal payment–event, tetapi tidak meng-rollback side effect yang sudah terjadi di luar database.",
+          "feedback": [
+            "Rollback tidak mempunyai kuasa pada provider eksternal.",
+            "Outbox bukan distributed transaction atau broker acknowledgement.",
+            "Benar: outcome provider perlu dicari, direkonsiliasi, dan tidak diulang secara buta."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l4m05l01-edge-2",
+          "question": "Apa pilihan aman ketika perlu memakai id yang baru dibuat oleh INSERT dalam query berikutnya pada transaction?",
+          "options": [
+            "Andalkan outer SELECT dalam DML CTE untuk membaca target baru dari snapshot yang sama.",
+            "Gunakan RETURNING sebagai komunikasi atau pisahkan INSERT dan SELECT menjadi statement berbeda.",
+            "Jalankan SELECT tanpa commit agar row uncommitted selalu terlihat oleh semua session."
+          ],
+          "answer": 1,
+          "explanation": "RETURNING meneruskan row yang dimodifikasi; statement terpisah setelah INSERT dapat membaca own writes, termasuk saat snapshot transaksi tetap pada Repeatable Read atau Serializable.",
+          "feedback": [
+            "Data-modifying CTE memakai snapshot yang sama sehingga outer SELECT tidak otomatis membaca perubahan target.",
+            "Benar: RETURNING atau statement terpisah adalah pola yang dapat dijelaskan dan diaudit.",
+            "Session lain tidak melihat row uncommitted dan transaksi harus tetap memiliki boundary yang jelas."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Tentukan dulu dua fakta internal yang harus hidup atau hilang bersama: payment dan outbox event.",
+        "Status ready berarti pekerjaan tersedia, bukan delivery berhasil.",
+        "Untuk INSERT yang perlu dikomunikasikan, pilih RETURNING atau statement terpisah; jangan mengandalkan outer SELECT pada snapshot DML CTE."
+      ],
+      "solutionSql": "BEGIN;\nINSERT INTO pg_temp.lesson_outbox_payments (payment_id, payment_key, amount, status) VALUES (1001, 'pay-1001', 50000.00, 'captured');\nINSERT INTO pg_temp.lesson_outbox_events (event_id, effect_key, payment_id, event_type, payload, status) VALUES (9001, 'payment:pay-1001', 1001, 'payment.captured', '{\"amount\":50000}', 'ready');\nCOMMIT;\nSELECT p.payment_id, p.status, o.effect_key, o.status AS outbox_status, (o.payment_id IS NOT NULL) AS paired FROM pg_temp.lesson_outbox_payments p LEFT JOIN pg_temp.lesson_outbox_events o ON o.payment_id = p.payment_id ORDER BY p.payment_id;",
+      "solutionExplanation": "Reference script menulis payment dan outbox dalam satu transaction lalu melakukan satu SELECT setelah COMMIT. Hasilnya satu pasangan internal dengan status ready. Tidak ada broker, worker, provider, atau external acknowledgement yang dijalankan; delivery at-least-once dan deduplication menjadi topik lesson berikutnya.",
+      "critical": true
+    },
+    "reflection": "Jelaskan gap yang ditutup oleh transactional outbox dan gap yang tetap berada di luar database. Mengapa status ready bukan delivered, dan kapan RETURNING atau statement terpisah lebih tepat daripada membaca target dari outer SELECT DML CTE?"
+  },
+  {
+    "id": "l4m05l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "worker-retry",
+      "deduplication",
+      "at-least-once",
+      "payment-ledger"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/sql-insert.html",
+      "https://www.postgresql.org/docs/17/sql-select.html",
+      "https://www.postgresql.org/docs/17/explicit-locking.html"
+    ],
+    "hook": "Worker mengirim effect payment:1001, koneksi timeout, lalu tidak tahu apakah consumer sudah menerapkan debit. Bagaimana retry dapat aman ketika delivery at-least-once memang mengizinkan duplicate request?",
+    "objectives": [
+      "Menjelaskan lease, retry, dan ambiguity timeout tanpa menganggap retry sebagai exactly-once delivery.",
+      "Menggunakan stable effect identity dan payload comparison untuk deduplication atau menahan konflik.",
+      "Membedakan claim job, publish, dan mark-sent sebagai window terpisah yang perlu rekonsiliasi."
+    ],
+    "sections": [
+      {
+        "title": "At-least-once berarti duplicate mungkin",
+        "paragraphs": [
+          "Worker biasanya mengambil event ready, memberi lease, lalu memanggil provider. Jika provider timeout, worker tidak dapat membedakan request yang belum diterima dari request yang sudah diterapkan tetapi acknowledgement-nya hilang. Retry adalah cara mencapai at-least-once attempt, bukan bukti exactly-once delivery. Consumer harus mengenali effect_key stabil dan membuat efek bisnisnya idempotent atau menolak payload yang konflik.",
+          "Lease membatasi worker yang menganggap dirinya memiliki pekerjaan pada satu waktu, tetapi lease expiry tidak menghapus kemungkinan worker lama masih berjalan. Claim, publish, dan mark-sent bukan satu atomic action lintas jaringan. Window publish-then-mark dapat menghasilkan duplicate; mark-then-publish dapat kehilangan effect bila proses mati. Rekonsiliasi dan consumer dedup mengatasi ketidakpastian itu secara terukur."
+        ]
+      },
+      {
+        "title": "Identity tetap, payload harus konsisten",
+        "paragraphs": [
+          "Effect key seperti payment:1002 harus mewakili efek bisnis yang sama pada setiap retry. Jika retry membawa payload amount 75000 tetapi consumer sudah melihat amount 70000 untuk key yang sama, worker tidak boleh diam-diam overwrite. Tahan payload conflict untuk investigasi, karena mengganti payload dapat mengubah uang atau notifikasi yang seharusnya immutable. Unique constraint pada effect_key membantu memusatkan identity, tetapi tidak menyelesaikan delivery.",
+          "Consumer dedup yang aman perlu atomic dengan efeknya: catat applied effect key dan perubahan domain dalam satu transaction, atau gunakan constraint yang membuat duplicate menjadi no-op yang dapat diaudit. Hanya menaruh flag processed setelah publish tidak cukup bila proses mati di antara dua langkah. Fixture lesson mengasumsikan state lease dan effect sebagai input authored; ia tidak menjalankan broker atau worker nyata."
+        ]
+      },
+      {
+        "title": "SKIP LOCKED bukan sertifikat pekerjaan selesai",
+        "paragraphs": [
+          "SKIP LOCKED dapat membantu beberapa consumer mengambil baris yang tidak sedang dikunci, tetapi PostgreSQL memperingatkan bahwa hasilnya inconsistent view dan cocok untuk queue-like table, bukan pembacaan umum. Worker yang melihat nol baris belum boleh menyimpulkan tidak ada pekerjaan: baris dapat sedang di-lease, filter dapat menyembunyikannya, atau transaksi lain belum melepaskan lock. Claim query juga harus menyimpan lease dan retry metadata secara eksplisit.",
+          "Worked report mengklasifikasikan tiga row authored: job processing dengan lease expired dipilih untuk reclaim, job ready dengan applied payload berbeda ditahan sebagai payload-conflict-hold, dan job sent dengan effect identik menjadi dedup-noop. Ready tanpa applied effect akan masuk claim-and-publish, tetapi kondisi itu hanya dibahas pada variasi latihan. Ini rubric penalaran, bukan pengamatan lock queue atau bukti bahwa SKIP LOCKED menghilangkan duplicate."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Mini fixture worker: tiga TEMP job dan dua applied effect pada pg_temp. Lease, status, attempts, dan payload conflict sudah dinyatakan sebagai authored input untuk laporan prediksi.",
+      "setupSql": "CREATE TEMP TABLE lesson_worker_jobs (job_id BIGINT PRIMARY KEY, effect_key TEXT NOT NULL UNIQUE, payload TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('ready','processing','sent')), lease_state TEXT NOT NULL CHECK (lease_state IN ('none','expired','done')), attempts INTEGER NOT NULL CHECK (attempts >= 0), last_error TEXT);\nCREATE TEMP TABLE lesson_worker_effects (effect_key TEXT PRIMARY KEY, payload TEXT NOT NULL, applied_label TEXT NOT NULL);\nINSERT INTO pg_temp.lesson_worker_jobs VALUES (9001,'payment:1001','{\"amount\":50000}','processing','expired',2,'network-timeout'), (9002,'payment:1002','{\"amount\":75000}','ready','none',0,NULL), (9003,'payment:1003','{\"amount\":20000}','sent','done',2,NULL);\nINSERT INTO pg_temp.lesson_worker_effects VALUES ('payment:1002','{\"amount\":70000}','existing-conflict'), ('payment:1003','{\"amount\":20000}','applied');",
+      "sql": "SELECT j.effect_key, j.status, j.attempts, e.payload AS applied_payload, CASE WHEN e.effect_key IS NOT NULL AND e.payload = j.payload THEN 'dedup-noop' WHEN e.effect_key IS NOT NULL AND e.payload <> j.payload THEN 'payload-conflict-hold' WHEN j.status = 'processing' AND j.lease_state = 'expired' THEN 'reclaim-and-retry' WHEN j.status = 'ready' THEN 'claim-and-publish' ELSE 'inspect' END AS next_action FROM pg_temp.lesson_worker_jobs j LEFT JOIN pg_temp.lesson_worker_effects e ON e.effect_key = j.effect_key ORDER BY j.effect_key;",
+      "columns": [
+        "effect_key",
+        "status",
+        "attempts",
+        "applied_payload",
+        "next_action"
+      ],
+      "rows": [
+        [
+          "payment:1001",
+          "processing",
+          "2",
+          null,
+          "reclaim-and-retry"
+        ],
+        [
+          "payment:1002",
+          "ready",
+          "0",
+          "{\"amount\":70000}",
+          "payload-conflict-hold"
+        ],
+        [
+          "payment:1003",
+          "sent",
+          "2",
+          "{\"amount\":20000}",
+          "dedup-noop"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Job 1001 memiliki lease expired dan timeout sehingga boleh direclaim dengan retry bounded. Job 1002 menemukan effect key sama tetapi payload berbeda, sehingga ditahan. Job 1003 sudah mempunyai payload identik dan retry menjadi no-op dedup. Tidak ada hasil yang menyatakan broker benar-benar menerima request."
+    },
+    "checks": [
+      {
+        "id": "l4m05l02-check-1",
+        "question": "Mengapa consumer perlu stable effect_key ketika worker memakai at-least-once retry?",
+        "options": [
+          "Agar consumer dapat mengenali retry yang sama dan membuat duplicate menjadi no-op atau konflik yang ditahan.",
+          "Agar network timeout tidak pernah terjadi pada request kedua.",
+          "Agar satu COMMIT database mengunci provider eksternal sampai acknowledgement."
+        ],
+        "answer": 0,
+        "explanation": "Stable identity memungkinkan deduplication; ia tidak menghapus ketidakpastian jaringan.",
+        "feedback": [
+          "Benar: identity stabil adalah dasar catatan applied effect dan payload comparison.",
+          "Retry justru diperlukan karena timeout dan duplicate mungkin terjadi.",
+          "Database tidak dapat memegang lock global atas provider eksternal."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l4m05l02-check-2",
+        "question": "Apa tindakan aman ketika effect_key sama tetapi payload retry berbeda dari payload yang sudah applied?",
+        "options": [
+          "Overwrite payload lama agar retry terbaru selalu menang.",
+          "Tahan payload conflict untuk rekonsiliasi; jangan menerapkan efek kedua secara diam-diam.",
+          "Hapus effect key agar kedua payload dapat dicoba dari awal."
+        ],
+        "answer": 1,
+        "explanation": "Perbedaan payload untuk identity bisnis yang sama adalah konflik data, bukan duplicate normal yang boleh diabaikan.",
+        "feedback": [
+          "Overwrite dapat mengubah fakta uang atau pesan yang sudah diterapkan.",
+          "Benar: hold, audit, dan rekonsiliasi menjaga identity tetap bermakna.",
+          "Menghapus identity menghilangkan bukti dan membuka duplicate effect."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Pilih tindakan worker/consumer untuk lease expired, payload conflict, dan effect identik.",
+      "setup": "Gunakan job dan applied effect TEMP pada worked example. Lease state dan applied payload adalah input authored, bukan hasil worker atau broker nyata.",
+      "starterSql": "SELECT j.effect_key, j.status, j.attempts, e.payload AS applied_payload\nFROM pg_temp.lesson_worker_jobs j\nLEFT JOIN pg_temp.lesson_worker_effects e ON e.effect_key = j.effect_key\nORDER BY j.effect_key;",
+      "variants": [
+        {
+          "id": "l4m05l02-variant-1",
+          "question": "Job payment:1101 berstatus ready, attempts 0, dan belum memiliki applied effect. Apa langkah pertama?",
+          "options": [
+            "Claim dengan lease lalu publish; outcome perlu dicatat untuk retry.",
+            "Tandai sent sebelum publish agar duplicate mustahil.",
+            "Abaikan karena ready berarti sudah delivered."
+          ],
+          "answer": 0,
+          "explanation": "Worker perlu claim yang dapat direclaim dan publish dengan asumsi timeout mungkin terjadi.",
+          "feedback": [
+            "Benar: claim dan publish dipisahkan dari acknowledgement, lalu retry tetap mungkin.",
+            "Mark-sent sebelum publish membuka kehilangan effect jika proses mati.",
+            "ready berarti pekerjaan menunggu, bukan delivered."
+          ]
+        },
+        {
+          "id": "l4m05l02-variant-2",
+          "question": "Retry payment:1102 memiliki payload sama persis dengan effect yang sudah applied. Apa tindakan consumer?",
+          "options": [
+            "Terapkan debit kedua untuk memastikan delivery.",
+            "No-op dedup dan catat bahwa identity/payload sudah diterapkan.",
+            "Ubah payload retry supaya hasilnya dapat dibedakan."
+          ],
+          "answer": 1,
+          "explanation": "Identity dan payload yang sama menunjukkan retry dari efek yang sama, bukan payment baru.",
+          "feedback": [
+            "Debit kedua justru melanggar tujuan deduplication.",
+            "Benar: atomic applied-effect record dapat membuat retry menjadi no-op.",
+            "Mengubah payload menciptakan konflik, bukan menyelesaikan retry."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l4m05l02-edge-1",
+          "question": "Consumer menerapkan efek, lalu worker timeout sebelum mark-sent. Apa hasil retry yang aman?",
+          "options": [
+            "Retry blind dan terapkan efek kedua karena status masih processing.",
+            "Dedup dengan effect_key/payload yang sama, lalu rekonsiliasi status job.",
+            "Hapus applied effect agar worker dapat mencoba ulang dari nol."
+          ],
+          "answer": 1,
+          "explanation": "Publish-then-mark window membuat status job ambigu; consumer dedup mencegah efek bisnis kedua.",
+          "feedback": [
+            "Status worker yang lama tidak membuktikan consumer belum menerapkan efek.",
+            "Benar: dedup di boundary efek dan rekonsiliasi job menangani ambiguity.",
+            "Menghapus applied effect membuka duplicate pada retry berikutnya."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l4m05l02-edge-2",
+          "question": "Worker memakai SKIP LOCKED dan SELECT kosong. Apa kesimpulan yang aman?",
+          "options": [
+            "Tidak ada pekerjaan di seluruh sistem.",
+            "Tidak ada row yang dapat diambil pada snapshot/lock saat itu; pekerjaan bisa sedang di-lease atau tersembunyi oleh filter.",
+            "Semua job pasti sudah delivered exactly once."
+          ],
+          "answer": 1,
+          "explanation": "SKIP LOCKED menghindari menunggu row tertentu dan dapat memberi inconsistent view; kosong bukan sertifikat global.",
+          "feedback": [
+            "Row lain dapat sedang terkunci atau tidak cocok filter.",
+            "Benar: hasil kosong harus diperlakukan sebagai keadaan lokal, bukan bukti tidak ada kerja.",
+            "SKIP LOCKED tidak membuktikan delivery atau exactly-once."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Pisahkan tiga window: claim lease, publish ke provider, dan mark-sent.",
+        "Bandingkan effect_key dan payload, bukan hanya status job.",
+        "Timeout dan SKIP LOCKED menghasilkan ketidakpastian lokal; jangan mengubahnya menjadi klaim exactly-once atau no-work global."
+      ],
+      "solutionSql": "SELECT j.effect_key, j.status, j.attempts, e.payload AS applied_payload, CASE WHEN e.effect_key IS NOT NULL AND e.payload = j.payload THEN 'dedup-noop' WHEN e.effect_key IS NOT NULL AND e.payload <> j.payload THEN 'payload-conflict-hold' WHEN j.status = 'processing' AND j.lease_state = 'expired' THEN 'reclaim-and-retry' WHEN j.status = 'ready' THEN 'claim-and-publish' ELSE 'inspect' END AS next_action FROM pg_temp.lesson_worker_jobs j LEFT JOIN pg_temp.lesson_worker_effects e ON e.effect_key = j.effect_key ORDER BY j.effect_key;",
+      "solutionExplanation": "Classifier memilih reclaim untuk lease expired, hold untuk payload conflict, dan dedup no-op untuk payload identik. Ini adalah keputusan authored atas fixture, bukan eksekusi worker; production perlu lease ownership, bounded backoff, observability, dan atomic consumer effect.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa at-least-once delivery membutuhkan consumer deduplication, bagaimana payload conflict berbeda dari retry identik, dan apa yang tetap tidak diketahui ketika timeout terjadi antara publish dan mark-sent."
+  },
+  {
+    "id": "l4m05l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "concurrency-certification",
+      "evidence",
+      "atomic-update",
+      "payment-ledger"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/transaction-iso.html",
+      "https://www.postgresql.org/docs/17/explicit-locking.html",
+      "https://www.postgresql.org/docs/17/tutorial-transactions.html"
+    ],
+    "hook": "Tim menyatakan debit 100 worker aman karena happy-path test lulus sekali. Evidence apa yang benar-benar perlu dikumpulkan sebelum menyebut concurrency contract memenuhi rubric?",
+    "objectives": [
+      "Membedakan hasil happy path dari evidence multisesi yang dapat mendukung concurrency claim.",
+      "Membaca authored outcomes untuk menemukan lost update, duplicate effect, dan saldo yang tidak direkonsiliasi.",
+      "Menyusun rubric outcome yang eksplisit tanpa mengubahnya menjadi sertifikasi production atau bukti runner nyata."
+    ],
+    "sections": [
+      {
+        "title": "Certification adalah rubric evidence, bukan badge produksi",
+        "paragraphs": [
+          "Concurrency certification di lesson ini berarti memeriksa apakah evidence yang disyaratkan oleh rubric tersedia dan konsisten. Ia bukan sertifikat keamanan production, bukan signature, dan bukan hasil 100 session PostgreSQL yang benar-benar dijalankan oleh halaman. Candidate outcome diberi flag authored seperti evidence_scope dan reconciled agar learner berlatih membaca kriteria, bukan menerima angka tanpa konteks.",
+          "Happy path satu worker dapat menghasilkan saldo yang tampak benar walaupun desain akan lost update ketika banyak worker membaca saldo lama. Sebaliknya, saldo akhir benar sekali belum membuktikan tidak ada duplicate payment atau effect yang hilang. Claim concurrency perlu jumlah attempted/success, ledger effect count, duplicate count, expected final balance, trace multisesi, dan rekonsiliasi yang dinyatakan."
+        ]
+      },
+      {
+        "title": "Atomic UPDATE dan invariant hasil",
+        "paragraphs": [
+          "Rubric candidate mengharuskan 100 debit paralel bernilai 1000 dari saldo awal 100000 menghasilkan saldo 0, 100 operasi sukses, dan 100 ledger effect tanpa duplicate. Atomic UPDATE dapat menjadi desain yang tepat untuk saldo, tetapi evidence tetap perlu menunjukkan request yang dicoba serta efek yang tercatat. Aplikasi juga harus memikirkan retry dan stable identity; saldo nol saja tidak mengetahui apakah satu debit tertulis dua kali.",
+          "Run yang menunjukkan final balance 99000 setelah 100 success adalah red flag: update tidak mengakumulasi seluruh debit atau hasilnya tidak direkonsiliasi. Run dengan final balance 0 tetapi duplicate_effects 1 juga tidak memenuhi rubric. Query worked hanya mengklasifikasikan input hasil authored, bukan menghitung lock timing atau membuktikan isolation level server."
+        ]
+      },
+      {
+        "title": "Scope evidence harus dinyatakan",
+        "paragraphs": [
+          "Evidence_scope multi-session memberi konteks bahwa candidate mengaku memiliki trace dari banyak session; single-session atau mocked tidak cukup untuk concurrency certification rubric. Flag reconciled menyatakan hasil akhir dibandingkan dengan expected balance dan ledger count, bukan sekadar status HTTP sukses. Jika input flag berasal dari sistem lain, lesson menganggapnya sebagai authored input dan tidak memverifikasi signature, otorisasi, atau provenance.",
+          "Concurrency test juga memiliki batas: satu beban 100 worker pada satu konfigurasi tidak membuktikan semua interleaving, ukuran database, timeout, failover, atau deployment production aman. Rubric membantu meminta evidence yang lebih baik dan menemukan mismatch yang terlihat. Keputusan release membutuhkan test harness, observability, rollback plan, dan review operational yang berada di luar lesson ini."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Mini fixture certification outcomes: tiga baris authored result untuk 100-debit candidate. Angka dan evidence flags adalah input latihan, bukan hasil eksekusi multisesi di aplikasi.",
+      "setupSql": "CREATE TEMP TABLE lesson_certification_runs (run_id BIGINT PRIMARY KEY, run_label TEXT NOT NULL, workers INTEGER NOT NULL, attempted INTEGER NOT NULL, success_count INTEGER NOT NULL, starting_balance NUMERIC(12,2) NOT NULL, final_balance NUMERIC(12,2) NOT NULL, ledger_rows INTEGER NOT NULL, duplicate_effects INTEGER NOT NULL, evidence_scope TEXT NOT NULL CHECK (evidence_scope IN ('multi-session','single-session','mocked')), reconciled BOOLEAN NOT NULL);\nINSERT INTO pg_temp.lesson_certification_runs VALUES (5001,'atomic-update-trace',100,100,100,100000.00,0.00,100,0,'multi-session',true), (5002,'read-then-write-trace',100,100,100,100000.00,99000.00,100,0,'multi-session',true), (5003,'happy-path-only',1,1,1,100000.00,99000.00,1,0,'single-session',true);",
+      "sql": "SELECT run_id, run_label, workers, success_count, final_balance, ledger_rows, duplicate_effects, evidence_scope, CASE WHEN workers = 100 AND attempted = 100 AND success_count = 100 AND starting_balance = 100000.00 AND final_balance = 0.00 AND ledger_rows = 100 AND duplicate_effects = 0 AND evidence_scope = 'multi-session' AND reconciled THEN 'meets-authored-rubric' ELSE 'insufficient-or-failing' END AS rubric_outcome FROM pg_temp.lesson_certification_runs ORDER BY run_id;",
+      "columns": [
+        "run_id",
+        "run_label",
+        "workers",
+        "success_count",
+        "final_balance",
+        "ledger_rows",
+        "duplicate_effects",
+        "evidence_scope",
+        "rubric_outcome"
+      ],
+      "rows": [
+        [
+          "5001",
+          "atomic-update-trace",
+          "100",
+          "100",
+          "0.00",
+          "100",
+          "0",
+          "multi-session",
+          "meets-authored-rubric"
+        ],
+        [
+          "5002",
+          "read-then-write-trace",
+          "100",
+          "100",
+          "99000.00",
+          "100",
+          "0",
+          "multi-session",
+          "insufficient-or-failing"
+        ],
+        [
+          "5003",
+          "happy-path-only",
+          "1",
+          "1",
+          "99000.00",
+          "1",
+          "0",
+          "single-session",
+          "insufficient-or-failing"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Run 5001 memenuhi rubric authored: 100 worker, saldo akhir 0, 100 ledger rows, tanpa duplicate, evidence multi-session, dan reconciled. Run 5002 gagal pada final balance meskipun success_count 100. Run 5003 hanya happy path satu worker sehingga tidak memiliki evidence concurrency. Hasil ini bukan certification production."
+    },
+    "checks": [
+      {
+        "id": "l4m05l03-check-1",
+        "question": "Mengapa satu happy-path test tidak cukup untuk menyatakan debit concurrent aman?",
+        "options": [
+          "Karena satu worker tidak memperlihatkan interleaving, lost update, duplicate effect, atau lease race.",
+          "Karena query SELECT tidak pernah boleh dipakai untuk membaca saldo.",
+          "Karena concurrency hanya dapat dibuktikan jika semua request gagal."
+        ],
+        "answer": 0,
+        "explanation": "Evidence concurrency harus menyatakan scope multisesi dan memeriksa invariant hasil, bukan hanya satu urutan serial.",
+        "feedback": [
+          "Benar: happy path memberi bukti terbatas dan tidak mencakup interleaving concurrent.",
+          "SELECT dapat membaca hasil; masalahnya adalah scope evidence, bukan larangan membaca.",
+          "Test yang baik dapat menunjukkan operasi sukses dan failure/retry yang terukur."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l4m05l03-check-2",
+        "question": "Outcome mana yang memenuhi authored rubric 100 debit pada worked fixture?",
+        "options": [
+          "100 success, final 99000, 100 ledger rows, multi-session.",
+          "100 success, final 0, 100 ledger rows, duplicate 0, multi-session, reconciled.",
+          "1 success, final 99000, 1 ledger row, single-session."
+        ],
+        "answer": 1,
+        "explanation": "Rubric menggabungkan jumlah worker, success, saldo expected, ledger count, duplicate count, evidence scope, dan rekonsiliasi.",
+        "feedback": [
+          "Final 99000 tidak sesuai expected balance untuk 100 debit.",
+          "Benar: semua syarat authored rubric terpenuhi pada outcome ini.",
+          "Single-session happy path tidak memenuhi evidence concurrency."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Klasifikasikan candidate run sebagai memenuhi authored rubric atau insufficient/failing.",
+      "setup": "Gunakan authored outcomes TEMP pada worked example. Flag workers, success, ledger rows, duplicate effects, evidence scope, dan reconciled dianggap sebagai input latihan; halaman tidak menjalankan 100 session atau memverifikasi signature.",
+      "starterSql": "SELECT run_id, run_label, workers, success_count, final_balance, ledger_rows, duplicate_effects, evidence_scope, reconciled\nFROM pg_temp.lesson_certification_runs\nORDER BY run_id;",
+      "variants": [
+        {
+          "id": "l4m05l03-variant-1",
+          "question": "Candidate 5101 memiliki 100 worker, attempted 100, 100 success, starting_balance 100000, final 0, 100 ledger rows, duplicate 0, multi-session, dan reconciled true. Apa outcome rubric?",
+          "options": [
+            "meets-authored-rubric",
+            "insufficient karena success 100 terlalu banyak",
+            "insufficient karena ledger rows harus 0"
+          ],
+          "answer": 0,
+          "explanation": "Semua syarat candidate rubric 100 debit dipenuhi.",
+          "feedback": [
+            "Benar: outcome memenuhi angka hasil, evidence scope, dan rekonsiliasi yang diminta.",
+            "100 success justru diharapkan untuk 100 attempted worker.",
+            "Ledger rows 100 diperlukan untuk menunjukkan 100 effect tercatat."
+          ]
+        },
+        {
+          "id": "l4m05l03-variant-2",
+          "question": "Candidate 5102 memiliki 100 success dan final 0, tetapi duplicate_effects 1. Apa outcome rubric?",
+          "options": [
+            "meets-authored-rubric karena saldo akhir benar",
+            "insufficient-or-failing karena duplicate effect melanggar rubric",
+            "meets-authored-rubric karena duplicate selalu aman"
+          ],
+          "answer": 1,
+          "explanation": "Saldo akhir yang benar tidak menghapus bukti duplicate effect.",
+          "feedback": [
+            "Saldo saja tidak cukup untuk membuktikan efek diterapkan sekali.",
+            "Benar: duplicate_effects 1 membuat candidate gagal rubric dan perlu diagnosis.",
+            "Duplicate dapat berarti double charge atau notifikasi ganda; tidak otomatis aman."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l4m05l03-edge-1",
+          "question": "Candidate mengklaim 100 worker sukses dan final 0, tetapi evidence_scope mocked. Apa kesimpulan aman?",
+          "options": [
+            "Lulus certification karena angka akhirnya sempurna.",
+            "Insufficient: flag mocked tidak memenuhi evidence multisesi rubric.",
+            "Lulus karena mocked lebih deterministik daripada database."
+          ],
+          "answer": 1,
+          "explanation": "Angka authored tanpa evidence scope yang diminta tidak membuktikan interleaving atau concurrency behavior.",
+          "feedback": [
+            "Final balance yang benar tidak mengubah provenance evidence.",
+            "Benar: mocked outcome perlu evidence nyata atau review tambahan sebelum claim concurrency.",
+            "Deterministik bukan sinonim multisesi atau production-safe."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l4m05l03-edge-2",
+          "question": "100 request success dan final balance 0, tetapi ledger_rows 99. Apa yang harus dilakukan?",
+          "options": [
+            "Anggap satu row hilang tidak penting karena saldo benar.",
+            "Tandai mismatch dan rekonsiliasi effect identity sebelum menyatakan rubric lulus.",
+            "Tambahkan row ledger manual tanpa mencari request yang hilang."
+          ],
+          "answer": 1,
+          "explanation": "Expected effect count adalah bagian rubric; mismatch dapat menunjukkan effect hilang atau perhitungan saldo yang tidak dapat dipercaya.",
+          "feedback": [
+            "Saldo benar tidak membuktikan setiap effect tercatat.",
+            "Benar: hentikan claim, cari identity yang hilang/duplikat, lalu rekonsiliasi.",
+            "Row manual tanpa diagnosis dapat menyembunyikan duplicate atau sumber mismatch."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Bandingkan attempted, success_count, final_balance, dan ledger_rows dengan expected 100 debit.",
+        "Periksa duplicate_effects dan evidence_scope; angka akhir saja tidak cukup.",
+        "Rubric lesson menilai authored evidence, bukan sertifikasi production atau eksekusi multisesi nyata."
+      ],
+      "solutionSql": "SELECT run_id, run_label, workers, success_count, final_balance, ledger_rows, duplicate_effects, evidence_scope, CASE WHEN workers = 100 AND attempted = 100 AND success_count = 100 AND starting_balance = 100000.00 AND final_balance = 0.00 AND ledger_rows = 100 AND duplicate_effects = 0 AND evidence_scope = 'multi-session' AND reconciled THEN 'meets-authored-rubric' ELSE 'insufficient-or-failing' END AS rubric_outcome FROM pg_temp.lesson_certification_runs ORDER BY run_id;",
+      "solutionExplanation": "Reference classifier hanya menerima candidate yang memenuhi semua syarat authored rubric: 100 worker/attempt/success, final balance 0, 100 ledger rows, duplicate 0, evidence multi-session, dan reconciled. Ia tidak menjalankan worker atau menjamin production concurrency safety; hasil yang gagal harus memicu diagnosis dan evidence tambahan.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa happy path tidak cukup untuk concurrency certification. Tuliskan evidence minimum untuk 100 debit, lalu sebutkan dua alasan mengapa authored rubric ini belum menjadi sertifikasi production atau bukti semua interleaving aman."
+  }
+]

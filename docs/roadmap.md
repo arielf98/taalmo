@@ -13,13 +13,13 @@
 
 ## Database Engineering — database curriculum
 
-The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L3 and L4M01–L4M04 provide 57 published bilingual lessons; 63 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
+The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L4 provide 60 published bilingual lessons; 60 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
 
-## Recommended next milestone: L4M05 authoring
+## Recommended next milestone: L5M01 authoring
 
-L4M04 follows L4M03. L4 still lacks its final module and its level assessment remains unavailable. Local-effect predictions are not a claim of provider authentication, production idempotency or exactly-once network delivery.
+L4M05 completes publication of L4. Its level assessment now follows the existing publication and mastery gates. The outbox and concurrency predictions do not execute workers, send external effects or certify production safety.
 
-Continue with L4M05 — Reliable Side Effects: transactional outbox, retry/deduplication workers, and a bounded concurrency checkpoint. Keep the send/mark crash window, lease expiry and consumer idempotency boundaries explicit; no live external messages or payments are authorized. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
+Continue with L5M01 — Membaca Query Planner: plan operators, EXPLAIN ANALYZE BUFFERS and statistics/estimates. Distinguish authored illustrative plans from actual measured output, planner cost from time and EXPLAIN ANALYZE execution from plain EXPLAIN. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
 
 ## Later learning improvements
 

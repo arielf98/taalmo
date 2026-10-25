@@ -14,6 +14,7 @@ import acid from "./l4-acid.json";
 import isolation from "./l4-isolation.json";
 import concurrency from "./l4-concurrency.json";
 import payments from "./l4-payments.json";
+import sideEffects from "./l4-side-effects.json";
 import type { AuthoredLesson, ConceptCheck } from "./types";
 import { pathHref } from "../lessons";
 export const databasePathHref = pathHref;
@@ -34,6 +35,7 @@ const authored = [
   ...isolation,
   ...concurrency,
   ...payments,
+  ...sideEffects,
 ] as AuthoredLesson[];
 const byId = new Map(authored.map((lesson) => [lesson.id, lesson]));
 export const databaseLevels = blueprint.levels.map((level) => ({

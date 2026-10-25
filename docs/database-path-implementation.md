@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L3 and L4M01–L4M04: 57 published / 63 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L4: 60 published / 60 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -202,3 +202,11 @@ Added three bilingual payment lessons. L4M04L01 shows merchant-scoped keys and d
 Totals: 19 authored modules, 57 published / 63 draft lessons; 60 combined lessons plus three labs (63 activity milestones). Existing E2E expectations only change the count and next draft route to l4m05l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
 
 Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L4M05**.
+
+## L4M05 continuation — 25 October 2026
+
+Added three bilingual reliable-side-effect lessons. L4M05L01 pairs a payment and an outbox event in one transaction and emits a final report after COMMIT. L4M05L02 classifies expired lease, conflicting payload and already-applied effect states, explaining the send/mark crash window, lease ownership and atomic consumer deduplication limits. L4M05L03 evaluates authored 100-debit result summaries against balance, effect count, duplicates and evidence-scope requirements; no concurrent workload was executed. The raw boolean output in the pairing report is authored as PostgreSQL t. No broker, worker, provider call, new simulator or test suite was added. All L4 modules are published, so its existing assessment gate becomes available after learner mastery.
+
+Totals: 20 authored modules, 60 published / 60 draft lessons; 63 combined lessons plus three labs (66 activity milestones). Existing E2E expectations only change the count and next draft route to l5m01l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
+
+Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L5M01**.

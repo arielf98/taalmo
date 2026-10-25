@@ -158,5 +158,11 @@
   "mutable-balance": "saldo mutable",
   "exactly-once": "exactly-once",
   "at-least-once": "at-least-once",
-  "external-effects": "efek eksternal"
+  "external-effects": "efek eksternal",
+  "transactional-outbox": "outbox transaksional",
+  "side-effects": "efek samping",
+  "worker-retry": "retry worker",
+  "deduplication": "deduplikasi",
+  "concurrency-certification": "rubrik konkurensi",
+  "evidence": "bukti"
 }
