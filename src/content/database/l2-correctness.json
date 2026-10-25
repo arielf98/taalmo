@@ -1,0 +1,600 @@
+[
+  {
+    "id": "l2m04l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "sql",
+      "bag-semantics",
+      "query-correctness",
+      "school-finance"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/sql-select.html",
+      "https://www.postgresql.org/docs/17/queries-table-expressions.html"
+    ],
+    "hook": "Invoice 103 memiliki dua cicilan sah. Setelah JOIN, nilai tagihannya terlihat dua kali dan total laporan membengkak. Bagaimana mempertahankan semua payment tanpa menghitung tagihan yang sama berulang kali?",
+    "objectives": [
+      "Menentukan arti satu baris sebelum dan sesudah join satu-ke-banyak.",
+      "Membedakan duplikasi proyeksi yang sah dari penggandaan nilai agregat.",
+      "Memperbaiki total dengan preagregasi berdasarkan invoice_id, bukan DISTINCT nominal."
+    ],
+    "sections": [
+      {
+        "title": "Satu baris mewakili apa?",
+        "paragraphs": [
+          "SQL umumnya mempertahankan pengulangan baris hasil; sifat ini disebut bag atau multiset. Dua baris yang tampak sama belum tentu kesalahan data. Jika hanya invoice_id yang ditampilkan dari payment 203 dan 204, keduanya menampilkan 103 karena memang membayar invoice yang sama. Payment berbeda tetap memiliki identitas berbeda. Sebelum menghitung total, tulis arti satu baris atau grain: satu invoice, satu payment, atau satu siswa. Proyeksi yang menyembunyikan payment_id tidak mengubah banyaknya baris yang sedang dihitung.",
+          "Relasi invoices ke payments adalah satu-ke-banyak. JOIN menghasilkan satu pasangan untuk setiap payment yang cocok. Invoice 103 bernilai 450000 muncul dua kali bersama cicilan 250000 dan 200000. Invoice 109 bernilai 650000 juga muncul dua kali bersama cicilan 300000 dan 350000. Keempat pasangan ini benar untuk laporan detail pembayaran. Akan tetapi, SUM atas kolom invoice.amount pada pasangan tersebut menghitung tagihan berulang. Masalahnya ada pada grain agregasi, bukan pada adanya dua cicilan."
+        ]
+      },
+      {
+        "title": "DISTINCT tidak memahami identitas bisnis",
+        "paragraphs": [
+          "SELECT DISTINCT menghapus baris yang sama pada seluruh kolom hasil yang dipilih. Jika payment_id masih ditampilkan, dua payment tetap berbeda sehingga DISTINCT tidak mengurangi apa pun. Jika hanya nominal yang ditampilkan, invoice berbeda dengan nilai sama justru dapat menyatu. SUM(DISTINCT amount) menghitung setiap nominal unik sekali, bukan setiap invoice sekali. Invoice 103 dan 104 masing-masing bernilai 450000; total tagihannya 900000, sedangkan SUM(DISTINCT amount) hanya 450000. Hasil yang lebih kecil tidak otomatis lebih benar."
+        ]
+      },
+      {
+        "title": "Samakan grain sebelum menjumlahkan",
+        "paragraphs": [
+          "Kelompokkan payment succeeded berdasarkan invoice_id terlebih dahulu. Hasil receipts memiliki paling banyak satu baris per invoice, sehingga LEFT JOIN dari invoices tidak menggandakan tagihan. LEFT JOIN juga mempertahankan invoice tanpa penerimaan; COALESCE mengisi paid menjadi nol ketika tidak ada kelompok payment yang cocok. Status pending dan failed tidak dihitung sebagai uang diterima. Pada seluruh seed, sepuluh invoice bernilai 5350000, penerimaan berhasil 3400000, dan selisihnya 1950000. Direct LEFT JOIN semua payment menghasilkan dua belas baris dan total tagihan keliru 6450000.",
+          "Kontrak contoh ini adalah seluruh snapshot seed, tanpa cutoff waktu atau filter siswa aktif. Jangan membandingkannya dengan laporan September saja. DISTINCT tetap tepat bila kebutuhan memang daftar invoice unik atau daftar nominal unik; gunakan berdasarkan kontrak hasil, bukan untuk menyembunyikan join yang belum dipahami. Saat meninjau query, telusuri satu invoice dengan dua payment dan satu invoice tanpa payment. Pastikan detail yang diperlukan tetap tersedia dan setiap nilai tagihan berkontribusi tepat sekali ke total."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "SELECT i.invoice_id, p.payment_id, i.amount AS billed, p.amount AS received\nFROM school.invoices i\nJOIN school.payments p ON p.invoice_id = i.invoice_id\n  AND p.status = 'succeeded'\nWHERE i.invoice_id IN (103, 109)\nORDER BY i.invoice_id, p.payment_id;",
+      "columns": [
+        "invoice_id",
+        "payment_id",
+        "billed",
+        "received"
+      ],
+      "rows": [
+        [
+          "103",
+          "203",
+          "450000.00",
+          "250000.00"
+        ],
+        [
+          "103",
+          "204",
+          "450000.00",
+          "200000.00"
+        ],
+        [
+          "109",
+          "209",
+          "650000.00",
+          "300000.00"
+        ],
+        [
+          "109",
+          "210",
+          "650000.00",
+          "350000.00"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Empat baris adalah empat payment yang sah. Jika billed dijumlahkan dari tabel ini, hasilnya 2200000, padahal dua invoice hanya bernilai 1100000. Jumlah received tetap 1100000. Bedakan kolom yang boleh dijumlahkan pada grain payment dari nilai invoice yang berulang."
+    },
+    "checks": [
+      {
+        "id": "l2m04l01-check-1",
+        "question": "Mengapa invoice 103 tampil dua kali pada worked example?",
+        "options": [
+          "Dua payment berbeda cocok dengan satu invoice.",
+          "Primary key invoice pasti terduplikasi di tabel sumber.",
+          "PostgreSQL selalu menggandakan semua hasil JOIN."
+        ],
+        "answer": 0,
+        "explanation": "JOIN mempertahankan setiap pasangan yang cocok; primary key invoice tetap unik di tabel asal.",
+        "feedback": [
+          "Benar: payment 203 dan 204 adalah cicilan yang berbeda.",
+          "Pengulangan setelah join tidak membuktikan pelanggaran primary key sumber.",
+          "Jumlah pasangan bergantung pada data dan kondisi join, bukan penggandaan tetap."
+        ]
+      },
+      {
+        "id": "l2m04l01-check-2",
+        "question": "Apa perbaikan tepat untuk total billed dan paid dengan grain satu invoice?",
+        "options": [
+          "SUM(DISTINCT i.amount) setelah join semua payment.",
+          "Hapus salah satu cicilan supaya invoice tidak berulang.",
+          "Agregasikan payment succeeded per invoice, lalu LEFT JOIN ke invoices."
+        ],
+        "answer": 2,
+        "explanation": "Preagregasi mempertahankan seluruh cicilan sambil mengembalikan grain satu invoice.",
+        "feedback": [
+          "Nominal sama dapat dimiliki invoice berbeda dan tetap harus dihitung masing-masing.",
+          "Menghapus cicilan sah merusak data, bukan memperbaiki agregasi.",
+          "Benar: satu kelompok receipts per invoice mencegah penggandaan tagihan."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Telusuri penggandaan tagihan lalu prediksi ringkasan yang sudah memakai grain invoice.",
+      "setup": "Gunakan seluruh School Finance seed, termasuk siswa tidak aktif. Hitung hanya payment succeeded; invoice tanpa payment tetap ada. Kasus dua invoice bernominal sama tidak mengubah fixture.",
+      "starterSql": "SELECT SUM(i.amount) AS billed\nFROM school.invoices i\nLEFT JOIN school.payments p ON p.invoice_id = i.invoice_id;",
+      "variants": [
+        {
+          "id": "l2m04l01-variant-1",
+          "question": "Berapa total billed dari starter SQL yang langsung LEFT JOIN seluruh payment?",
+          "options": [
+            "5350000 karena invoice_id adalah primary key.",
+            "6450000 karena invoice 103 dan 109 dihitung dua kali.",
+            "3400000 karena semua kolom amount adalah penerimaan."
+          ],
+          "answer": 1,
+          "explanation": "Total 5350000 bertambah 450000 dan 650000 akibat dua invoice dengan dua payment.",
+          "feedback": [
+            "Primary key pada sumber tidak mencegah pengulangan pada hasil join.",
+            "Benar: pengulangan nilai invoice menambah 1100000 yang tidak semestinya.",
+            "Starter menjumlahkan i.amount, bukan amount payment succeeded."
+          ]
+        },
+        {
+          "id": "l2m04l01-variant-2",
+          "question": "Setelah preagregasi payment succeeded, ringkasan seluruh seed seharusnya apa?",
+          "options": [
+            "10 invoice; billed 5350000; paid 3400000; outstanding 1950000.",
+            "12 invoice; billed 6450000; paid 3400000; outstanding 3050000.",
+            "10 invoice; billed 5350000; paid 4500000; outstanding 850000."
+          ],
+          "answer": 0,
+          "explanation": "Satu baris per invoice menjaga billed tetap benar, sementara hanya sembilan payment succeeded masuk paid.",
+          "feedback": [
+            "Benar: grain dan filter status sesuai kontrak laporan.",
+            "Dua belas adalah baris direct join, bukan jumlah invoice sumber.",
+            "4500000 turut menghitung pending dan failed; keduanya bukan penerimaan."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l2m04l01-edge-1",
+          "question": "Invoice 103 dan 104 masing-masing bernilai 450000. Berapa SUM(DISTINCT amount) dibanding total tagihan keduanya?",
+          "options": [
+            "900000; sama dengan total tagihan.",
+            "0; nominal sama saling membatalkan.",
+            "450000; kurang dari total tagihan 900000."
+          ],
+          "answer": 2,
+          "explanation": "DISTINCT nominal menggabungkan nilai sama tanpa mempertimbangkan identitas invoice.",
+          "feedback": [
+            "Itu hasil SUM biasa pada dua invoice, bukan SUM DISTINCT nominal.",
+            "DISTINCT menghapus pengulangan, bukan melakukan pengurangan nilai.",
+            "Benar: nominal unik bukan pengganti identitas invoice unik."
+          ]
+        },
+        {
+          "id": "l2m04l01-edge-2",
+          "question": "Bagaimana mempertahankan invoice 108 yang belum memiliki payment pada ringkasan per invoice?",
+          "options": [
+            "INNER JOIN receipts agar invoice tanpa pasangan tetap ada.",
+            "LEFT JOIN receipts dan COALESCE(paid, 0.00).",
+            "WHERE receipts.paid > 0 setelah LEFT JOIN."
+          ],
+          "answer": 1,
+          "explanation": "LEFT JOIN mempertahankan invoice sumber; COALESCE mengisi nilai agregat yang tidak ada.",
+          "feedback": [
+            "INNER JOIN membuang invoice yang tidak memiliki kelompok receipts.",
+            "Benar: tagihan 400000 tetap ada dengan paid nol.",
+            "Filter tersebut membuang invoice tanpa receipts dan menghilangkan tagihannya."
+          ]
+        }
+      ],
+      "hints": [
+        "Tandai kolom yang berulang ketika satu invoice memiliki dua cicilan.",
+        "Buat receipts dengan GROUP BY invoice_id dan filter status succeeded di dalamnya.",
+        "LEFT JOIN receipts ke invoices, lalu jumlahkan i.amount dan COALESCE(r.paid, 0.00) pada grain invoice."
+      ],
+      "solutionSql": "WITH receipts AS (\n  SELECT invoice_id, SUM(amount) AS paid\n  FROM school.payments WHERE status = 'succeeded'\n  GROUP BY invoice_id\n)\nSELECT COUNT(*) AS invoice_count, SUM(i.amount) AS billed,\n       SUM(COALESCE(r.paid, 0.00)) AS paid,\n       SUM(i.amount - COALESCE(r.paid, 0.00)) AS outstanding\nFROM school.invoices i LEFT JOIN receipts r ON r.invoice_id = i.invoice_id;",
+      "solutionExplanation": "Receipts menyatukan cicilan tanpa menghapus payment sumber. LEFT JOIN menjaga sepuluh invoice, termasuk 108. Setiap tagihan dihitung sekali: billed 5350000, paid 3400000, outstanding 1950000. Ringkasan snapshot ini tidak memakai batas bulan dan tidak menganggap payment pending atau failed sebagai uang diterima.",
+      "critical": false
+    },
+    "reflection": "Mengapa pengulangan invoice pada detail payment bisa sah, tetapi SUM invoice.amount setelah join keliru? Jelaskan kapan DISTINCT tepat dan bagaimana dua invoice bernominal sama membongkar perbaikan yang salah."
+  },
+  {
+    "id": "l2m04l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "sql",
+      "anti-join",
+      "null",
+      "query-correctness",
+      "school-finance"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/functions-subquery.html",
+      "https://www.postgresql.org/docs/17/functions-comparison.html"
+    ],
+    "hook": "Daftar invoice tanpa penerimaan mendadak kosong setelah daftar pengecualian memuat NULL. Mengapa NOT IN menyembunyikan invoice yang belum dibayar, dan bagaimana merumuskan ketiadaan payment dengan tepat?",
+    "objectives": [
+      "Membedakan tidak ada payment, tidak ada payment succeeded, dan belum lunas.",
+      "Menjelaskan TRUE, FALSE, dan UNKNOWN pada NOT IN yang memuat NULL.",
+      "Memakai NOT EXISTS berkorelasi dengan perilaku jelas untuk data kosong dan relasi hilang."
+    ],
+    "sections": [
+      {
+        "title": "Definisikan dulu apa yang tidak ada",
+        "paragraphs": [
+          "Anti-join mencari baris pada sisi kiri yang tidak memiliki pasangan sesuai kondisi di sisi kanan. Kalimat invoice belum dibayar masih ambigu. Invoice 102 memiliki payment succeeded sebesar 200000 tetapi masih menyisakan 300000; invoice ini bukan invoice tanpa penerimaan. Invoice 104 memiliki payment pending, sedangkan 105 memiliki payment failed. Keduanya belum memiliki penerimaan berhasil. Invoice 108 sama sekali tidak memiliki baris payment. Tiga pertanyaan ini memerlukan predikat berbeda meskipun sering disebut belum bayar dalam percakapan.",
+          "Untuk mencari invoice tanpa payment succeeded, subquery harus menghubungkan p.invoice_id dengan i.invoice_id dan menyaring status succeeded. NOT EXISTS bernilai benar ketika subquery tidak menghasilkan baris yang cocok. Banyaknya cicilan tidak penting: satu atau lima payment berhasil sama-sama membuat EXISTS benar. Menghilangkan korelasi invoice_id mengubah pertanyaan menjadi apakah seluruh tabel memiliki payment berhasil. Karena seed memiliki payment berhasil, NOT EXISTS tanpa korelasi akan membuang semua invoice, termasuk yang sebenarnya belum menerima uang."
+        ]
+      },
+      {
+        "title": "NULL mengubah arti NOT IN",
+        "paragraphs": [
+          "NOT IN membandingkan nilai kiri dengan semua nilai pada daftar kanan. Jika ditemukan nilai yang sama, hasilnya FALSE. Jika tidak ada nilai yang sama tetapi daftar kanan memiliki NULL, hasilnya UNKNOWN, yang ditampilkan sebagai NULL. WHERE hanya mempertahankan TRUE, sehingga UNKNOWN tidak ikut hasil. Untuk invoice 104, daftar (103, NULL) membuat 104 NOT IN menghasilkan UNKNOWN, bukan TRUE. Untuk invoice 103, adanya pasangan 103 membuat hasil FALSE meskipun daftar juga memuat NULL. Jangan menyederhanakan semua hasil NOT IN menjadi NULL.",
+          "Seed mendefinisikan payments.invoice_id sebagai NOT NULL dan foreign key. Karena itu contoh NULL ditambahkan hanya sebagai baris pada CTE successful_invoices, bukan disisipkan ke tabel payment asli. Ini menirukan daftar staging atau hasil gabungan yang kualitasnya lebih longgar. Menggunakan NOT IN pada kolom yang dijamin non-NULL dapat benar; persoalannya adalah asumsi yang berubah ketika sumber kanan berganti. NOT EXISTS berkorelasi dengan kesetaraan tetap menguji keberadaan pasangan, sedangkan NULL di kanan tidak sama dengan invoice_id yang diketahui."
+        ]
+      },
+      {
+        "title": "Data kosong dan identitas yang hilang",
+        "paragraphs": [
+          "Jika subquery payment succeeded kosong, NOT EXISTS benar untuk seluruh invoice sumber dan laporan tanpa penerimaan memuat semuanya. Hasil kosong dari laporan berbeda artinya dengan tabel sumber yang kosong; tentukan expected behavior untuk keduanya. Pola LEFT JOIN juga dapat dipakai dengan filter status di ON lalu WHERE p.payment_id IS NULL. Kolom payment_id adalah primary key non-NULL pada pasangan asli, sehingga dapat menjadi penanda tidak ada pasangan. Menaruh status succeeded di WHERE justru membuang baris luar yang tidak mempunyai pasangan.",
+          "Pada data staging, invoice_id di sisi kiri juga bisa hilang. NOT EXISTS dengan operator = akan menganggap NULL tersebut tidak memiliki pasangan, karena kesetaraan dengan NULL tidak pernah TRUE. Itu tidak membuktikan adanya invoice sah tanpa penerimaan; identitasnya belum diketahui. Pisahkan data beridentitas hilang untuk investigasi sesuai kontrak bisnis. Anti-join bukan alat memperbaiki identitas yang rusak dan bukan pengganti perhitungan outstanding. Pastikan nama laporan menjelaskan apakah ia mencari ketiadaan baris, ketiadaan penerimaan, atau saldo positif."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "WITH successful_invoices AS (\n  SELECT invoice_id FROM school.payments WHERE status = 'succeeded'\n  UNION ALL SELECT NULL::bigint\n)\nSELECT i.invoice_id,\n       i.invoice_id NOT IN (SELECT invoice_id FROM successful_invoices) AS not_in_result,\n       NOT EXISTS (SELECT 1 FROM successful_invoices s\n                   WHERE s.invoice_id = i.invoice_id) AS no_receipt\nFROM school.invoices i\nWHERE i.invoice_id IN (103, 104, 105, 108)\nORDER BY i.invoice_id;",
+      "columns": [
+        "invoice_id",
+        "not_in_result",
+        "no_receipt"
+      ],
+      "rows": [
+        [
+          "103",
+          "f",
+          "f"
+        ],
+        [
+          "104",
+          null,
+          "t"
+        ],
+        [
+          "105",
+          null,
+          "t"
+        ],
+        [
+          "108",
+          null,
+          "t"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "f berarti FALSE, t berarti TRUE, dan NULL berarti UNKNOWN. Invoice 103 memiliki penerimaan sehingga kedua predikat FALSE. Invoice 104, 105, dan 108 tidak memiliki penerimaan berhasil; NOT EXISTS benar, tetapi NOT IN bernilai UNKNOWN akibat NULL buatan pada CTE. Payment sumber tidak diubah."
+    },
+    "checks": [
+      {
+        "id": "l2m04l02-check-1",
+        "question": "Invoice 104 tidak cocok dengan nilai mana pun pada daftar yang juga memuat NULL. Apa hasil NOT IN?",
+        "options": [
+          "TRUE karena tidak ditemukan pasangan pasti.",
+          "UNKNOWN, sehingga tidak lolos WHERE.",
+          "PostgreSQL menolak query dengan error constraint."
+        ],
+        "answer": 1,
+        "explanation": "NULL pada daftar kanan membuat ketiadaan kesetaraan belum dapat dipastikan oleh NOT IN.",
+        "feedback": [
+          "Tanpa pasangan tetapi dengan NULL, hasilnya UNKNOWN alih-alih TRUE.",
+          "Benar: WHERE hanya mengambil hasil TRUE, bukan UNKNOWN.",
+          "NULL pada hasil CTE sah; ini persoalan logika, bukan pelanggaran tabel sumber."
+        ]
+      },
+      {
+        "id": "l2m04l02-check-2",
+        "question": "Predikat apa yang mencari invoice tanpa payment berhasil secara terpisah untuk setiap invoice?",
+        "options": [
+          "NOT EXISTS (SELECT 1 FROM school.payments p WHERE p.invoice_id = i.invoice_id AND p.status = 'succeeded')",
+          "NOT EXISTS (SELECT 1 FROM school.payments p WHERE p.status = 'succeeded')",
+          "i.invoice_id = NULL"
+        ],
+        "answer": 0,
+        "explanation": "Korelasi invoice_id membatasi pencarian ke invoice saat ini, sedangkan status menentukan jenis pasangan.",
+        "feedback": [
+          "Benar: ini menguji ketiadaan penerimaan untuk invoice yang sedang ditinjau.",
+          "Tanpa korelasi, satu payment berhasil di mana pun akan mengecualikan semua invoice.",
+          "Kesetaraan dengan NULL menghasilkan UNKNOWN, bukan pencarian relasi hilang."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Bedakan invoice tanpa penerimaan dari invoice tanpa baris payment, lalu analisis daftar pengecualian NULL.",
+      "setup": "Gunakan seed tanpa mutasi. Invoice 104 pending, 105 failed, dan 108 tanpa payment. NULL pada worked example berasal dari UNION ALL di CTE, bukan dari foreign key payment sumber.",
+      "starterSql": "SELECT i.invoice_id FROM school.invoices i\nWHERE NOT EXISTS (\n  SELECT 1 FROM school.payments p\n  WHERE /* korelasi invoice dan filter status */\n)\nORDER BY i.invoice_id;",
+      "variants": [
+        {
+          "id": "l2m04l02-variant-1",
+          "question": "Invoice mana pada seluruh seed tidak memiliki payment succeeded?",
+          "options": [
+            "Hanya 108.",
+            "102, 104, 105, 106, 108.",
+            "104, 105, 108."
+          ],
+          "answer": 2,
+          "explanation": "104 hanya pending, 105 hanya failed, dan 108 tidak punya payment; 102 dan 106 sudah menerima sebagian.",
+          "feedback": [
+            "108 saja menjawab pertanyaan tanpa baris payment, bukan tanpa penerimaan berhasil.",
+            "102 dan 106 memiliki penerimaan sebagian sehingga tidak termasuk anti-join ini.",
+            "Benar: filter status membedakan payment tercatat dari uang yang berhasil diterima."
+          ]
+        },
+        {
+          "id": "l2m04l02-variant-2",
+          "question": "Jika filter status dihapus dari NOT EXISTS berkorelasi, invoice mana yang tersisa pada seed?",
+          "options": [
+            "104, 105, 108 karena semuanya belum lunas.",
+            "Hanya 108 karena invoice lain mempunyai setidaknya satu baris payment.",
+            "Tidak ada karena NULL dari LEFT JOIN dianggap payment."
+          ],
+          "answer": 1,
+          "explanation": "Tanpa filter status, payment pending dan failed juga menjadi pasangan yang menggagalkan NOT EXISTS.",
+          "feedback": [
+            "104 dan 105 punya baris payment, sehingga tidak lolos pencarian tanpa baris sama sekali.",
+            "Benar: hanya invoice 108 tidak memiliki pasangan payment apa pun.",
+            "Subquery membaca payment asli; ia tidak membuat baris NULL seperti LEFT JOIN."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l2m04l02-edge-1",
+          "question": "Jika sumber payment succeeded kosong sementara sepuluh invoice tetap ada, berapa invoice lolos NOT EXISTS berkorelasi?",
+          "options": [
+            "Sepuluh karena tidak ada pasangan untuk invoice mana pun.",
+            "Nol karena sumber kanan kosong.",
+            "Satu baris NULL pengganti seluruh invoice."
+          ],
+          "answer": 0,
+          "explanation": "NOT EXISTS bernilai TRUE untuk setiap baris kiri yang tidak menemukan pasangan.",
+          "feedback": [
+            "Benar: semua invoice sumber tetap diperiksa dan semuanya tanpa penerimaan.",
+            "Sumber kanan kosong justru membuat NOT EXISTS benar bagi setiap invoice.",
+            "Anti-join tidak menggabungkan sepuluh invoice menjadi satu baris pengganti."
+          ]
+        },
+        {
+          "id": "l2m04l02-edge-2",
+          "question": "Baris staging memiliki invoice_id NULL di sisi kiri. Apa arti lolos NOT EXISTS dengan kondisi s.invoice_id = i.invoice_id?",
+          "options": [
+            "Invoice tersebut pasti sah dan belum menerima pembayaran.",
+            "NULL pasti sama dengan salah satu invoice_id sumber.",
+            "Tidak ditemukan pasangan kesetaraan, tetapi identitas hilang perlu dipisahkan untuk investigasi."
+          ],
+          "answer": 2,
+          "explanation": "Kesetaraan dengan NULL tidak pernah TRUE; tidak menemukan pasangan bukan bukti validitas identitas.",
+          "feedback": [
+            "Identitas belum diketahui, sehingga kesimpulan bisnis itu terlalu kuat.",
+            "NULL bukan nilai kunci tertentu dan tidak sama melalui operator =.",
+            "Benar: hasil logika dan validitas data adalah dua hal yang harus dibedakan."
+          ]
+        }
+      ],
+      "hints": [
+        "Tentukan apakah pasangan berarti payment apa pun atau hanya status succeeded.",
+        "Korelasikan p.invoice_id = i.invoice_id di dalam NOT EXISTS.",
+        "Pertahankan filter status di subquery; hasil seed tanpa penerimaan adalah 104, 105, dan 108."
+      ],
+      "solutionSql": "SELECT i.invoice_id\nFROM school.invoices i\nWHERE NOT EXISTS (\n  SELECT 1 FROM school.payments p\n  WHERE p.invoice_id = i.invoice_id AND p.status = 'succeeded'\n)\nORDER BY i.invoice_id;",
+      "solutionExplanation": "NOT EXISTS berkorelasi mencari satu pasangan payment succeeded untuk setiap invoice. Tidak ada pasangan untuk 104, 105, dan 108. Cicilan parsial 102 dan 106 sudah memiliki pasangan sehingga dikecualikan. Untuk laporan saldo yang belum lunas, gunakan perhitungan outstanding, bukan mengganti nama hasil anti-join ini.",
+      "critical": false
+    },
+    "reflection": "Mengapa NOT IN dapat kehilangan invoice ketika daftar kanan memuat NULL, sedangkan NOT EXISTS berkorelasi tetap mencari pasangan? Bedakan invoice tanpa payment, tanpa penerimaan, dan belum lunas serta jelaskan batas untuk identitas kiri NULL."
+  },
+  {
+    "id": "l2m04l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "sql",
+      "query-correctness",
+      "reconciliation",
+      "school-finance"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/queries-union.html",
+      "https://www.postgresql.org/docs/17/ddl-constraints.html"
+    ],
+    "hook": "Dua query menampilkan total outstanding yang sama, tetapi salah satunya menagih invoice yang keliru. Bukti apa yang diperlukan agar laporan benar sampai identitas, nominal, dan jumlah kemunculan setiap baris?",
+    "objectives": [
+      "Menulis kontrak hasil dengan grain, filter, kolom, dan expected rows yang jelas.",
+      "Membedakan kesetaraan multiset dua arah dari kesamaan total atau teks SQL.",
+      "Menganalisis partial payment, no payment, dan penolakan overpayment tanpa mengklaim guard yang belum tersedia."
+    ],
+    "sections": [
+      {
+        "title": "Kontrak hasil mendahului bentuk SQL",
+        "paragraphs": [
+          "Checkpoint ini meminta laporan outstanding positif untuk seluruh snapshot School Finance. Satu baris mewakili satu invoice; hanya payment succeeded mengurangi tagihan. Tidak ada filter bulan, tanggal acuan, atau siswa aktif pada kontrak ini. Kolom hasil adalah invoice_id, billed, paid, dan outstanding. Urutan invoice_id diperlukan untuk tampilan contoh, tetapi kebenaran isi laporan tidak bergantung pada urutan tanpa kontrak ORDER BY. Dua SQL dengan CTE atau subquery berbeda dapat sama-sama benar jika memenuhi kontrak yang sama.",
+          "Expected rows berasal dari penelusuran invoice dan cicilan, bukan disalin dari keluaran query yang sedang dinilai. Invoice 102 tersisa 300000, 104 tersisa 450000, 105 tersisa 650000, 106 tersisa 150000, dan 108 tersisa 400000. Total lima baris ini 1950000. Invoice 103 yang lunas melalui dua cicilan tidak muncul. Kesamaan total saja belum cukup: memindahkan outstanding 300000 ke invoice lain mempertahankan total tetapi menagih pihak yang salah. Jumlah baris yang sama juga tidak membuktikan identitas atau nominal benar."
+        ]
+      },
+      {
+        "title": "Bandingkan dua arah dan pertahankan multiplicity",
+        "paragraphs": [
+          "Perbandingan expected EXCEPT ALL actual menemukan baris yang hilang. Arah actual EXCEPT ALL expected menemukan baris tambahan atau salinan berlebih. Kedua hasil harus kosong agar kedua multiset sama. Memeriksa satu arah saja dapat melewatkan baris tambahan. EXCEPT biasa menghilangkan duplikasi, sehingga satu salinan ekstra dari baris yang sudah benar bisa tidak terdeteksi. Misalnya expected memuat invoice 102 sekali dan actual memuatnya dua kali dengan nominal sama: EXCEPT ALL pada arah actual menghasilkan satu baris ekstra.",
+          "Bandingkan kolom dengan urutan dan tipe yang kompatibel. Reference solution membandingkan seluruh kolom invoice_id, billed, paid, dan outstanding karena selisih yang benar saja tidak membuktikan komponennya benar. Tambahkan peninjauan saldo negatif secara terpisah sebelum menyaring outstanding positif: filter positif tidak boleh menyembunyikan kredit atau overpayment yang perlu ditangani. Ketika kedua sisi kosong, perbandingan memang cocok, tetapi itu tidak membuktikan sumber data lengkap. Bukti berlaku untuk input dan kontrak yang dinyatakan, bukan seluruh kemungkinan produksi."
+        ]
+      },
+      {
+        "title": "Penolakan overpayment memerlukan aturan nyata",
+        "paragraphs": [
+          "Sebagai keputusan sebelum pencatatan, invoice 102 mempunyai sisa 300000. Usulan payment berhasil 300001 harus ditolak pada kebijakan tanpa overpayment, sedangkan 300000 tepat melunasi tagihan. Ini contoh hipotetis, bukan mutasi seed. Constraint payments.amount > 0 hanya menolak nol dan negatif; foreign key hanya memastikan invoice ada. Keduanya tidak membatasi jumlah seluruh cicilan terhadap invoice.amount. Seed tidak memiliki guard overpayment lintas baris, sehingga database tidak otomatis menolak usulan berlebih hanya karena kuis mengharapkan keputusan reject.",
+          "CASE dalam reference solution hanya menghitung keputusan berdasarkan snapshot, tanpa melakukan INSERT atau memberi perlindungan concurrency. Dua request dapat membaca sisa yang sama; penolakan yang benar di sistem nyata membutuhkan pemeriksaan dan pencatatan atomik pada boundary transaksi yang sesuai. Materi transaksi berikutnya membahas koordinasi tersebut. Pemain lesson ini menilai prediksi dan alasan, bukan menjalankan SQL pengguna. Menyelesaikan checkpoint menunjukkan pemahaman hasil dan batas model, bukan sertifikasi bahwa query atau sistem pembayaran telah diuji pada database nyata."
+        ]
+      }
+    ],
+    "worked": {
+      "sql": "WITH receipts AS (\n  SELECT invoice_id, SUM(amount) AS paid\n  FROM school.payments WHERE status = 'succeeded'\n  GROUP BY invoice_id\n), balances AS (\n  SELECT i.invoice_id, i.amount AS billed, COALESCE(r.paid, 0.00) AS paid,\n         i.amount - COALESCE(r.paid, 0.00) AS outstanding\n  FROM school.invoices i LEFT JOIN receipts r ON r.invoice_id = i.invoice_id\n)\nSELECT invoice_id, billed, paid, outstanding\nFROM balances WHERE outstanding > 0\nORDER BY invoice_id;",
+      "columns": [
+        "invoice_id",
+        "billed",
+        "paid",
+        "outstanding"
+      ],
+      "rows": [
+        [
+          "102",
+          "500000.00",
+          "200000.00",
+          "300000.00"
+        ],
+        [
+          "104",
+          "450000.00",
+          "0.00",
+          "450000.00"
+        ],
+        [
+          "105",
+          "650000.00",
+          "0.00",
+          "650000.00"
+        ],
+        [
+          "106",
+          "650000.00",
+          "500000.00",
+          "150000.00"
+        ],
+        [
+          "108",
+          "400000.00",
+          "0.00",
+          "400000.00"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Lima invoice memiliki sisa positif total 1950000. Partial payment 102 dan 106 mengurangi nominal; pending 104 dan failed 105 tidak mengurangi tagihan; invoice 108 tanpa payment tetap muncul. Invoice lunas 103 tidak muncul. Gunakan identitas dan nominal setiap baris sebagai kontrak, bukan hanya grand total."
+    },
+    "checks": [
+      {
+        "id": "l2m04l03-check-1",
+        "question": "Dua query mempunyai teks berbeda tetapi seluruh baris dan nilai kolom hasil beserta multiplicity sama. Bagaimana menilai kebenarannya?",
+        "options": [
+          "Tolak salah satunya karena teks SQL harus identik.",
+          "Terima untuk kontrak dan input yang diperiksa; tetap tinjau kolom serta kasus lain yang diwajibkan.",
+          "Anggap semua input produksi pasti benar karena satu fixture cocok."
+        ],
+        "answer": 1,
+        "explanation": "Kebenaran ditentukan hasil sesuai kontrak; satu input tidak membuktikan semua kasus dan semua kolom.",
+        "feedback": [
+          "CTE dan subquery berbeda dapat menghasilkan relasi yang sama.",
+          "Benar: bukti hasil harus dibatasi pada kontrak dan data yang benar-benar diperiksa.",
+          "Kecocokan fixture bukan bukti universal untuk data atau kebijakan lain."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l2m04l03-check-2",
+        "question": "Apa yang benar tentang penolakan overpayment pada School Finance seed saat ini?",
+        "options": [
+          "Belum ada guard lintas baris; CHECK amount > 0 tidak membatasi total cicilan.",
+          "Foreign key otomatis menolak jumlah payment di atas sisa tagihan.",
+          "CASE pada SELECT menjamin dua request tidak dapat melakukan overpayment."
+        ],
+        "answer": 0,
+        "explanation": "Validasi identitas dan nominal positif tidak menjamin batas agregat; SELECT keputusan juga bukan transaksi pencatatan.",
+        "feedback": [
+          "Benar: kebutuhan guard harus dinyatakan, bukan diasumsikan sudah terpasang.",
+          "Foreign key memeriksa keberadaan invoice, bukan total pembayaran.",
+          "SELECT keputusan tidak mengunci pemeriksaan dan pencatatan menjadi satu aksi atomik."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Nilai kontrak laporan outstanding dan cari bukti yang membedakan query benar dari hasil yang sekadar tampak masuk akal.",
+      "setup": "Expected pasangan invoice_id/outstanding: (102,300000), (104,450000), (105,650000), (106,150000), (108,400000). Kasus duplikasi dan usulan payment 300001 bersifat hipotetis. Tidak ada mutasi atau penolakan constraint yang dijalankan.",
+      "starterSql": "SELECT i.invoice_id, i.amount - COALESCE(p.amount, 0.00) AS outstanding\nFROM school.invoices i LEFT JOIN school.payments p ON p.invoice_id = i.invoice_id\nORDER BY i.invoice_id;",
+      "variants": [
+        {
+          "id": "l2m04l03-variant-1",
+          "question": "Apa hasil benar untuk invoice 102, 103, dan 108 pada kontrak outstanding positif?",
+          "options": [
+            "102 tersisa 500000; 103 muncul dua kali; 108 hilang.",
+            "102, 103, dan 108 seluruhnya lunas.",
+            "102 tersisa 300000; 103 tidak muncul; 108 tersisa 400000."
+          ],
+          "answer": 2,
+          "explanation": "Partial receipt mengurangi 102, dua cicilan melunasi 103, dan ketiadaan payment tidak menghapus 108.",
+          "feedback": [
+            "Itu mengabaikan partial payment, salah grain untuk cicilan, dan membuang invoice tanpa payment.",
+            "Hanya 103 lunas; 102 dan 108 masih memiliki outstanding positif.",
+            "Benar: ketiga kasus berbeda ditangani sesuai kontrak hasil."
+          ]
+        },
+        {
+          "id": "l2m04l03-variant-2",
+          "question": "Query kandidat memindahkan saldo 300000 dari invoice 102 ke 103, tetapi total dan jumlah baris tetap sama. Apakah benar?",
+          "options": [
+            "Tidak; expected rows harus memeriksa identitas invoice dan nominal.",
+            "Ya karena total 1950000 sudah cukup.",
+            "Ya karena jumlah invoice sama."
+          ],
+          "answer": 0,
+          "explanation": "Saldo yang ditempatkan pada invoice salah melanggar kontrak walaupun agregatnya sama.",
+          "feedback": [
+            "Benar: perbandingan baris menangkap kesalahan yang tidak terlihat pada total.",
+            "Total tidak menunjukkan pihak atau invoice mana yang ditagih.",
+            "Jumlah baris tidak memeriksa identitas dan nilai setiap baris."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l2m04l03-edge-1",
+          "question": "Expected memuat (102,300000) sekali; actual memuat pasangan sama dua kali. Apa hasil actual EXCEPT ALL expected?",
+          "options": [
+            "Kosong karena kedua sisi memiliki pasangan tersebut.",
+            "Satu salinan ekstra (102,300000).",
+            "Dua salinan karena EXCEPT ALL mengabaikan expected."
+          ],
+          "answer": 1,
+          "explanation": "EXCEPT ALL mengurangi jumlah kemunculan pasangan di kanan dari jumlahnya di kiri.",
+          "feedback": [
+            "Itu perilaku EXCEPT tanpa ALL, yang dapat menyembunyikan duplikasi ekstra.",
+            "Benar: dua salinan dikurangi satu menyisakan satu baris tidak diharapkan.",
+            "Satu salinan sudah diimbangi expected sehingga hanya satu yang berlebih."
+          ]
+        },
+        {
+          "id": "l2m04l03-edge-2",
+          "question": "Invoice 102 tersisa 300000. Pada kebijakan tanpa overpayment, bagaimana keputusan untuk usulan succeeded 300001?",
+          "options": [
+            "Terima karena amount positif berarti semua aturan terpenuhi.",
+            "Terima lalu hilangkan saldo negatif dengan GREATEST(outstanding,0).",
+            "Tolak sebelum pencatatan; seed belum memiliki guard atomik yang menjaminnya."
+          ],
+          "answer": 2,
+          "explanation": "Usulan melebihi sisa satu unit. Penolakan adalah kebijakan yang perlu ditegakkan atomik, bukan efek otomatis CHECK positif.",
+          "feedback": [
+            "Positif tidak berarti lebih kecil atau sama dengan sisa yang boleh diterima.",
+            "Menjepit saldo ke nol menyembunyikan pelanggaran tanpa menolak pencatatannya.",
+            "Benar: bedakan keputusan yang diharapkan dari guard database yang belum tersedia."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Turunkan expected saldo per invoice dari seed, jangan hanya membandingkan grand total.",
+        "Agregasikan succeeded per invoice sebelum LEFT JOIN, lalu pilih outstanding > 0.",
+        "Bandingkan expected dan actual dengan EXCEPT ALL dua arah; periksa saldo negatif serta usulan payment melebihi sisa secara terpisah."
+      ],
+      "solutionSql": "WITH receipts AS (\n  SELECT invoice_id, SUM(amount) AS paid\n  FROM school.payments WHERE status = 'succeeded'\n  GROUP BY invoice_id\n), balances AS (\n  SELECT i.invoice_id, i.amount AS billed, COALESCE(r.paid, 0.00) AS paid,\n         i.amount - COALESCE(r.paid, 0.00) AS outstanding\n  FROM school.invoices i LEFT JOIN receipts r ON r.invoice_id = i.invoice_id\n), actual AS (\n  SELECT invoice_id, billed, paid, outstanding FROM balances WHERE outstanding > 0\n), expected(invoice_id, billed, paid, outstanding) AS (\n  VALUES (102::bigint, 500000.00::numeric, 200000.00::numeric, 300000.00::numeric),\n         (104, 450000.00, 0.00, 450000.00),\n         (105, 650000.00, 0.00, 650000.00),\n         (106, 650000.00, 500000.00, 150000.00),\n         (108, 400000.00, 0.00, 400000.00)\n), missing AS (\n  SELECT * FROM expected EXCEPT ALL SELECT * FROM actual\n), unexpected AS (\n  SELECT * FROM actual EXCEPT ALL SELECT * FROM expected\n)\nSELECT (SELECT COUNT(*) FROM missing) AS missing_rows,\n       (SELECT COUNT(*) FROM unexpected) AS unexpected_rows,\n       (SELECT COUNT(*) FROM balances WHERE outstanding < 0) AS overpaid_invoices,\n       (SELECT CASE WHEN 300001.00 > 0 AND 300001.00 <= outstanding\n                    THEN 'accept' ELSE 'reject' END\n        FROM balances WHERE invoice_id = 102) AS proposed_payment;",
+      "solutionExplanation": "Pada seed, missing_rows = 0, unexpected_rows = 0, dan overpaid_invoices = 0. Kedua arah EXCEPT ALL memeriksa seluruh kolom kontrak serta jumlah kemunculan setiap baris. Proposed_payment = reject untuk usulan 300001 ke invoice 102 yang tersisa 300000. SELECT ini hanya memberi keputusan snapshot, tidak mencatat payment dan tidak menerapkan guard concurrency. Expected rows sengaja ditulis independen dari query kandidat.",
+      "critical": true
+    },
+    "reflection": "Mengapa total dan jumlah baris yang sama belum membuktikan laporan benar? Jelaskan fungsi EXCEPT ALL dua arah, kasus partial/no payment, dan alasan keputusan reject pada SELECT belum menjamin penolakan overpayment secara atomik."
+  }
+]

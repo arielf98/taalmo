@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L1 plus L2M01–L2M03: 30 published / 90 draft. The original implementation evidence below is retained as release history. L2M02–L2M03 have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L1 plus all L2 modules (L2M01–L2M04): 33 published / 87 draft. The original implementation evidence below is retained as release history. L2M02–L2M04 have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -108,3 +108,21 @@ Source review covered half-open instant boundaries, local-month grouping, explic
 The catalog now has ten fully authored modules and 30 published / 90 draft lessons. L2M03 retains its canonical L2M02 prerequisite. L2M04 remains draft, so no complete L2 assessment is exposed. IDs, prior versions, fixture and storage format are unchanged. Validation registries include the new JSON for a future authorized run; existing E2E expectations only update the count and next draft route. No test cases or registered lesson coverage were added; the browser loop remains the earlier 24 records. Next: **L2M04 — Kebenaran Hasil Query**, under the same no-test policy unless the user explicitly changes it.
 
 Limits are taught explicitly: the calendar is a static fixture report, not proof of complete live or future data; succeeded payments with unknown timestamps need investigation. Aging assumes fixture invoices already exist, uses current recorded statuses and has no complete issuance/status/refund ledger. Credits are separate from this positive-outstanding report. SQL, browser behavior and runtime remain unverified for L2M02–L2M03.
+
+## L2M04 continuation — 25 October 2026
+
+Published three bilingual lessons in `l2-correctness.json`, with `en-database-correctness.json` registered in the shared display translator:
+
+- `l2m04l01`: bag semantics, invoice/payment grain, legitimate installments, why DISTINCT amounts cannot repair invoice aggregation, and preaggregated receipts.
+- `l2m04l02`: correlated anti-joins, no rows versus no succeeded receipts versus positive balances, NULL-bearing exclusion lists, empty right-hand sources and unknown left-hand identities.
+- `l2m04l03`: an outstanding report contract, independently authored expected rows, bidirectional EXCEPT ALL including multiplicity, and a hypothetical overpayment decision. Both concept checks and the overpayment edge case are critical, preserving an integrity-critical question in either level-assessment rotation.
+
+Source/diff review covers invoice 103/109 installment multiplication, billed 5350000 versus direct-join 6450000, total succeeded receipts 3400000, and the five positive balances totaling 1950000. Invoice IDs are 102/104/105/106/108. The anti-join example introduces NULL through a CTE rather than violating the seed's NOT NULL foreign key. No source fixture or schema was changed. Expected booleans use PostgreSQL CSV f/t/null conventions.
+
+The checkpoint reference compares all four report columns in both directions, including billed/paid components and row multiplicity. For the baseline, the authored expected summary is missing_rows 0, unexpected_rows 0, overpaid_invoices 0, and proposed_payment reject for 300001 against invoice 102's remaining 300000. A SELECT CASE does not enforce a write or concurrency boundary, and the seed has no aggregate overpayment constraint. This is taught explicitly rather than claiming a rejected database mutation.
+
+The catalog now has eleven authored modules and 33 published / 87 draft lessons. All four L2 modules are published, so the existing level-assessment condition exposes L2; official completion remains gated on all module checkpoints and the level's 85%/critical-question rules. No progress storage or prior content versions changed. Combined transaction/database availability is 36 lessons plus three labs (39 activity milestones).
+
+The content-audit and trusted-SQL file registries include the new JSON for a future authorized run. Existing E2E expectations now use 11 modules/33 lessons, the next draft route l3m01l01, and an available L2 assessment. No test case or registered browser lesson coverage was added; the earlier 24-record loop remains unchanged. No tests, audits, SQL, lint, typecheck, build, browser or manual checks were run, as required by AGENTS.md. All new result values remain source-reviewed expectations, not executed evidence.
+
+Next canonical milestone: **L3M01 — Domain Modeling** (Commerce), starting with entities, attributes and lifecycle. Read the source curriculum and establish any required fixture before authoring it.

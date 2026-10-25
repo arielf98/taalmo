@@ -1,4 +1,11 @@
 {
+  "sql": "SQL",
+  "null": "nilai NULL",
+  "school-finance": "keuangan sekolah",
+  "bag-semantics": "semantik multiset",
+  "query-correctness": "kebenaran query",
+  "anti-join": "anti-join",
+  "reconciliation": "rekonsiliasi",
   "time-zones": "zona waktu",
   "time-series": "deret waktu",
   "reporting": "pelaporan",

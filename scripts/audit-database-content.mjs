@@ -12,6 +12,7 @@ export const authored = [
   "l2-subqueries",
   "l2-windows",
   "l2-time-reports",
+  "l2-correctness",
 ].flatMap((file) => read(`src/content/database/${file}.json`));
 const modules = blueprint.levels.flatMap((level) => level.modules);
 const lessons = modules.flatMap((module) => module.lessons);

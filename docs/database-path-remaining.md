@@ -1,16 +1,6 @@
 # Remaining curriculum authoring
 
-The following 90 canonical lessons remain draft. Each checkbox means: substantive teaching body, worked example, two concept checks with feedback, two practice variants, two graded edge cases, progressive hints, reflection, required fixture/simulator and validation. Follow the current AGENTS.md restrictions on validation; L2M02–L2M03 were reviewed through code and diff only.
-
-## L2 — SQL Problem Solving
-
-### L2M04 — Kebenaran Hasil Query
-
-Prerequisite: l2m03. Scenario: School Finance.
-
-- [ ] `l2m04l01` — Bag semantics dan duplikasi
-- [ ] `l2m04l02` — Anti-join, NULL, dan edge case
-- [ ] `l2m04l03` — Uji query dan checkpoint SQL
+The following 87 canonical lessons remain draft. Each checkbox means: substantive teaching body, worked example, two concept checks with feedback, two practice variants, two graded edge cases, progressive hints, reflection, required fixture/simulator and validation. Follow the current AGENTS.md restrictions on validation; L2M02–L2M04 were reviewed through code and diff only.
 
 ## L3 — Data Modeling & Schema Evolution
 
