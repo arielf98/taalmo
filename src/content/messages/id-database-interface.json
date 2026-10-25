@@ -177,5 +177,15 @@
   "statistics": "statistik",
   "estimates": "estimasi",
   "data-skew": "distribusi data timpang",
-  "analyze": "ANALYZE"
+  "analyze": "ANALYZE",
+  "indexes": "indeks",
+  "btree": "B-tree",
+  "selectivity": "selektivitas",
+  "composite-index": "indeks komposit",
+  "covering-index": "indeks covering",
+  "partial-index": "indeks parsial",
+  "write-amplification": "amplifikasi tulis",
+  "index-cost": "biaya indeks",
+  "storage": "penyimpanan",
+  "leading-column": "kolom awal"
 }

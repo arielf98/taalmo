@@ -13,13 +13,13 @@
 
 ## Database Engineering — database curriculum
 
-The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L4 and L5M01 provide 63 published bilingual lessons; 57 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
+The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L4 and L5M01–L5M02 provide 66 published bilingual lessons; 54 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
 
-## Recommended next milestone: L5M02 authoring
+## Recommended next milestone: L5M03 authoring
 
-L5M01 follows the completed L4 curriculum. L5 remains incomplete and its level assessment stays unavailable. Reading authored plan evidence does not establish measured profiling skill or certify a performance improvement.
+L5M02 follows L5M01. L5 remains incomplete and its level assessment stays unavailable. Prediction exercises assess index-design reasoning; they do not execute a tuning benchmark or certify database performance.
 
-Continue with L5M02 — Index Design: B-tree selectivity, composite/covering/partial indexes, and storage/write costs. Keep index eligibility distinct from actual planner choice and measured speed; preserve the seed schema and use isolated fixtures for additional fields. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
+Continue with L5M03 — Joins, Sorts, dan Rewrite: join algorithms, sort spill and per-operation memory costs, and result-preserving rewrites. Use deterministic results for semantic equivalence and explicitly authored inputs for plan/performance illustrations. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
 
 ## Later learning improvements
 

@@ -1,16 +1,8 @@
 # Remaining curriculum authoring
 
-The following 57 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
+The following 54 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L5 — Performance Engineering
-
-### L5M02 — Index Design
-
-Prerequisite: l5m01. Scenario: Commerce + Analytics.
-
-- [ ] `l5m02l01` — B-tree dan selectivity
-- [ ] `l5m02l02` — Composite, covering, dan partial
-- [ ] `l5m02l03` — Index cost dan write amplification
 
 ### L5M03 — Joins, Sorts, dan Rewrite
 

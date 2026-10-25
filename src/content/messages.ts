@@ -21,6 +21,7 @@ import englishConcurrency from "./messages/en-database-concurrency.json" with { 
 import englishPayments from "./messages/en-database-payments.json" with { type: "json" };
 import englishSideEffects from "./messages/en-database-side-effects.json" with { type: "json" };
 import englishPlanner from "./messages/en-database-planner.json" with { type: "json" };
+import englishIndexes from "./messages/en-database-indexes.json" with { type: "json" };
 export type Locale = "en" | "id";
 const indonesian: Record<string, string> = {
   ...interfaceMessages,
@@ -48,6 +49,7 @@ const english: Record<string, string> = {
   ...englishPayments,
   ...englishSideEffects,
   ...englishPlanner,
+  ...englishIndexes,
 };
 const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

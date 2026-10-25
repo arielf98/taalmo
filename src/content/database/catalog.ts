@@ -16,6 +16,7 @@ import concurrency from "./l4-concurrency.json";
 import payments from "./l4-payments.json";
 import sideEffects from "./l4-side-effects.json";
 import planner from "./l5-planner.json";
+import indexes from "./l5-indexes.json";
 import type { AuthoredLesson, ConceptCheck } from "./types";
 import { pathHref } from "../lessons";
 export const databasePathHref = pathHref;
@@ -38,6 +39,7 @@ const authored = [
   ...payments,
   ...sideEffects,
   ...planner,
+  ...indexes,
 ] as AuthoredLesson[];
 const byId = new Map(authored.map((lesson) => [lesson.id, lesson]));
 export const databaseLevels = blueprint.levels.map((level) => ({
