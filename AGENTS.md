@@ -15,8 +15,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Tinjau perubahan melalui pembacaan kode dan diff. Jangan menjalankan lint, typecheck, atau build sebagai pengganti test tanpa permintaan eksplisit pengguna.
 - Setiap satu pekerjaan yang selesai wajib diakhiri dengan Git commit berpesan singkat dan jelas.
 - Commit hanya file yang relevan dengan pekerjaan tersebut. Jangan memasukkan perubahan pengguna atau pekerjaan lain yang belum selesai.
-- Jangan push, merge, atau deploy kecuali pengguna memintanya.
-- Pada laporan akhir, sebutkan commit yang dibuat serta nyatakan bahwa test tidak dijalankan sesuai instruksi pengguna.
+- Setelah satu pekerjaan selesai ditinjau dan di-commit, langsung push commit ke remote branch yang sedang dikerjakan, kemudian lanjutkan pekerjaan berikutnya pada roadmap tanpa menunggu konfirmasi atau pesan lanjutan pengguna.
+- Teruskan siklus pengerjaan, peninjauan kode/diff, commit, dan push sampai seluruh pekerjaan yang disepakati selesai atau kapasitas token/sesi habis. Jangan mengurangi kelengkapan materi demi mengejar jumlah pekerjaan.
+- Jika push gagal, pertahankan commit lokal, catat penyebabnya, dan lanjutkan pekerjaan lain yang tidak bergantung pada push. Jangan force-push atau mengubah remote untuk mengatasi kegagalan.
+- Jangan merge atau deploy kecuali pengguna memintanya.
+- Pada laporan akhir, sebutkan commit yang dibuat, status push, dan pekerjaan berikutnya yang belum selesai, serta nyatakan bahwa test tidak dijalankan sesuai instruksi pengguna.
 
 ## Visualisasi materi Database Engineering
 
