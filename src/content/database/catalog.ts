@@ -18,6 +18,7 @@ import sideEffects from "./l4-side-effects.json";
 import planner from "./l5-planner.json";
 import indexes from "./l5-indexes.json";
 import joinsRewrite from "./l5-joins-rewrite.json";
+import largeData from "./l5-large-data.json";
 import type { AuthoredLesson, ConceptCheck } from "./types";
 import { pathHref } from "../lessons";
 export const databasePathHref = pathHref;
@@ -42,6 +43,7 @@ const authored = [
   ...planner,
   ...indexes,
   ...joinsRewrite,
+  ...largeData,
 ] as AuthoredLesson[];
 const byId = new Map(authored.map((lesson) => [lesson.id, lesson]));
 export const databaseLevels = blueprint.levels.map((level) => ({

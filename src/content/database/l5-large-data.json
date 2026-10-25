@@ -1,0 +1,562 @@
+[
+  {
+    "id": "l5m04l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "large-data",
+      "data-skew",
+      "tenant-distribution",
+      "reproducible-generator",
+      "cardinality"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/queries-table-expressions.html",
+      "https://www.postgresql.org/docs/17/functions-srf.html",
+      "https://www.postgresql.org/docs/17/planner-stats.html"
+    ],
+    "hook": "Satu tenant dari 100 tenant menghasilkan 90% event. Mengapa query yang terlihat baik pada sepuluh baris contoh dapat berubah perilakunya ketika data diskalakan, dan bagaimana membuat generator skew yang dapat diulang tanpa berpura-pura sudah mengukur satu juta baris?",
+    "objectives": [
+      "Merancang generator data skew yang deterministik dengan seed, formula, dan ukuran target yang terdokumentasi.",
+      "Menjelaskan perbedaan distribusi merata dengan satu tenant dominan yang hanya mewakili 1% jumlah tenant.",
+      "Membaca laporan fixture kecil tanpa menganggapnya sebagai bukti runtime untuk dataset satu juta baris."
+    ],
+    "sections": [
+      {
+        "title": "Skala bukan hanya jumlah baris",
+        "paragraphs": [
+          "Ketika tabel membesar, biaya query dipengaruhi jumlah baris, ukuran row, selectivity, indeks, distribusi nilai, dan jumlah tenant yang dilayani. Dua tabel sama-sama memiliki satu juta baris dapat mempunyai perilaku berbeda: distribusi merata membagi pekerjaan ke banyak tenant, sedangkan satu tenant dominan dapat mengambil sebagian besar baris. Dalam skenario ini ada 100 tenant, jadi satu tenant hanya 1% dari tenant, tetapi tenant 1 menghasilkan 90% event. Jika query selalu meminta tenant 1, predicate itu tidak selektif walaupun tenant_id memiliki indeks. Jika query meminta tenant kecil, lookup yang sama dapat jauh lebih selektif.",
+          "Karena itu, angka row count saja tidak cukup untuk memilih strategi. Catat grain, tenant cardinality, frekuensi top values, row width, dan query mix. Distribusi juga dapat berubah setelah backfill atau migrasi. Planner membutuhkan statistik yang cukup baru, sementara operator aplikasi perlu batas tenant dan pagination yang benar. Data kecil berguna untuk mengajarkan rumus dan memeriksa bentuk output; ia tidak membuktikan cache, planner cost, memory, atau throughput pada volume production."
+        ]
+      },
+      {
+        "title": "Generator reproducible harus menyebut seed dan formula",
+        "paragraphs": [
+          "Generator yang dapat diulang tidak memakai random tanpa seed atau now(). Tetapkan seed, row_count, jumlah tenant, dan aturan assignment. Contoh desain untuk satu juta event: row_no berjalan dari 1 sampai 1000000; jika row_no <= 900000, tenant_id = 1; selain itu, tenant_id = 2 + ((row_no - 900001) % 99). Satu tenant dominan mengambil 90% baris, sedangkan 99 tenant lain membagi 10% secara deterministik. Formula ini menjelaskan skenario, tetapi lesson tidak menjalankan generator satu juta baris.",
+          "Sampel worked example hanya membuat 100 event memakai formula yang sama: 90 event untuk tenant 1 dan 10 event untuk tenant 2 sampai 11. generate_series memberi row number stabil, dan CASE memberi assignment tanpa random. Untuk dataset nyata, simpan seed dan formula dalam artefak generator, dokumentasikan apakah pembulatan atau tanggal ikut ditentukan, lalu hitung distribusi setelah load. Reproducible berarti input sama dapat menghasilkan isi yang sama; bukan berarti hasil kecil dapat digunakan sebagai benchmark volume besar."
+        ]
+      },
+      {
+        "title": "Laporan distribusi memberi sinyal, bukan bukti performa",
+        "paragraphs": [
+          "Worked table mengembalikan lima tenant teratas dari fixture 100 baris. Tenant 1 memiliki 90 baris, sedangkan tenant kecil yang muncul masing-masing memiliki satu. Kolom persentase dihitung dari fixture, sehingga angka 90,00% adalah fakta deterministik untuk sample ini. Tabel tersebut tidak mengklaim bahwa query pada satu juta baris memiliki latency tertentu, bahwa index scan pasti menang, atau bahwa planner production akan memakai plan yang sama. Untuk menyelidiki volume besar, jalankan generator di lingkungan disposable, jalankan ANALYZE, dan ukur query dengan workload serta resource yang representatif.",
+          "Bandingkan juga query tenant dominan dengan query tenant kecil. Satu indeks mungkin membantu tenant kecil tetapi tetap membaca banyak halaman untuk tenant dominan. Solusi dapat berupa partitioning, summary, cache, atau perubahan query, tetapi keputusan itu membutuhkan evidence dan lifecycle data. Jangan mengubah sample menjadi angka kapasitas. Lesson ini mengajarkan cara membuat input dan laporan distribusi yang dapat diaudit sebelum eksperimen skala besar dilakukan."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset S — fixture 100 event dengan 100 tenant terdaftar. Formula deterministic memberi 90 event untuk tenant_id 1 dan satu event untuk tenant_id 2 sampai 11. Satu tenant adalah 1% dari 100 tenant, tetapi memegang 90% baris sample; fixture kecil ini bukan bukti runtime satu juta baris.",
+      "setupSql": "CREATE TEMP TABLE lesson_tenants (\n  tenant_id INTEGER PRIMARY KEY,\n  tenant_code TEXT NOT NULL UNIQUE\n);\nINSERT INTO pg_temp.lesson_tenants\nSELECT tenant_id, 'T' || LPAD(tenant_id::TEXT, 3, '0')\nFROM generate_series(1, 100) AS g(tenant_id);\nCREATE TEMP TABLE lesson_tenant_events (\n  event_id INTEGER PRIMARY KEY,\n  tenant_id INTEGER NOT NULL REFERENCES pg_temp.lesson_tenants(tenant_id),\n  event_day DATE NOT NULL,\n  payload_bucket TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_tenant_events (event_id, tenant_id, event_day, payload_bucket)\nSELECT row_no,\n       CASE WHEN row_no <= 90 THEN 1 ELSE 2 + ((row_no - 91) % 10) END,\n       DATE '2026-10-01' + ((row_no - 1) % 7),\n       CASE WHEN row_no % 2 = 0 THEN 'even' ELSE 'odd' END\nFROM generate_series(1, 100) AS g(row_no);",
+      "sql": "SELECT e.tenant_id, t.tenant_code, COUNT(*)::TEXT AS event_count,\n       TO_CHAR(ROUND(COUNT(*)::NUMERIC * 100 / 100, 2), 'FM990.00') AS percent_of_fixture\nFROM pg_temp.lesson_tenant_events AS e\nJOIN pg_temp.lesson_tenants AS t ON t.tenant_id = e.tenant_id\nGROUP BY e.tenant_id, t.tenant_code\nORDER BY COUNT(*) DESC, e.tenant_id\nLIMIT 5;",
+      "columns": [
+        "tenant_id",
+        "tenant_code",
+        "event_count",
+        "percent_of_fixture"
+      ],
+      "rows": [
+        ["1", "T001", "90", "90.00"],
+        ["2", "T002", "1", "1.00"],
+        ["3", "T003", "1", "1.00"],
+        ["4", "T004", "1", "1.00"],
+        ["5", "T005", "1", "1.00"]
+      ],
+      "ordered": true,
+      "explanation": "Laporan menunjukkan tenant 1 sebagai tenant dominan pada fixture 100 baris dan tenant 2 sampai 5 sebagai tenant kecil. Formula assignment dapat dipetakan ke desain satu juta baris tanpa benar-benar membuat satu juta row pada lesson ini. Persentase adalah persentase fixture, bukan ukuran tenant production. Tidak ada latency, planner plan, memory, atau throughput yang diukur; sample ini hanya memeriksa distribusi dan repeatability."
+    },
+    "checks": [
+      {
+        "id": "l5m04l01-check-1",
+        "question": "Dalam skenario 100 tenant, apa arti 1% tenant dominan?",
+        "options": [
+          "Satu tenant dari 100 tenant adalah tenant dominan; ia dapat memiliki porsi baris jauh di atas 1%, misalnya 90%.",
+          "Tepat 1% dari seluruh baris harus dimiliki tenant dominan.",
+          "Semua tenant harus memiliki jumlah baris yang sama karena jumlah tenant sudah diketahui."
+        ],
+        "answer": 0,
+        "explanation": "Persentase tenant dan persentase baris adalah dua metrik berbeda. Satu tenant dapat 1% dari tenant tetapi 90% dari event.",
+        "feedback": [
+          "Benar. Tenant share dan row share harus dilaporkan terpisah.",
+          "Belum tepat. 1% di sini merujuk pada jumlah tenant, bukan porsi baris.",
+          "Belum tepat. Skenario dominan justru menyatakan distribusi tidak merata."
+        ]
+      },
+      {
+        "id": "l5m04l01-check-2",
+        "question": "Mengapa generator production perlu menyimpan seed, row_count, dan formula assignment?",
+        "options": [
+          "Agar semua row otomatis masuk tenant yang sama tanpa perlu laporan.",
+          "Agar input yang sama dapat diulang dan distribusi hasil dapat diperiksa tanpa bergantung pada random atau waktu saat eksekusi.",
+          "Agar sample 100 row membuktikan latency dataset satu juta row."
+        ],
+        "answer": 1,
+        "explanation": "Seed dan formula membuat input generator dapat diaudit dan direproduksi; keduanya tidak mengubah sample menjadi benchmark.",
+        "feedback": [
+          "Belum tepat. Formula tetap harus mendistribusikan row sesuai skenario yang didokumentasikan.",
+          "Benar. Repeatability memudahkan membandingkan eksperimen dan menemukan perubahan distribusi.",
+          "Belum tepat. Reproducibility bukan bukti latency atau kapasitas pada volume lain."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi tenant dominan dan tenant kecil dari formula deterministic, lalu jelaskan evidence apa yang masih diperlukan sebelum menyimpulkan performa.",
+      "setup": "Gunakan Dataset S. Formula fixture membuat 100 row, bukan satu juta; player membaca laporan distribusi dan tidak menjalankan generator volume besar atau benchmark. Bedakan jumlah tenant, porsi row, dan bukti runtime.",
+      "starterSql": "SELECT tenant_id, COUNT(*)::TEXT AS event_count\nFROM pg_temp.lesson_tenant_events\nGROUP BY tenant_id\nORDER BY COUNT(*) DESC, tenant_id;",
+      "variants": [
+        {
+          "id": "l5m04l01-variant-1",
+          "question": "Jika query hanya meminta tenant_id = 1 pada fixture skew, apa risiko interpretasi yang tepat?",
+          "options": [
+            "Predicate tenant 1 dapat mencakup mayoritas row sehingga indeks tidak otomatis berarti query sangat selektif.",
+            "Karena tenant 1 dominan, semua query tenant kecil pasti sama mahal.",
+            "Sample kecil membuktikan cache dan latency production."
+          ],
+          "answer": 0,
+          "explanation": "Tenant dominan mempunyai banyak row; selectivity predicate harus dilihat dari distribusi, bukan dari keberadaan indeks saja.",
+          "feedback": [
+            "Benar. Tenant dominan dapat membuat lookup mengambil banyak row dan halaman.",
+            "Belum tepat. Tenant kecil dapat memiliki selectivity berbeda dan perlu diukur terpisah.",
+            "Belum tepat. Sample hanya menunjukkan distribusi authored, bukan runtime production."
+          ]
+        },
+        {
+          "id": "l5m04l01-variant-2",
+          "question": "Desain generator satu juta row ingin mempertahankan 90% row pada tenant 1 dan membagi 10% pada 99 tenant lain. Formula mana yang sesuai?",
+          "options": [
+            "tenant_id = 2 + ((row_no - 900001) % 99) untuk semua row tanpa kondisi.",
+            "Gunakan random tanpa seed agar distribusi terlihat alami.",
+            "CASE WHEN row_no <= 900000 THEN 1 ELSE 2 + ((row_no - 900001) % 99) END."
+          ],
+          "answer": 2,
+          "explanation": "CASE mengalokasikan 900000 row pertama ke tenant 1 dan formula modulo membagi sisa 100000 secara deterministik ke 99 tenant.",
+          "feedback": [
+            "Belum tepat. Tanpa CASE, row awal dapat menghasilkan tenant di luar skenario dominan.",
+            "Belum tepat. Random tanpa seed tidak repeatable dan sulit diaudit.",
+            "Benar. Kondisi dan modulo bersama-sama menyatakan porsi dominan serta pembagian sisa."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l5m04l01-edge-1",
+          "question": "Laporan fixture 100 row menunjukkan tenant 1 = 90%. Apa klaim yang aman?",
+          "options": [
+            "Query tenant 1 pasti selesai dalam 90% waktu query tenant lain.",
+            "Fixture memiliki row share 90% untuk tenant 1; dampak planner, I/O, dan latency pada volume lain belum terbukti.",
+            "Indeks tenant_id pasti tidak berguna untuk semua tenant."
+          ],
+          "answer": 1,
+          "explanation": "Laporan hanya membuktikan distribusi fixture. Performa perlu workload dan pengukuran pada lingkungan yang relevan.",
+          "feedback": [
+            "Belum tepat. Porsi row tidak sama dengan proporsi waktu.",
+            "Benar. Nyatakan row share dan batas evidence secara terpisah.",
+            "Belum tepat. Indeks dapat tetap membantu tenant kecil atau query lain."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l5m04l01-edge-2",
+          "question": "Generator memakai now() dan random tanpa seed agar terasa realistis. Masalah utamanya apa?",
+          "options": [
+            "Hasil dapat berubah antar-run sehingga perbedaan distribusi atau performa sulit diatribusikan pada perubahan yang sedang diuji.",
+            "Generator pasti menghasilkan tepat 90% row tenant 1.",
+            "Random tanpa seed membuat semua row selalu identik."
+          ],
+          "answer": 0,
+          "explanation": "Benchmark atau diagnosis membutuhkan input yang dapat dibandingkan; waktu dan random tak terkendali mengurangi reproducibility.",
+          "feedback": [
+            "Benar. Tetapkan seed, formula, tanggal, dan row_count untuk eksperimen yang dapat diaudit.",
+            "Belum tepat. Tanpa formula eksplisit tidak ada jaminan distribusi tertentu.",
+            "Belum tepat. Random justru dapat menghasilkan variasi, bukan semua row identik."
+          ]
+        }
+      ],
+      "hints": [
+        "Pisahkan denominator tenant dari denominator row: satu tenant dapat 1% tenant tetapi 90% event.",
+        "Tuliskan formula CASE dan modulo dengan row_no, seed, dan row_count yang eksplisit sebelum membahas plan.",
+        "Laporan fixture membuktikan distribusi sample; runtime volume besar memerlukan generator disposable, ANALYZE, dan measurement terpisah."
+      ],
+      "solutionSql": "SELECT e.tenant_id, COUNT(*)::TEXT AS event_count,\n       TO_CHAR(ROUND(COUNT(*)::NUMERIC * 100 / 100, 2), 'FM990.00') AS percent_of_fixture\nFROM pg_temp.lesson_tenant_events AS e\nGROUP BY e.tenant_id\nORDER BY COUNT(*) DESC, e.tenant_id\nLIMIT 5;",
+      "solutionExplanation": "Reference query mengembalikan tenant dominan dan empat tenant kecil teratas secara deterministik. Formula fixture membuat 90 dari 100 row untuk tenant 1; formula satu juta row yang dibahas di lesson hanya desain, bukan eksekusi. Solusi tidak mengubah row share menjadi latency, memory, atau planner evidence.",
+      "critical": true
+    },
+    "reflection": "Jelaskan perbedaan 1% jumlah tenant dan 90% porsi row, tuliskan seed serta formula generator reproducible, dan sebutkan mengapa fixture kecil tidak membuktikan performa dataset satu juta row."
+  },
+  {
+    "id": "l5m04l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "large-data",
+      "pagination",
+      "keyset",
+      "offset",
+      "consistent-order"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/queries-limit.html",
+      "https://www.postgresql.org/docs/17/queries-order.html",
+      "https://www.postgresql.org/docs/17/indexes-order.html",
+      "https://www.postgresql.org/docs/17/transaction-iso.html"
+    ],
+    "hook": "Feed order memiliki beberapa row dengan created_at sama. Mengapa cursor hanya berisi timestamp dapat melewati atau mengulang row, dan bagaimana keyset pagination memakai pasangan created_at serta id untuk urutan total?",
+    "objectives": [
+      "Menerapkan keyset pagination dengan (created_at, id) sebagai cursor lengkap dan urutan yang konsisten.",
+      "Membandingkan offset dengan keyset ketika row disisipkan atau dihapus di antara request.",
+      "Menjelaskan kebutuhan index direction, immutable non-NULL keys, dan snapshot bila pembaca memerlukan view yang konsisten."
+    ],
+    "sections": [
+      {
+        "title": "Halaman membutuhkan urutan total",
+        "paragraphs": [
+          "Pagination bukan hanya memilih LIMIT. Database membutuhkan urutan yang menentukan posisi setiap row. ORDER BY created_at DESC belum total bila beberapa row memiliki timestamp sama; PostgreSQL boleh mengembalikan ties dalam urutan yang tidak terikat. Tambahkan id DESC sebagai tie-breaker yang unik sehingga pasangan (created_at, id) menentukan urutan total. Cursor harus menyimpan kedua nilai terakhir, bukan timestamp saja. Jika created_at nullable, kontrak harus menetapkan NOT NULL atau menyatakan NULLS FIRST/LAST secara eksplisit; contoh ini memilih NOT NULL agar predikat cursor tidak memiliki ambiguitas tiga nilai.",
+          "Index direction sebaiknya mendukung urutan feed, misalnya (created_at DESC, id DESC). Keyset query mengambil row setelah cursor dengan perbandingan row (created_at, id) < (:last_created_at, :last_id) untuk urutan descending. Jika arah pagination berubah, operator cursor dan ORDER BY harus berubah bersama; B-tree yang sama sering dapat dipindai mundur untuk urutan kebalikan, jadi index baru tidak selalu diperlukan. ID tie-breaker harus immutable; mengganti created_at atau id setelah cursor diterbitkan dapat mengubah posisi row dan mengurangi jaminan traversal."
+        ]
+      },
+      {
+        "title": "Offset melewati row; keyset mencari dari cursor",
+        "paragraphs": [
+          "Offset meminta database menemukan dan melewati N row sebelum mengembalikan page berikutnya. Pada offset besar, pekerjaan skip dapat bertambah dan perubahan data di antara request dapat menggeser boundary. Jika row baru masuk di awal feed, page kedua dengan OFFSET dapat mengulang row yang sebelumnya sudah dilihat; jika row dihapus, satu row dapat terlewati. Offset tetap berguna untuk page number kecil atau kebutuhan UI tertentu, tetapi jangan menjanjikan snapshot stabil tanpa transaction atau snapshot contract.",
+          "Keyset memakai nilai cursor sebagai batas langsung. Ia tidak perlu menghitung semua posisi sebelum cursor, sehingga biasanya lebih sesuai untuk feed besar yang bergerak maju. Keyset juga tidak otomatis membuat hasil immutable: insert atau delete tetap dapat mengubah row yang terlihat pada request berikutnya. Untuk view yang benar-benar konsisten, baca beberapa page pada consistent snapshot atau gunakan exportable snapshot dengan lifecycle yang jelas. Snapshot yang panjang memiliki biaya resource dan konflik, jadi pilih contract sesuai kebutuhan."
+        ]
+      },
+      {
+        "title": "Worked page memakai cursor lengkap dan data deterministic",
+        "paragraphs": [
+          "Fixture memiliki tiga row dengan created_at yang sama pada awal feed. Page pertama mengambil 1008, 1007, dan 1006, sehingga cursor terakhir adalah (2026-10-05 03:00:00+00, 1006). Query offset dan keyset kemudian diminta untuk page kedua. Pada fixture tanpa perubahan, kedua metode menampilkan 1005, 1004, dan 1003; hasil ini menunjukkan kesetaraan input, bukan bukti bahwa offset dan keyset memiliki biaya runtime yang sama.",
+          "Activity meminta learner memprediksi dampak insert atau delete dan menyebut dua nilai cursor. Jangan menyimpan timestamp saja karena 1007 dan 1006 memiliki timestamp yang sama. Jangan mengandalkan offset sebagai identitas row. Jika feed memerlukan repeatable read lintas request, nyatakan siapa yang memegang snapshot dan kapan snapshot dibuang. Lesson ini tidak membuka SQL runner bebas dan tidak mengukur latency pagination."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset P — delapan order deterministic dengan ties pada created_at. Page size 3; cursor page pertama adalah (2026-10-05 03:00:00+00, 1006). created_at dan order_id NOT NULL; order_id menjadi tie-breaker immutable untuk latihan.",
+      "setupSql": "CREATE TEMP TABLE lesson_pagination_orders (\n  order_id BIGINT PRIMARY KEY,\n  created_at TIMESTAMPTZ NOT NULL,\n  customer_id BIGINT NOT NULL,\n  state TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_pagination_orders VALUES\n (1001, '2026-10-02 03:00:00+00', 1, 'confirmed'),\n (1002, '2026-10-03 03:00:00+00', 2, 'confirmed'),\n (1003, '2026-10-03 03:00:00+00', 3, 'confirmed'),\n (1004, '2026-10-04 03:00:00+00', 4, 'confirmed'),\n (1005, '2026-10-04 03:00:00+00', 5, 'confirmed'),\n (1006, '2026-10-05 03:00:00+00', 6, 'confirmed'),\n (1007, '2026-10-05 03:00:00+00', 7, 'confirmed'),\n (1008, '2026-10-05 03:00:00+00', 8, 'confirmed');\nCREATE INDEX lesson_pagination_orders_created_id_idx\nON pg_temp.lesson_pagination_orders (created_at DESC, order_id DESC);",
+      "sql": "WITH offset_page AS (\n  SELECT order_id, created_at, 1 AS page_method_order, 'offset'::TEXT AS page_method,\n         ROW_NUMBER() OVER (ORDER BY created_at DESC, order_id DESC) - 3 AS page_position\n  FROM pg_temp.lesson_pagination_orders\n  ORDER BY created_at DESC, order_id DESC\n  OFFSET 3 LIMIT 3\n), keyset_page AS (\n  SELECT order_id, created_at, 2 AS page_method_order, 'keyset'::TEXT AS page_method,\n         ROW_NUMBER() OVER (ORDER BY created_at DESC, order_id DESC) AS page_position\n  FROM pg_temp.lesson_pagination_orders\n  WHERE (created_at, order_id) < (TIMESTAMPTZ '2026-10-05 03:00:00+00', 1006)\n  ORDER BY created_at DESC, order_id DESC\n  LIMIT 3\n)\nSELECT page_method, page_position::TEXT AS page_position, order_id::TEXT AS order_id,\n       TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') AS created_at_utc\nFROM (\n  SELECT * FROM offset_page\n  UNION ALL\n  SELECT * FROM keyset_page\n) AS pages\nORDER BY page_method_order, page_position;",
+      "columns": [
+        "page_method",
+        "page_position",
+        "order_id",
+        "created_at_utc"
+      ],
+      "rows": [
+        ["offset", "1", "1005", "2026-10-04 03:00:00"],
+        ["offset", "2", "1004", "2026-10-04 03:00:00"],
+        ["offset", "3", "1003", "2026-10-03 03:00:00"],
+        ["keyset", "1", "1005", "2026-10-04 03:00:00"],
+        ["keyset", "2", "1004", "2026-10-04 03:00:00"],
+        ["keyset", "3", "1003", "2026-10-03 03:00:00"]
+      ],
+      "ordered": true,
+      "explanation": "Tanpa perubahan data di antara request, offset 3 dan keyset dengan cursor lengkap menghasilkan row yang sama pada fixture. Persamaan ini bukan bukti biaya atau stabilitas yang sama. Query worked memakai ROW_NUMBER hanya untuk memberi label posisi pada perbandingan side-by-side; reference solution di bawah menunjukkan query keyset production yang lebih langsung. Ties pada 1006 dan 1007 membuat cursor timestamp saja tidak cukup; pair created_at dan order_id memotong urutan tepat setelah 1006. Index direction mengikuti ORDER BY descending. created_at NOT NULL menghindari hasil NULL yang tidak terdefinisi pada predikat row comparison."
+    },
+    "checks": [
+      {
+        "id": "l5m04l02-check-1",
+        "question": "Mengapa cursor keyset harus menyimpan created_at dan id?",
+        "options": [
+          "Timestamp saja sudah cukup karena ties selalu dikembalikan dalam urutan insertion.",
+          "Pasangan created_at dan id membentuk posisi total sehingga row dengan timestamp sama tidak terlewati atau terulang.",
+          "Id hanya diperlukan untuk menampilkan label, bukan untuk menentukan boundary."
+        ],
+        "answer": 1,
+        "explanation": "created_at dapat sama; id unik menjadi tie-breaker yang membuat boundary cursor deterministik.",
+        "feedback": [
+          "Belum tepat. Urutan ties tanpa tie-breaker bukan contract yang aman.",
+          "Benar. Kedua nilai harus dipakai pada ORDER BY dan predicate cursor.",
+          "Belum tepat. id adalah bagian dari posisi dan boundary, bukan dekorasi output."
+        ]
+      },
+      {
+        "id": "l5m04l02-check-2",
+        "question": "Apa efek insert row baru di awal feed antara request page pertama dan kedua dengan OFFSET?",
+        "options": [
+          "Boundary offset dapat bergeser sehingga row bisa terulang atau terlewati.",
+          "OFFSET menyimpan snapshot otomatis sehingga hasil selalu sama.",
+          "Insert tidak berpengaruh karena OFFSET dihitung dari id terbesar."
+        ],
+        "answer": 0,
+        "explanation": "OFFSET menghitung posisi pada statement berikutnya; perubahan row di depan dapat menggeser posisi page.",
+        "feedback": [
+          "Benar. Offset position bukan identity dan tidak otomatis repeatable antar statement.",
+          "Belum tepat. Snapshot otomatis bukan jaminan umum untuk request terpisah.",
+          "Belum tepat. OFFSET tidak memakai id terbesar sebagai boundary."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Bandingkan page kedua OFFSET 3 dengan keyset cursor (created_at, order_id), lalu prediksi perubahan ketika row baru masuk atau row lama dihapus.",
+      "setup": "Gunakan Dataset P. Page size 3, ordering (created_at DESC, order_id DESC), dan cursor lengkap (2026-10-05 03:00:00+00, 1006). Player tidak menjalankan pagination runtime atau mengukur latency; semua hasil adalah prediksi dari fixture.",
+      "starterSql": "SELECT order_id, created_at, state\nFROM pg_temp.lesson_pagination_orders\nWHERE (created_at, order_id) < (TIMESTAMPTZ '2026-10-05 03:00:00+00', 1006)\nORDER BY created_at DESC, order_id DESC\nLIMIT 3;",
+      "variants": [
+        {
+          "id": "l5m04l02-variant-1",
+          "question": "Jika row 1009 dengan created_at lebih baru disisipkan setelah page pertama, apa yang paling tepat?",
+          "options": [
+            "Keyset cursor lama tetap menunjuk boundary setelah 1006; row 1009 tidak otomatis muncul di page berikutnya, sedangkan OFFSET dapat menggeser page.",
+            "Keyset selalu menampilkan row baru di posisi yang sama tanpa perubahan contract.",
+            "Insert baru membuat created_at lama menjadi NULL."
+          ],
+          "answer": 0,
+          "explanation": "Cursor adalah boundary nilai, bukan pointer live ke awal feed; row baru di depan memerlukan refresh atau contract feed baru.",
+          "feedback": [
+            "Benar. Keyset menjaga traversal setelah cursor, sementara data baru di depan berada sebelum boundary.",
+            "Belum tepat. Keyset tidak menjanjikan feed live tanpa refresh atau snapshot contract.",
+            "Belum tepat. Insert tidak mengubah nilai created_at row lama menjadi NULL."
+          ]
+        },
+        {
+          "id": "l5m04l02-variant-2",
+          "question": "Mengapa index (created_at DESC, order_id DESC) cocok dengan query keyset worked?",
+          "options": [
+            "Karena setiap index selalu menghilangkan kebutuhan ORDER BY.",
+            "Karena index direction tidak berpengaruh pada biaya atau urutan.",
+            "Index tersebut menyamakan arah urutan dengan ORDER BY dan menyediakan tie-breaker yang sama."
+          ],
+          "answer": 2,
+          "explanation": "Arah dan kolom index mendukung traversal ordering, walaupun plan dan biaya nyata tetap perlu diukur.",
+          "feedback": [
+            "Belum tepat. Query tetap memiliki ORDER BY contract.",
+            "Belum tepat. Kecocokan direction dan kolom membantu, tetapi tetap bukan jaminan semua biaya.",
+            "Benar. Direction yang sesuai dan id tie-breaker mendukung pencarian page berikutnya."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l5m04l02-edge-1",
+          "question": "Jika created_at boleh NULL, apa yang harus ditambahkan pada contract pagination?",
+          "options": [
+            "Abaikan NULL karena row comparison selalu menempatkannya paling akhir.",
+            "Tetapkan NOT NULL atau nyatakan NULLS FIRST/LAST dan predicate cursor yang konsisten.",
+            "Ganti created_at dengan random agar NULL tidak muncul."
+          ],
+          "answer": 1,
+          "explanation": "NULL menghasilkan unknown pada sebagian perbandingan dan urutan default dapat berbeda dari contract yang diharapkan.",
+          "feedback": [
+            "Belum tepat. Perilaku NULL harus dinyatakan, bukan diasumsikan.",
+            "Benar. Constraint atau aturan ordering harus sama pada index, ORDER BY, dan cursor.",
+            "Belum tepat. Random merusak repeatability dan tidak menyelesaikan urutan NULL."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l5m04l02-edge-2",
+          "question": "Kapan consistent snapshot relevan untuk beberapa request pagination?",
+          "options": [
+            "Saat pembaca membutuhkan view yang sama meskipun insert atau delete terjadi di antara page; snapshot harus punya lifecycle dan biaya resource yang dipahami.",
+            "Selalu, karena snapshot membuat cursor dan index tidak diperlukan.",
+            "Tidak pernah, karena setiap request otomatis memakai snapshot transaction sebelumnya."
+          ],
+          "answer": 0,
+          "explanation": "Keyset memberi boundary traversal, sedangkan snapshot memberi visibility contract lintas statement bila lifecycle-nya dipertahankan.",
+          "feedback": [
+            "Benar. Snapshot dapat mengurangi perubahan view, tetapi long-lived snapshot punya biaya dan batas.",
+            "Belum tepat. Snapshot tidak menggantikan ordering total atau cursor.",
+            "Belum tepat. Request terpisah tidak otomatis berbagi snapshot."
+          ]
+        }
+      ],
+      "hints": [
+        "Tulis ORDER BY lengkap dan simpan dua nilai cursor terakhir, termasuk id ketika timestamp tie.",
+        "Untuk descending, row setelah cursor memakai perbandingan pair yang lebih kecil: (created_at, id) < (:last_created_at, :last_id).",
+        "Pisahkan jaminan traversal keyset dari visibility snapshot; insert/delete tetap memerlukan contract yang jelas."
+      ],
+      "solutionSql": "SELECT order_id::TEXT AS order_id,\n       TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') AS created_at_utc,\n       state\nFROM pg_temp.lesson_pagination_orders\nWHERE (created_at, order_id) < (TIMESTAMPTZ '2026-10-05 03:00:00+00', 1006)\nORDER BY created_at DESC, order_id DESC\nLIMIT 3;",
+      "solutionExplanation": "Reference solution memakai pair cursor yang sama dengan ORDER BY dan index direction. Ia mengembalikan 1005, 1004, dan 1003 pada fixture tanpa perubahan. Cursor timestamp saja tidak cukup karena 1006 dan 1007 tie; created_at NOT NULL membuat row comparison memiliki contract sederhana. Solusi tidak menjanjikan stabilitas terhadap insert/delete lintas request tanpa snapshot.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa OFFSET dan keyset dapat menghasilkan page yang sama pada fixture tetapi berbeda perilaku pada data yang berubah, mengapa cursor harus menyimpan created_at serta id, dan kapan consistent snapshot atau immutable key diperlukan."
+  },
+  {
+    "id": "l5m04l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "large-data",
+      "batch-writes",
+      "contention",
+      "wal",
+      "idempotency"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/tutorial-transactions.html",
+      "https://www.postgresql.org/docs/17/wal-intro.html",
+      "https://www.postgresql.org/docs/17/explicit-locking.html",
+      "https://www.postgresql.org/docs/17/sql-insert.html"
+    ],
+    "hook": "Import 10000 payment rows dapat selesai sebagai satu transaction besar, seratus transaction kecil, atau sepuluh batch sedang. Apa yang berubah pada lock duration, WAL burst, round trip, rollback, dan retry idempotent ketika ukuran batch diganti?",
+    "objectives": [
+      "Menjelaskan trade-off batch kecil, sedang, dan besar pada lock duration, WAL burst, round trip, serta rollback boundary.",
+      "Membedakan statement atomicity dari transaction atomicity dan menyatakan kapan semua batch hanya atomic di dalam top-level transaction.",
+      "Merancang retry batch yang bounded dan idempotent tanpa mengklaim throughput dari metadata authored."
+    ],
+    "sections": [
+      {
+        "title": "Ukuran batch mengubah resource dan boundary",
+        "paragraphs": [
+          "Batch bukan angka throughput yang universal. Batch kecil biasanya mempersingkat lock duration dan membatasi rollback scope, tetapi menambah jumlah statement, commit, round trip, dan overhead koordinasi. Batch besar dapat mengurangi round trip dan commit overhead, namun menahan lock lebih lama, membuat burst WAL lebih besar, memperpanjang transaction, dan meningkatkan pekerjaan yang harus diulang ketika gagal. Batch sedang sering menjadi kandidat awal, lalu dipilih ulang setelah pengukuran pada workload representatif. Metadata authored pada lesson ini hanya menyatakan trade-off dan jumlah batch; ia tidak mengukur rows per second.",
+          "Satu INSERT statement atomic berarti statement itu berhasil atau gagal sebagai statement. Beberapa batch yang masing-masing commit tidak otomatis atomic sebagai satu import: batch pertama dapat commit ketika batch kedua gagal. Semua batch hanya menjadi satu unit atomic bila caller membuka satu top-level transaction yang membungkus seluruh batch, dengan konsekuensi lock, WAL, dan rollback scope ikut membesar. Pilih boundary sesuai kebutuhan bisnis, bukan sekadar mengejar satu commit."
+        ]
+      },
+      {
+        "title": "WAL dan contention perlu dipikirkan sebagai puncak",
+        "paragraphs": [
+          "WAL mencatat perubahan agar recovery dan durability dapat bekerja. Batch besar dapat menghasilkan burst WAL dan membuat transaction lain menunggu lock atau resource; batch kecil menyebarkan pekerjaan tetapi menambah overhead per commit. Dampak bergantung pada row width, indeks, konflik, foreign keys, synchronous settings, storage, concurrent readers/writers, dan checkpoint. Jangan menyimpulkan WAL bytes atau lock duration dari batch_size saja. Ukur telemetry yang relevan pada disposable environment dan catat konfigurasi.",
+          "Contention juga datang dari urutan key yang tidak konsisten, unique conflicts, foreign keys, dan index maintenance. Batch yang menulis row overlapping dapat saling menunggu walaupun jumlah row sama. Jika operasi finansial harus diproses dalam urutan tertentu, buat lock/order contract dan bounded retry. Timeout atau deadlock bukan izin untuk mengulang seluruh provider side effect tanpa idempotency key."
+        ]
+      },
+      {
+        "title": "Retry dan rollback harus punya identitas batch",
+        "paragraphs": [
+          "Gunakan batch_id deterministik atau idempotency key per logical chunk. Simpan status pending, applied, atau failed dan unique constraint yang sesuai sehingga retry setelah timeout dapat diperiksa, bukan ditebak. Jika database sudah diketahui rollback dan seluruh efek berada di dalam transaction lokal, caller dapat memulai ulang unit kerja; idempotency dan rekonsiliasi tetap diperlukan untuk outcome COMMIT yang tidak diketahui atau efek eksternal. Jika seluruh import berada dalam satu top-level transaction, kegagalan di akhir dapat membatalkan semua batch; bila tiap batch commit sendiri, resume dapat dimulai dari batch yang belum applied.",
+          "Worked metadata memakai total 10000 row dan tiga ukuran batch: 100, 1000, dan 10000. Kolom round_trips, rollback_scope, dan tradeoff adalah authored design notes. Tidak ada throughput, WAL byte, lock duration, atau timing yang diukur. Activity meminta keputusan policy dan alasan, bukan angka benchmark. Production rollout tetap memerlukan canary, observability, backpressure, dan rekonsiliasi finansial."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset B — metadata authored untuk import 10000 payment rows dengan batch_size 100, 1000, dan 10000. Nilai menggambarkan jumlah batch dan trade-off boundary; throughput, WAL bytes, lock duration, serta timing sengaja tidak diukur.",
+      "setupSql": "CREATE TEMP TABLE lesson_batch_metadata (\n  batch_size INTEGER PRIMARY KEY,\n  total_rows INTEGER NOT NULL,\n  batch_count INTEGER NOT NULL,\n  round_trips INTEGER NOT NULL,\n  lock_scope TEXT NOT NULL,\n  rollback_scope TEXT NOT NULL,\n  tradeoff TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_batch_metadata VALUES\n (100, 10000, 100, 100, 'shorter per-batch lock candidate', 'one batch', 'more commit and round-trip overhead'),\n (1000, 10000, 10, 10, 'medium lock candidate', 'one batch', 'balanced authored trade-off'),\n (10000, 10000, 1, 1, 'long import lock candidate', 'whole import', 'large WAL burst and rollback scope');",
+      "sql": "SELECT batch_size::TEXT, total_rows::TEXT, batch_count::TEXT, round_trips::TEXT,\n       lock_scope, rollback_scope, tradeoff\nFROM pg_temp.lesson_batch_metadata\nORDER BY batch_size;",
+      "columns": [
+        "batch_size",
+        "total_rows",
+        "batch_count",
+        "round_trips",
+        "lock_scope",
+        "rollback_scope",
+        "tradeoff"
+      ],
+      "rows": [
+        ["100", "10000", "100", "100", "shorter per-batch lock candidate", "one batch", "more commit and round-trip overhead"],
+        ["1000", "10000", "10", "10", "medium lock candidate", "one batch", "balanced authored trade-off"],
+        ["10000", "10000", "1", "1", "long import lock candidate", "whole import", "large WAL burst and rollback scope"]
+      ],
+      "ordered": true,
+      "explanation": "Metadata menunjukkan aritmetika batch_count = total_rows / batch_size dan jumlah round trip authored yang disederhanakan. Ia tidak menunjukkan throughput; batch 1000 bukan klaim optimal, hanya kandidat trade-off. Lock scope, WAL burst, dan rollback scope harus diukur pada workload nyata. Jika setiap row batch commit sendiri, rollback_scope berlaku per batch; jika caller membungkus semua batch dalam top-level transaction, kegagalan akhir dapat membatalkan seluruh import."
+    },
+    "checks": [
+      {
+        "id": "l5m04l03-check-1",
+        "question": "Apa konsekuensi utama menjalankan 10000 row dalam satu top-level transaction?",
+        "options": [
+          "Lock dan rollback scope dapat panjang atau besar, serta WAL dapat muncul sebagai burst, walaupun round trip dan commit lebih sedikit.",
+          "Semua lock langsung hilang setelah setiap row walaupun belum COMMIT.",
+          "Throughput pasti paling tinggi karena batch terbesar selalu optimal."
+        ],
+        "answer": 0,
+        "explanation": "Transaction besar mengubah resource dan failure boundary; lebih sedikit commit tidak membuktikan throughput terbaik.",
+        "feedback": [
+          "Benar. Resource peak dan rollback impact perlu ditimbang terhadap kebutuhan atomicity.",
+          "Belum tepat. Lock transaction-level tidak hilang per row sebelum boundary commit.",
+          "Belum tepat. Ukuran terbesar bukan jaminan optimal tanpa measurement."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l5m04l03-check-2",
+        "question": "Mengapa batch retry membutuhkan batch_id atau idempotency key deterministik?",
+        "options": [
+          "Agar setiap retry selalu membuat payment baru tanpa pemeriksaan.",
+          "Agar retry dapat membedakan logical batch yang sama dari batch baru dan mencegah duplicate financial effect.",
+          "Agar rollback database otomatis mengembalikan side effect provider."
+        ],
+        "answer": 1,
+        "explanation": "Identitas logical batch memungkinkan unique guard, status check, dan rekonsiliasi sebelum mengulang effect.",
+        "feedback": [
+          "Belum tepat. Batch retry tanpa identity dapat menggandakan payment atau ledger.",
+          "Benar. Retry harus memeriksa hasil lokal dan identitas operasi sebelum mengulang.",
+          "Belum tepat. Rollback database tidak membatalkan provider eksternal."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Bandingkan tiga ukuran batch dan pilih boundary transaction serta retry policy yang aman untuk import payment rows.",
+      "setup": "Gunakan Dataset B. Metadata adalah authored design input, bukan throughput benchmark; player memprediksi lock/WAL/rollback trade-off dan tidak menjalankan batch write atau mengukur storage.",
+      "starterSql": "SELECT batch_size, batch_count, round_trips, rollback_scope, tradeoff\nFROM pg_temp.lesson_batch_metadata\nORDER BY batch_size;",
+      "variants": [
+        {
+          "id": "l5m04l03-variant-1",
+          "question": "Workload sangat lock-sensitive dan dapat melanjutkan batch berikutnya setelah satu batch gagal. Pilihan awal mana yang paling masuk akal?",
+          "options": [
+            "Batch 10000 tanpa observability karena round trip paling sedikit.",
+            "Batch kecil atau sedang dengan bounded retry dan status per batch, lalu ukur ulang pada workload representatif.",
+            "Satu retry tak terbatas tanpa batch_id agar semua row akhirnya masuk."
+          ],
+          "answer": 1,
+          "explanation": "Lock scope yang lebih kecil dapat menurunkan blast radius, tetapi overhead dan throughput tetap harus diukur.",
+          "feedback": [
+            "Belum tepat. Round trip lebih sedikit tidak menghapus lock duration dan rollback blast radius.",
+            "Benar. Pilihan awal harus menyatakan trade-off, status, retry limit, dan kebutuhan measurement.",
+            "Belum tepat. Retry tanpa identity dan limit dapat menggandakan effect atau menambah contention."
+          ]
+        },
+        {
+          "id": "l5m04l03-variant-2",
+          "question": "Semua batch harus atomic sebagai satu import finansial. Apa boundary yang sesuai?",
+          "options": [
+            "Commit setiap batch lalu menganggap seluruh import atomic.",
+            "Jalankan batch paralel tanpa transaction agar rollback otomatis terjadi.",
+            "Bungkus seluruh batch dalam satu top-level transaction, sambil menerima lock/WAL/rollback scope yang lebih besar."
+          ],
+          "answer": 2,
+          "explanation": "Atomicity lintas batch memerlukan satu transaction boundary, dengan konsekuensi resource dan failure scope yang harus diterima.",
+          "feedback": [
+            "Belum tepat. Commit per batch memungkinkan partial import.",
+            "Belum tepat. Tanpa boundary transaction tidak ada all-or-nothing rollback.",
+            "Benar. Satu top-level transaction memberi all-or-nothing internal atomicity, bukan provider exactly-once."
+          ],
+          "critical": true
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l5m04l03-edge-1",
+          "question": "Batch ketiga timeout setelah client kehilangan koneksi. Apa langkah pertama sebelum retry payment effect?",
+          "options": [
+            "Anggap rollback dan ulangi provider call tanpa mencari state.",
+            "Rekonsiliasi batch_id pada database/provider, lalu retry hanya bila outcome dan idempotency contract mendukung.",
+            "Naikkan batch_size agar timeout tidak terjadi lagi."
+          ],
+          "answer": 1,
+          "explanation": "Timeout dapat membuat outcome commit atau external effect tidak diketahui; identity dan reconciliation mencegah blind retry.",
+          "feedback": [
+            "Belum tepat. Koneksi hilang bukan bukti rollback dan retry buta dapat menggandakan payment.",
+            "Benar. Cari status lokal/provider sebelum mengulang side effect.",
+            "Belum tepat. Batch lebih besar dapat memperpanjang lock dan timeout."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l5m04l03-edge-2",
+          "question": "Mengapa batch 1000 tidak boleh disebut pasti optimal hanya karena metadata menunjukkan trade-off balanced?",
+          "options": [
+            "Karena metadata authored tidak mengukur throughput, WAL bytes, lock duration, storage, atau concurrency pada workload nyata.",
+            "Karena batch_size tidak pernah memengaruhi round trip.",
+            "Karena batch 10000 selalu lebih baik daripada batch lain."
+          ],
+          "answer": 0,
+          "explanation": "Label balanced adalah hipotesis desain. Keputusan optimal memerlukan pengukuran terkontrol dan kriteria workload.",
+          "feedback": [
+            "Benar. Authored trade-off memandu eksperimen, bukan menggantikan measurement.",
+            "Belum tepat. Batch size dapat mengubah jumlah statement dan round trip.",
+            "Belum tepat. Batch terbesar memiliki rollback dan contention risk yang berbeda."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Hitung batch_count dan round_trips, lalu pisahkan commit boundary dari statement atomicity.",
+        "Hubungkan batch besar dengan lock/WAL/rollback peak, serta batch kecil dengan commit dan round-trip overhead.",
+        "Sebelum retry payment, gunakan batch_id/idempotency dan rekonsiliasi; rollback database tidak membatalkan provider effect."
+      ],
+      "solutionSql": "SELECT batch_size::TEXT, total_rows::TEXT, batch_count::TEXT, round_trips::TEXT,\n       lock_scope, rollback_scope, tradeoff\nFROM pg_temp.lesson_batch_metadata\nORDER BY batch_size;",
+      "solutionExplanation": "Reference mengembalikan tiga authored design rows secara deterministik. Batch 100 memiliki 100 per-batch boundary, batch 1000 memiliki 10, dan batch 10000 memiliki satu boundary dalam metadata. Tidak ada angka throughput atau WAL measurement. Untuk import finansial all-or-nothing, caller harus memilih satu top-level transaction; untuk partial resume, batch_id dan status per batch dibutuhkan bersama retry bounded dan rekonsiliasi.",
+      "critical": true
+    },
+    "reflection": "Jelaskan trade-off tiga ukuran batch pada lock duration, WAL burst, round trip, dan rollback; bedakan statement atomicity dari transaction atomicity; lalu jelaskan bagaimana batch_id dan rekonsiliasi membuat retry finansial lebih aman."
+  }
+]

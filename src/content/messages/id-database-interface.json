@@ -201,5 +201,15 @@
   "equivalence": "kesetaraan",
   "pre-aggregation": "pra-agregasi",
   "exists": "EXISTS",
-  "multiplicity": "multiplicity"
+  "multiplicity": "multiplicity",
+  "large-data": "data besar",
+  "tenant-distribution": "distribusi tenant",
+  "reproducible-generator": "generator reproducible",
+  "pagination": "pagination",
+  "keyset": "keyset",
+  "offset": "offset",
+  "consistent-order": "urutan konsisten",
+  "batch-writes": "penulisan batch",
+  "contention": "kontensi",
+  "wal": "WAL"
 }

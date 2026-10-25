@@ -1,16 +1,8 @@
 # Remaining curriculum authoring
 
-The following 51 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
+The following 48 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L5 — Performance Engineering
-
-### L5M04 — Large Data Strategies
-
-Prerequisite: l5m03. Scenario: Commerce + Analytics.
-
-- [ ] `l5m04l01` — Skala data dan distribusi skew
-- [ ] `l5m04l02` — Keyset vs offset pagination
-- [ ] `l5m04l03` — Batch writes dan contention
 
 ### L5M05 — Workload Tuning Clinic
 

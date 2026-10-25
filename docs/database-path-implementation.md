@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L4 and L5M01–L5M03: 69 published / 51 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L4 and L5M01–L5M04: 72 published / 48 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -234,3 +234,11 @@ Added three bilingual lessons for join algorithms, sort/memory tradeoffs and sem
 Totals: 23 authored modules, 69 published / 51 draft lessons; 72 combined lessons plus three labs (75 activity milestones). Existing E2E expectations only change the count and next draft route to l5m04l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
 
 Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L5M04**.
+
+## L5M04 continuation — 25 October 2026
+
+Added three bilingual large-data lessons. A deterministic generator/report distinguishes tenant share from row share without running the million-row design. Pagination compares offset and seek output on a total (created_at, order_id) descending order, including timestamp ties, a complete cursor and explicit NULL/immutability/snapshot limits. The reference demonstrates the direct seek form; illustrative ROW_NUMBER columns are only report decoration. Batch examples compare 100/1000/10000-row chunks over 10000 rows with transaction, rollback, WAL and retry-identity limits, without measuring throughput or lock duration. Source review corrected cursor/index-direction claims, unknown-commit retry wording and question/feedback alignment. No live data or configuration was changed.
+
+Totals: 24 authored modules, 72 published / 48 draft lessons; 75 combined lessons plus three labs (78 activity milestones). Existing E2E expectations only change the count and next draft route to l5m05l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
+
+Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L5M05**.
