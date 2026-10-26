@@ -31,6 +31,7 @@ import englishVacuum from "./messages/en-database-vacuum.json" with { type: "jso
 import englishObservability from "./messages/en-database-observability.json" with { type: "json" };
 import englishReleases from "./messages/en-database-releases.json" with { type: "json" };
 import englishBackupRecovery from "./messages/en-database-backup-recovery.json" with { type: "json" };
+import englishReplication from "./messages/en-database-replication.json" with { type: "json" };
 export type Locale = "en" | "id";
 const indonesian: Record<string, string> = {
   ...interfaceMessages,
@@ -68,6 +69,7 @@ const english: Record<string, string> = {
   ...englishObservability,
   ...englishReleases,
   ...englishBackupRecovery,
+  ...englishReplication,
 };
 const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

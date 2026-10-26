@@ -311,5 +311,17 @@
   "pitr": "PITR",
   "timeline": "timeline",
   "recovery-target": "target recovery",
-  "restore-safety": "keamanan restore"
+  "restore-safety": "keamanan restore",
+  "replication": "replikasi",
+  "lsn": "LSN",
+  "replica-lag": "lag replica",
+  "synchronous-commit": "commit synchronous",
+  "failover": "failover",
+  "fencing": "fencing",
+  "split-brain": "split-brain",
+  "incident-response": "respons insiden",
+  "read-replicas": "replica baca",
+  "read-your-writes": "membaca write sendiri",
+  "consistency-contract": "kontrak konsistensi",
+  "routing": "routing"
 }

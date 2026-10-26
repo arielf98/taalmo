@@ -1,0 +1,628 @@
+[
+  {
+    "id": "l7m03l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "replication",
+      "lsn",
+      "replica-lag",
+      "synchronous-commit",
+      "postgresql-lab"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/warm-standby.html",
+      "https://www.postgresql.org/docs/17/monitoring-stats.html#MONITORING-PG-STAT-REPLICATION-VIEW",
+      "https://www.postgresql.org/docs/17/runtime-config-wal.html#GUC-SYNCHRONOUS-COMMIT"
+    ],
+    "hook": "Payment baru saja commit di primary, tetapi halaman status dari replica masih menunjukkan pending. Apakah payment gagal, atau perubahan belum sampai ke tahap yang dapat dibaca?",
+    "objectives": [
+      "Membedakan sent, write, flush, dan replay LSN serta arti commit acknowledgement.",
+      "Menghitung selisih byte pada lineage yang sama tanpa mengubahnya menjadi detik atau jumlah transaksi.",
+      "Menahan kesimpulan freshness ketika posisi atau lineage tidak diketahui."
+    ],
+    "sections": [
+      {
+        "title": "WAL bergerak melalui beberapa tahap",
+        "paragraphs": [
+          "Bayangkan primary sebagai buku kas utama dan replica sebagai salinan yang mengikuti catatan perubahannya. Primary menghasilkan WAL, sender mengirimnya, receiver menulisnya, storage menyimpan secara durable, lalu replay menerapkan record pada salinan data. Sent menunjukkan pengiriman dari primary, write menunjukkan penulisan di sistem operasi standby, flush menunjukkan penyimpanan durable di standby, dan replay menunjukkan perubahan telah diterapkan. Keempat posisi itu dapat berbeda pada satu pengamatan. Koneksi bertuliskan streaming hanya menjelaskan jalur pengiriman sedang berjalan; label tersebut tidak membuktikan bahwa transaksi tertentu sudah terlihat oleh query.",
+          "Streaming replication secara default asynchronous. Pada asumsi durability lokal normal, acknowledgement commit dapat dikirim setelah WAL lokal durable tanpa menunggu replica. Karena itu replica dapat tertinggal sesudah aplikasi menerima sukses. Jika primary kemudian hilang permanen, perubahan yang belum tersedia pada kandidat failover mungkin hilang. Replica juga mengikuti penghapusan atau perubahan salah, sehingga bukan pengganti backup dengan retention dan restore yang terpisah."
+        ]
+      },
+      {
+        "title": "LSN adalah posisi byte, bukan jam",
+        "paragraphs": [
+          "LSN ditulis seperti 0/1000500 dan menyatakan posisi dalam WAL. Dataset R menetapkan target sebagai posisi yang mencakup commit yang ingin dibaca, serta satu pengamatan curated untuk setiap replica. Selisih target dengan flush atau replay dihitung dalam byte. A masih mempunyai replay gap 256 byte walau flush gap nol; B mempunyai flush gap 512 dan replay gap 1024. Angka itu tidak menyatakan berapa detik atau berapa payment yang hilang, karena ukuran dan laju WAL berubah menurut workload.",
+          "Perbandingan membutuhkan cluster dan timeline ancestry yang sesuai. Setelah promosi, dua cabang WAL dapat memiliki angka LSN yang tampak lebih besar tetapi memuat perubahan berbeda; angka saja tidak membuktikan containment. Flag comparable_lineage pada latihan adalah asumsi authored, bukan hasil pemeriksaan timeline history. Posisi NULL berarti evidence tidak tersedia, bukan nol lag. Bahkan replay gap nol hanya menjawab target pada pengamatan tersebut, bukan seluruh write yang terjadi sesudah target."
+        ]
+      },
+      {
+        "title": "Durable di replica belum tentu terlihat pada snapshot lama",
+        "paragraphs": [
+          "Dengan synchronous standby yang dikonfigurasi sesuai, synchronous_commit=on menunggu remote flush, remote_write menunggu write yang lebih lemah terhadap crash sistem operasi, dan remote_apply menunggu replay pada standby yang mengakui commit. Tanpa konfigurasi synchronous standby, nama mode itu tidak membuat semua replica otomatis ikut menunggu. Mode local hanya menunggu lokal dan off melemahkan tunggu durability lokal. Latency dan availability ikut berubah ketika acknowledgement harus menunggu standby.",
+          "Untuk membaca perubahan sendiri, pilih replica yang benar dan mulai snapshot baca setelah replay target terbukti. Snapshot transaksi lama dapat tetap menampilkan keadaan lama walau replay telah maju. Timer sejak transaksi terakhir direplay juga dapat membesar saat primary idle, sehingga bukan prediksi waktu mengejar. SQL lesson hanya menghitung posisi authored melalui tabel TEMP; ia tidak membaca pg_stat_replication, mengukur network, atau membuktikan standby production sehat."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset R: lima pengamatan posisi WAL authored. Target 0/1000500 mencakup commit payment; flag lineage ditentukan oleh skenario. Tidak ada koneksi replication nyata.",
+      "setupSql": "CREATE TEMP TABLE lesson_replication_positions (\n  replica_id TEXT PRIMARY KEY,\n  comparable_lineage BOOLEAN NOT NULL,\n  target_lsn PG_LSN NOT NULL,\n  flush_lsn PG_LSN,\n  replay_lsn PG_LSN\n);\nINSERT INTO pg_temp.lesson_replication_positions VALUES\n  ('A',true,'0/1000500','0/1000500','0/1000400'),\n  ('B',true,'0/1000500','0/1000300','0/1000100'),\n  ('C',true,'0/1000500','0/1000500','0/1000500'),\n  ('D',true,'0/1000500',NULL,NULL),\n  ('E',false,'0/1000500','0/1000600','0/1000600');",
+      "sql": "SELECT replica_id,\n       CASE WHEN comparable_lineage THEN (target_lsn - flush_lsn)::TEXT END AS flush_gap_bytes,\n       CASE WHEN comparable_lineage THEN (target_lsn - replay_lsn)::TEXT END AS replay_gap_bytes,\n       CASE\n         WHEN NOT comparable_lineage THEN 'lineage_not_comparable'\n         WHEN flush_lsn IS NULL OR replay_lsn IS NULL THEN 'unknown_position'\n         WHEN replay_lsn >= target_lsn THEN 'target_replayed'\n         WHEN flush_lsn >= target_lsn THEN 'flushed_not_replayed'\n         ELSE 'flush_behind_target'\n       END AS target_state\nFROM pg_temp.lesson_replication_positions\nORDER BY replica_id;",
+      "columns": [
+        "replica_id",
+        "flush_gap_bytes",
+        "replay_gap_bytes",
+        "target_state"
+      ],
+      "rows": [
+        [
+          "A",
+          "0",
+          "256",
+          "flushed_not_replayed"
+        ],
+        [
+          "B",
+          "512",
+          "1024",
+          "flush_behind_target"
+        ],
+        [
+          "C",
+          "0",
+          "0",
+          "target_replayed"
+        ],
+        [
+          "D",
+          null,
+          null,
+          "unknown_position"
+        ],
+        [
+          "E",
+          null,
+          null,
+          "lineage_not_comparable"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "A sudah flush target tetapi belum replay; hanya C memiliki replay target pada lineage yang disepakati. D tidak memiliki evidence posisi dan E tidak boleh dibandingkan. Selisih ini adalah byte, bukan durasi catch-up; hasil merupakan ekspektasi authored."
+    },
+    "checks": [
+      {
+        "id": "l7m03l01-check-1",
+        "question": "Apa arti flush gap nol tetapi replay gap 256 pada A?",
+        "options": [
+          "Payment pasti gagal di primary.",
+          "WAL target durable pada standby, tetapi belum seluruhnya diterapkan untuk pembacaan.",
+          "Replica pasti menyusul tepat 256 detik lagi."
+        ],
+        "answer": 1,
+        "explanation": "Flush dan replay menjawab tahap berbeda; durable WAL bukan jaminan query sudah melihat commit.",
+        "feedback": [
+          "Belum tepat. Status replica tidak membatalkan commit primary.",
+          "Benar. Tunggu replay dan snapshot baca yang sesuai.",
+          "Belum tepat. Selisih LSN adalah byte, bukan detik."
+        ]
+      },
+      {
+        "id": "l7m03l01-check-2",
+        "question": "Apa yang ditunggu synchronous_commit=on ketika synchronous standby telah dikonfigurasi?",
+        "options": [
+          "Flush WAL pada standby yang mengakui commit; replay masih dapat tertinggal.",
+          "Replay pada setiap replica tanpa memandang konfigurasi.",
+          "Hanya pengiriman paket dari primary."
+        ],
+        "answer": 0,
+        "explanation": "Remote flush berbeda dari remote_apply dan tidak menjamin semua endpoint read memiliki snapshot baru.",
+        "feedback": [
+          "Benar. Bedakan remote durability dari replay visibility.",
+          "Belum tepat. Mode dan standby yang dipilih ikut menentukan acknowledgement.",
+          "Belum tepat. Pengiriman saja belum memenuhi remote flush."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi status kelima replica dan jelaskan mengapa byte gap tidak dapat dijadikan janji waktu read-your-writes.",
+      "setup": "Gunakan Dataset R yang terisolasi. Tidak ada WAL sender, receiver, atau replay yang dijalankan player.",
+      "starterSql": "SELECT replica_id, target_lsn, flush_lsn, replay_lsn, comparable_lineage\nFROM pg_temp.lesson_replication_positions ORDER BY replica_id;",
+      "variants": [
+        {
+          "id": "l7m03l01-variant-1",
+          "question": "Target baru pada lineage sama adalah 0/1000600 dan replay C tetap 0/1000500. Berapa replay gap?",
+          "options": [
+            "256 byte; target baru belum tercakup.",
+            "Nol karena target sebelumnya sudah replay.",
+            "100 detik karena suffix berubah 100."
+          ],
+          "answer": 0,
+          "explanation": "LSN memakai representasi heksadesimal; 0x600 minus 0x500 adalah 256 byte.",
+          "feedback": [
+            "Benar. Ulangi evaluasi untuk target baru.",
+            "Belum tepat. Target lama tidak menjamin write berikutnya.",
+            "Belum tepat. Suffix heksadesimal bukan durasi."
+          ]
+        },
+        {
+          "id": "l7m03l01-variant-2",
+          "question": "Commit menunggu remote_apply pada replica C, tetapi load balancer membaca A. Apa kontraknya?",
+          "options": [
+            "Semua replica otomatis fresh karena C sudah replay.",
+            "Tidak ada write yang durable di mana pun.",
+            "Acknowledgement C tidak membuktikan replay A; pilih endpoint yang memenuhi target."
+          ],
+          "answer": 2,
+          "explanation": "Visibility pada acknowledging standby tidak berpindah otomatis ke standby lain.",
+          "feedback": [
+            "Belum tepat. Setiap replica memiliki posisi sendiri.",
+            "Belum tepat. Masalahnya routing baca, bukan pembatalan durability.",
+            "Benar. Ikat target pada replica dan snapshot yang dibaca."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l7m03l01-edge-1",
+          "question": "D melaporkan replay_lsn NULL. Apakah NULL boleh diganti posisi target agar dashboard hijau?",
+          "options": [
+            "Boleh karena NULL berarti tidak ada pekerjaan.",
+            "Tidak; pertahankan unknown dan minta evidence baru.",
+            "Boleh selama flush replica lain nol gap."
+          ],
+          "answer": 1,
+          "explanation": "Missing evidence bukan bukti replay; COALESCE ke target menciptakan klaim freshness palsu.",
+          "feedback": [
+            "Belum tepat. NULL posisi tidak menyatakan idle atau caught up.",
+            "Benar. Unknown harus tetap dapat dibedakan dari nol.",
+            "Belum tepat. Posisi replica lain tidak menggantikan D."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l7m03l01-edge-2",
+          "question": "E memiliki replay LSN lebih besar tetapi berasal dari cabang timeline yang belum diverifikasi. Apa keputusan?",
+          "options": [
+            "Tahan perbandingan sampai cluster dan ancestry target dibuktikan.",
+            "Terima karena LSN terbesar selalu berisi semua write.",
+            "Hitung angka lebih besar sebagai nol kehilangan permanen."
+          ],
+          "answer": 0,
+          "explanation": "Cabang WAL dapat divergen; numeric ordering saja tidak menetapkan keberadaan commit target.",
+          "feedback": [
+            "Benar. Identity dan timeline history bagian dari evidence.",
+            "Belum tepat. Posisi lebih tinggi pada cabang lain dapat memuat perubahan berbeda.",
+            "Belum tepat. Data-loss claim membutuhkan evidence tambahan."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Urutkan tahap: sent, write, flush, lalu replay; query membutuhkan perubahan yang sudah diterapkan.",
+        "Gunakan selisih PG_LSN hanya setelah lineage cocok; 0x500 minus 0x400 adalah 256 byte.",
+        "CASE harus memisahkan lineage tidak cocok, posisi NULL, target replay, flush saja, dan target tertinggal."
+      ],
+      "solutionSql": "SELECT replica_id,\n       CASE WHEN comparable_lineage THEN (target_lsn - flush_lsn)::TEXT END AS flush_gap_bytes,\n       CASE WHEN comparable_lineage THEN (target_lsn - replay_lsn)::TEXT END AS replay_gap_bytes,\n       CASE\n         WHEN NOT comparable_lineage THEN 'lineage_not_comparable'\n         WHEN flush_lsn IS NULL OR replay_lsn IS NULL THEN 'unknown_position'\n         WHEN replay_lsn >= target_lsn THEN 'target_replayed'\n         WHEN flush_lsn >= target_lsn THEN 'flushed_not_replayed'\n         ELSE 'flush_behind_target'\n       END AS target_state\nFROM pg_temp.lesson_replication_positions\nORDER BY replica_id;",
+      "solutionExplanation": "Reference mempertahankan NULL dan menolak perbandingan lineage E. C memenuhi replay target authored; snapshot lama tetap perlu diganti sebelum mengandalkan read-your-writes. Script tidak mengamati atau mengubah replication nyata.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa flush nol gap belum cukup untuk read-your-writes, lalu sebutkan evidence endpoint, lineage, target, dan snapshot yang dibutuhkan."
+  },
+  {
+    "id": "l7m03l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "failover",
+      "fencing",
+      "split-brain",
+      "timeline",
+      "incident-response"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/warm-standby.html",
+      "https://www.postgresql.org/docs/17/warm-standby-failover.html",
+      "https://www.postgresql.org/docs/17/app-pgrewind.html"
+    ],
+    "hook": "Primary tidak menjawab health check, tetapi koneksi lama mungkin masih bisa menulis. Apa urutan keputusan failover yang mencegah dua primary menerima payment bersamaan?",
+    "objectives": [
+      "Membedakan failure detector, otoritas promosi, fencing, dan pemindahan endpoint.",
+      "Menilai kandidat terhadap lineage, target recovery, dan persetujuan kehilangan data.",
+      "Menyusun validasi serta rejoin tanpa menyebut tabel rencana sebagai failover yang telah dijalankan."
+    ],
+    "sections": [
+      {
+        "title": "Timeout adalah gejala, bukan bukti primary mati",
+        "paragraphs": [
+          "Health check gagal dapat berarti proses mati, storage macet, overload, atau hanya jalur network tertentu terputus. Client A mungkin tidak dapat menjangkau primary sementara client B masih mengirim write melalui koneksi lama. Jika setiap sisi langsung mempromosikan replica berdasarkan timeout sendiri, keduanya dapat menerima perubahan yang berbeda. Inilah split-brain: masalah otoritas menulis, bukan sekadar dua mesin sama-sama menyala. Mengubah DNS atau load balancer saja tidak menutup koneksi langsung, pool lama, job terjadwal, atau akses operator yang masih menuju primary lama.",
+          "Runbook perlu satu otoritas keputusan dengan identitas cluster, epoch atau lease yang jelas dan mekanisme fencing yang benar-benar menolak write lama. Bentuknya bergantung platform, misalnya mematikan node atau mencabut akses storage dengan mekanisme yang dapat dibuktikan. Witness atau quorum membantu menentukan otoritas, tetapi vote saja tidak menghentikan node yang masih hidup. PostgreSQL menyediakan kemampuan promosi; deteksi kegagalan, koordinasi, fencing, serta perubahan endpoint membutuhkan orkestrasi di luar report SQL ini."
+        ]
+      },
+      {
+        "title": "Pisahkan keputusan kandidat dari cutover layanan",
+        "paragraphs": [
+          "Urutan berpikirnya adalah membatasi write dan mengumpulkan evidence, memastikan otoritas serta fencing, memeriksa kandidat dan batas kehilangan, lalu mempromosikan kandidat yang disetujui. Bandingkan posisi hanya pada cluster dan ancestry yang sesuai. Kandidat dengan replay paling maju belum tentu sudah menerima seluruh acknowledged commit primary. Pada replication async, tail WAL yang hilang dapat berarti data loss; keputusan menerima gap harus dinyatakan oleh pemilik layanan sesuai RPO, bukan disembunyikan dengan memilih LSN terbesar. Unknown target coverage harus menahan proses sampai diperiksa atau risiko yang belum terbukti disetujui secara eksplisit.",
+          "Setelah promosi, koneksi aplikasi harus menuju writer yang benar dan pool lama harus ditangani. Periksa role server, endpoint, transaksi baca/tulis yang diizinkan, invariant payment, serta error rate sesuai acceptance criteria. Mutasi validasi nyata harus dirancang terisolasi dan disetujui; lesson ini hanya meminta murid menilai rencana. Status verify_cutover berarti masih ada evidence routing atau layanan yang belum lengkap. Status passes_authored_gate hanya menyatakan flag input rencana memenuhi aturan tabel, bukan membuktikan layanan production kembali atau RTO tercapai."
+        ]
+      },
+      {
+        "title": "Primary lama tidak boleh kembali sebagai writer kedua",
+        "paragraphs": [
+          "Promosi membuat timeline baru. Primary lama yang muncul kembali harus tetap fenced dan diperiksa terhadap timeline baru sebelum dijadikan standby. Rewind bila prasyarat terpenuhi atau reseed dari backup yang sesuai adalah keputusan operasional tersendiri; sekadar mengganti connection string tidak menyatukan perubahan yang sudah divergen. Simpan evidence dan lakukan rekonsiliasi business key untuk transaksi yang hasil commit-nya tidak diketahui. Retry payment secara buta dapat menciptakan efek ganda walau pergantian primary terlihat selesai.",
+          "Dataset F berisi empat rencana alternatif, bukan empat insiden yang diamati. Flag NULL berarti belum dibuktikan dan CASE memakai IS NOT TRUE agar unknown menahan gate. Pemisahan ini membuat alasan hold terlihat di tabel tanpa menjalankan promosi, menghubungi witness, mematikan mesin, atau mengubah route. Tabel membantu mempelajari urutan keputusan; ia bukan lock terdistribusi, fence, atau failover controller yang aman untuk dipasang."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset F: empat rencana failover dengan flag evidence authored. Tidak ada failure detector, promosi, fencing, atau cutover yang dieksekusi.",
+      "setupSql": "CREATE TEMP TABLE lesson_failover_plans (\n  plan_id TEXT PRIMARY KEY,\n  old_primary_fenced BOOLEAN,\n  authority_confirmed BOOLEAN,\n  comparable_lineage BOOLEAN,\n  target_covered BOOLEAN,\n  loss_approved BOOLEAN,\n  candidate_promoted BOOLEAN,\n  routing_verified BOOLEAN,\n  service_verified BOOLEAN\n);\nINSERT INTO pg_temp.lesson_failover_plans VALUES\n  ('01_partition',NULL,true,true,true,false,false,false,false),\n  ('02_unapproved_loss',true,true,true,false,false,false,false,false),\n  ('03_cutover_pending',true,true,true,true,false,true,false,false),\n  ('04_verified_plan',true,true,true,true,false,true,true,true);",
+      "sql": "SELECT plan_id,\n       CASE WHEN old_primary_fenced IS TRUE THEN 'confirmed' ELSE 'unconfirmed' END AS fencing,\n       CASE WHEN target_covered IS TRUE THEN 'covered' ELSE 'not_proven' END AS target,\n       CASE\n         WHEN old_primary_fenced IS NOT TRUE OR authority_confirmed IS NOT TRUE\n           THEN 'hold_authority_or_fencing'\n         WHEN comparable_lineage IS NOT TRUE THEN 'hold_lineage'\n         WHEN target_covered IS NOT TRUE AND loss_approved IS NOT TRUE\n           THEN 'hold_unapproved_loss'\n         WHEN candidate_promoted IS NOT TRUE THEN 'promotion_plan_review'\n         WHEN routing_verified IS NOT TRUE OR service_verified IS NOT TRUE\n           THEN 'verify_cutover'\n         ELSE 'passes_authored_gate'\n       END AS decision\nFROM pg_temp.lesson_failover_plans\nORDER BY plan_id;",
+      "columns": [
+        "plan_id",
+        "fencing",
+        "target",
+        "decision"
+      ],
+      "rows": [
+        [
+          "01_partition",
+          "unconfirmed",
+          "covered",
+          "hold_authority_or_fencing"
+        ],
+        [
+          "02_unapproved_loss",
+          "confirmed",
+          "not_proven",
+          "hold_unapproved_loss"
+        ],
+        [
+          "03_cutover_pending",
+          "confirmed",
+          "covered",
+          "verify_cutover"
+        ],
+        [
+          "04_verified_plan",
+          "confirmed",
+          "covered",
+          "passes_authored_gate"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Plan 01 ditahan walau target tercakup karena fencing unknown. Plan 02 belum mempunyai persetujuan gap. Plan 03 memerlukan validasi cutover. Hanya flag plan 04 melewati gate authored; tidak ada bukti failover nyata."
+    },
+    "checks": [
+      {
+        "id": "l7m03l02-check-1",
+        "question": "Mengapa timeout primary belum cukup untuk langsung promosi?",
+        "options": [
+          "Karena timeout selalu membuktikan semua server mati.",
+          "Karena replica tidak pernah dapat menjadi primary.",
+          "Karena network partition dapat menyisakan primary lama yang masih menerima write."
+        ],
+        "answer": 2,
+        "explanation": "Deteksi kegagalan harus diikuti otoritas dan fencing agar dua sisi tidak menulis bersamaan.",
+        "feedback": [
+          "Belum tepat. Timeout hanya mengamati jalur tertentu.",
+          "Belum tepat. Promosi dapat dilakukan dengan protokol yang benar.",
+          "Benar. Buktikan write lama telah dibatasi."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l7m03l02-check-2",
+        "question": "Apa yang dibuktikan passes_authored_gate pada Dataset F?",
+        "options": [
+          "Flag input rencana memenuhi aturan latihan.",
+          "RTO production pasti terpenuhi.",
+          "Semua koneksi lama sudah tertutup di dunia nyata."
+        ],
+        "answer": 0,
+        "explanation": "Flag latihan adalah input penalaran, bukan telemetri atau hasil orkestrasi.",
+        "feedback": [
+          "Benar. Klaim harus sebatas evidence authored.",
+          "Belum tepat. Tidak ada durasi recovery yang diukur.",
+          "Belum tepat. SQL ini tidak mengendalikan koneksi aplikasi."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Tentukan rencana yang harus ditahan, jelaskan gate pertama yang gagal, lalu susun langkah setelah promosi sampai rejoin.",
+      "setup": "Semua flag Dataset F authored. Latihan tidak mempromosikan server, mengubah DNS, atau mematikan primary.",
+      "starterSql": "SELECT * FROM pg_temp.lesson_failover_plans ORDER BY plan_id;",
+      "variants": [
+        {
+          "id": "l7m03l02-variant-1",
+          "question": "Plan baru memiliki authority_confirmed=true, sudah fenced dan lineage cocok, target tidak tercakup, loss_approved=true, candidate_promoted=false. Apa keputusan CASE?",
+          "options": [
+            "passes_authored_gate karena loss disetujui.",
+            "promotion_plan_review; persetujuan gap bukan promosi atau validasi layanan.",
+            "hold_authority_or_fencing walau keduanya confirmed."
+          ],
+          "answer": 1,
+          "explanation": "Dengan authority confirmed, persetujuan gap melewati gate loss saja; kandidat masih belum dipromosikan.",
+          "feedback": [
+            "Belum tepat. Gate setelah loss masih harus dipenuhi.",
+            "Benar. Pisahkan izin rencana dari langkah operasional.",
+            "Belum tepat. Baca flag yang berubah dan urutan CASE."
+          ]
+        },
+        {
+          "id": "l7m03l02-variant-2",
+          "question": "Sesudah promosi, DNS menunjuk primary baru tetapi pool lama masih menulis primary lama. Apa yang kurang?",
+          "options": [
+            "Label DNS cukup; write lama dapat dibiarkan.",
+            "Naikkan TTL agar koneksi lama semakin awet.",
+            "Fencing efektif dan penanganan koneksi lama; routing baru saja belum cukup."
+          ],
+          "answer": 2,
+          "explanation": "Endpoint discovery tidak mencabut kemampuan write pada koneksi yang sudah ada.",
+          "feedback": [
+            "Belum tepat. Koneksi lama tidak bergantung pada lookup DNS baru.",
+            "Belum tepat. TTL bukan fence bagi writer lama.",
+            "Benar. Tutup jalur otoritas write lama melalui mekanisme yang sesuai."
+          ],
+          "critical": true
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l7m03l02-edge-1",
+          "question": "Old primary muncul kembali pada timeline lama. Apa langkah aman sebelum rejoin?",
+          "options": [
+            "Tetap fenced, periksa divergence, lalu pilih rewind yang memenuhi prasyarat atau reseed.",
+            "Langsung izinkan write agar kapasitas naik.",
+            "Gabungkan dua data directory secara manual."
+          ],
+          "answer": 0,
+          "explanation": "Rejoin membutuhkan konsistensi timeline dan prosedur pemulihan, bukan dua writer independen.",
+          "feedback": [
+            "Benar. Rejoin adalah tahap terpisah dengan evidence sendiri.",
+            "Belum tepat. Ini membuka kembali split-brain.",
+            "Belum tepat. Menyalin file tidak merekonsiliasi divergence."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l7m03l02-edge-2",
+          "question": "Target coverage NULL dan loss_approved NULL pada kandidat yang sudah fenced. Apa keputusan?",
+          "options": [
+            "Anggap NULL sama dengan approved.",
+            "Tahan sampai evidence atau keputusan risiko eksplisit tersedia.",
+            "Terima jika nama replica berakhiran primary."
+          ],
+          "answer": 1,
+          "explanation": "IS NOT TRUE menahan unknown; nama node tidak menggantikan coverage atau persetujuan.",
+          "feedback": [
+            "Belum tepat. Tidak diketahui berbeda dari disetujui.",
+            "Benar. Evidence yang hilang tidak boleh meloloskan gate.",
+            "Belum tepat. Label bukan bukti posisi data."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Periksa authority dan fencing sebelum menilai target atau promosi.",
+        "Gunakan IS NOT TRUE agar NULL menahan gate seperti false.",
+        "Pisahkan target coverage, loss approval, promosi, routing, dan service verification dalam urutan CASE."
+      ],
+      "solutionSql": "SELECT plan_id,\n       CASE WHEN old_primary_fenced IS TRUE THEN 'confirmed' ELSE 'unconfirmed' END AS fencing,\n       CASE WHEN target_covered IS TRUE THEN 'covered' ELSE 'not_proven' END AS target,\n       CASE\n         WHEN old_primary_fenced IS NOT TRUE OR authority_confirmed IS NOT TRUE\n           THEN 'hold_authority_or_fencing'\n         WHEN comparable_lineage IS NOT TRUE THEN 'hold_lineage'\n         WHEN target_covered IS NOT TRUE AND loss_approved IS NOT TRUE\n           THEN 'hold_unapproved_loss'\n         WHEN candidate_promoted IS NOT TRUE THEN 'promotion_plan_review'\n         WHEN routing_verified IS NOT TRUE OR service_verified IS NOT TRUE\n           THEN 'verify_cutover'\n         ELSE 'passes_authored_gate'\n       END AS decision\nFROM pg_temp.lesson_failover_plans\nORDER BY plan_id;",
+      "solutionExplanation": "Reference memberi alasan hold pertama untuk setiap rencana. passes_authored_gate tetap hanya evaluasi flag. Runbook nyata memerlukan evidence fencing, otoritas, lineage, RPO, routing, validasi layanan dan rejoin; tidak ada yang dieksekusi oleh script ini.",
+      "critical": true
+    },
+    "reflection": "Tuliskan urutan failover yang membatasi split-brain, lalu jelaskan mengapa DNS, kandidat promoted, dan flag true belum sendirian membuktikan recovery."
+  },
+  {
+    "id": "l7m03l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "read-replicas",
+      "read-your-writes",
+      "consistency-contract",
+      "routing",
+      "postgresql-lab"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/warm-standby.html",
+      "https://www.postgresql.org/docs/17/hot-standby.html",
+      "https://www.postgresql.org/docs/17/transaction-iso.html"
+    ],
+    "hook": "Dashboard menerima data beberapa detik lama, tetapi bendahara perlu status payment yang baru dibuat. Apakah keduanya boleh memakai aturan semua SELECT ke replica?",
+    "objectives": [
+      "Menetapkan kontrak freshness berbeda untuk dashboard, saldo, dan status payment.",
+      "Menilai replica terhadap target commit, lineage, endpoint, dan snapshot baru.",
+      "Menentukan bounded wait atau fallback tanpa menganggap read check sebagai write guard."
+    ],
+    "sections": [
+      {
+        "title": "Pilih kontrak dari keputusan pengguna",
+        "paragraphs": [
+          "Pertanyaan pertama bukan apakah query memakai SELECT, melainkan keputusan apa yang diambil dari hasilnya. Dashboard jumlah invoice dapat menerima keterlambatan sepuluh detik jika kontrak produk menyatakan batas dan menampilkan waktu data. Konfirmasi payment sesudah commit membutuhkan read-your-writes agar pengguna tidak mengirim pembayaran kedua karena melihat pending. Saldo yang dipakai memutuskan debit membutuhkan sumber otoritatif dan keputusan tulis atomik. Mengirim semua read ke replica menghemat beban tertentu, tetapi dapat melanggar dua kebutuhan terakhir. Tidak ada batas staleness universal yang cocok bagi semua fitur.",
+          "Dataset C menyebut tiga kontrak: bounded_staleness, read_your_writes, dan authoritative. observed_age_seconds adalah usia data yang sudah diverifikasi dalam skenario terhadap batas produk, bukan nilai replay_lag yang otomatis diubah menjadi usia semua row. max_age_seconds hanya dipakai untuk kontrak pertama. Label replica_with_staleness_label mengizinkan data lama dalam batas, bukan menyatakan sama persis dengan primary. Age NULL berarti belum diketahui, sehingga tidak memenuhi kontrak meski replica sehat."
+        ]
+      },
+      {
+        "title": "Read-your-writes perlu target dan snapshot",
+        "paragraphs": [
+          "Sesudah write commit, aplikasi dapat membawa token posisi yang diketahui mencakup commit tersebut beserta identitas cluster dan timeline yang diperlukan. Token harus diperoleh melalui protokol yang benar; lesson tidak mengklaim SQL SELECT sebelum COMMIT menghasilkan token commit. Pembaca memeriksa bahwa replica yang benar sudah replay setidaknya target pada lineage yang sesuai. Pemeriksaan harus diikuti query dengan snapshot baru pada endpoint yang sama. Load balancer yang memindahkan query ke replica lain dapat membatalkan kesimpulan, demikian pula transaksi Repeatable Read yang snapshot-nya dibuat sebelum replay target.",
+          "Jika evidence belum cukup, aplikasi dapat menunggu dengan batas waktu lalu membaca primary yang otoritatif dengan snapshot baru, atau melaporkan bahwa status belum dapat dikonfirmasi. Jangan menunggu tanpa batas, memaksa nol lag dari NULL, atau mengubah pending replica menjadi gagal payment. Primary pun dapat gagal dihubungi; fallback adalah kebijakan dengan error yang terlihat, bukan jaminan availability. Pada failover, token harus diperiksa terhadap ancestry baru dan target yang mungkin hilang; sleep tetap beberapa detik tidak memperbaiki token yang tidak lagi dapat dipenuhi."
+        ]
+      },
+      {
+        "title": "Read fresh bukan proteksi terhadap race write",
+        "paragraphs": [
+          "Membaca saldo fresh lalu mengurangi di langkah terpisah tetap membuka race antara dua client. Guard jumlah, transaksi, idempotency key dan ledger authoritative harus berada pada writer; replica dapat menampilkan histori dengan kontrak yang berbeda tetapi tidak menjadi sumber otorisasi debit. Setelah timeout COMMIT, gunakan identitas bisnis untuk rekonsiliasi di sumber otoritatif. Memeriksa replica yang tertinggal lalu mengirim ulang operasi baru dapat menggandakan efek. Read-your-writes juga tidak sama dengan linearizability global untuk semua pengguna dan semua kegagalan.",
+          "Tabel hasil berikut menampilkan keputusan routing authored per request, sehingga perbedaan kebutuhan terlihat tanpa membuat koneksi database nyata. Query hanya mengklasifikasi input TEMP; ia tidak menunggu replay, memperoleh token commit, memulai snapshot, atau mengubah connection pool. Kebenaran policy production tetap membutuhkan implementasi dan evidence endpoint, deadline, error handling, serta konsistensi domain."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset C: enam request dengan kontrak produk dan evidence freshness authored. Target LSN sudah diasumsikan mencakup commit; tidak diperoleh dari server nyata.",
+      "setupSql": "CREATE TEMP TABLE lesson_read_routes (\n  request_id TEXT PRIMARY KEY,\n  contract TEXT NOT NULL,\n  observed_age_seconds INTEGER,\n  max_age_seconds INTEGER,\n  required_lsn PG_LSN,\n  replica_replay_lsn PG_LSN,\n  comparable_lineage BOOLEAN,\n  fresh_snapshot BOOLEAN,\n  replica_healthy BOOLEAN\n);\nINSERT INTO pg_temp.lesson_read_routes VALUES\n  ('01_dashboard','bounded_staleness',3,10,NULL,NULL,true,true,true),\n  ('02_balance','authoritative',0,0,NULL,NULL,true,true,true),\n  ('03_payment','read_your_writes',1,0,'0/1000500','0/1000400',true,true,true),\n  ('04_receipt','read_your_writes',0,0,'0/1000500','0/1000500',true,true,true),\n  ('05_old_snapshot','read_your_writes',0,0,'0/1000500','0/1000500',true,false,true),\n  ('06_unknown','bounded_staleness',NULL,10,NULL,NULL,true,true,true);",
+      "sql": "SELECT request_id, contract,\n       CASE\n         WHEN contract = 'authoritative' THEN 'primary_new_snapshot'\n         WHEN replica_healthy IS NOT TRUE OR fresh_snapshot IS NOT TRUE\n           THEN 'primary_or_bounded_wait'\n         WHEN contract = 'bounded_staleness'\n          AND observed_age_seconds IS NOT NULL\n          AND observed_age_seconds <= max_age_seconds\n           THEN 'replica_with_staleness_label'\n         WHEN contract = 'read_your_writes'\n          AND comparable_lineage IS TRUE\n          AND required_lsn IS NOT NULL AND replica_replay_lsn >= required_lsn\n           THEN 'replica_new_snapshot'\n         ELSE 'primary_or_bounded_wait'\n       END AS route_decision\nFROM pg_temp.lesson_read_routes\nORDER BY request_id;",
+      "columns": [
+        "request_id",
+        "contract",
+        "route_decision"
+      ],
+      "rows": [
+        [
+          "01_dashboard",
+          "bounded_staleness",
+          "replica_with_staleness_label"
+        ],
+        [
+          "02_balance",
+          "authoritative",
+          "primary_new_snapshot"
+        ],
+        [
+          "03_payment",
+          "read_your_writes",
+          "primary_or_bounded_wait"
+        ],
+        [
+          "04_receipt",
+          "read_your_writes",
+          "replica_new_snapshot"
+        ],
+        [
+          "05_old_snapshot",
+          "read_your_writes",
+          "primary_or_bounded_wait"
+        ],
+        [
+          "06_unknown",
+          "bounded_staleness",
+          "primary_or_bounded_wait"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Dashboard memenuhi age 3 <= 10; saldo memilih primary. Payment belum replay, receipt sudah replay dengan snapshot baru, old_snapshot tetap ditahan, dan age unknown tidak boleh diterima. Route ini hasil policy authored, bukan query yang telah dijalankan pada replica."
+    },
+    "checks": [
+      {
+        "id": "l7m03l03-check-1",
+        "question": "Mengapa semua SELECT ke replica bukan kontrak yang cukup untuk status payment baru?",
+        "options": [
+          "SELECT selalu mengubah data.",
+          "Replica async dapat belum replay commit yang baru diakui primary.",
+          "Primary tidak boleh melayani query baca."
+        ],
+        "answer": 1,
+        "explanation": "Jenis perintah tidak menentukan kebutuhan freshness pengguna; commit target perlu tercakup.",
+        "feedback": [
+          "Belum tepat. Masalahnya visibility, bukan semua SELECT melakukan mutasi.",
+          "Benar. Cocokkan kontrak dan evidence replica.",
+          "Belum tepat. Primary dapat menjadi sumber baca otoritatif."
+        ]
+      },
+      {
+        "id": "l7m03l03-check-2",
+        "question": "Saldo sudah dibaca fresh di primary. Apa yang masih diperlukan sebelum debit?",
+        "options": [
+          "Guard atomik dalam transaksi dan identitas operasi yang sesuai.",
+          "Tidak ada; hasil read mencegah semua race.",
+          "Pindahkan UPDATE ke replica agar lebih cepat."
+        ],
+        "answer": 0,
+        "explanation": "Read dan write terpisah dapat diselingi client lain; freshness tidak mengganti concurrency control.",
+        "feedback": [
+          "Benar. Reuse aturan writer dan idempotency yang sudah dipelajari.",
+          "Belum tepat. Client lain masih dapat menulis sesudah read.",
+          "Belum tepat. Replica baca bukan tempat otorisasi debit."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Pilih route untuk setiap request Dataset C dan jelaskan evidence yang harus diperbarui sebelum fallback atau retry.",
+      "setup": "Query hanya decision report. Player tidak mengatur pool, mengeluarkan token, menunggu replay, atau melakukan debit.",
+      "starterSql": "SELECT * FROM pg_temp.lesson_read_routes ORDER BY request_id;",
+      "variants": [
+        {
+          "id": "l7m03l03-variant-1",
+          "question": "Age dashboard berubah menjadi 12 detik, batas tetap 10. Apa route report?",
+          "options": [
+            "Replica karena dashboard tidak pernah membutuhkan batas.",
+            "Terima jika query memakai LIMIT 10.",
+            "primary_or_bounded_wait karena batas freshness terlewati."
+          ],
+          "answer": 2,
+          "explanation": "Kontrak memperbolehkan stale sampai batas tertentu, bukan tanpa batas.",
+          "feedback": [
+            "Belum tepat. Batas produk adalah bagian kontrak.",
+            "Belum tepat. LIMIT membatasi row, bukan age.",
+            "Benar. Gunakan deadline dan fallback yang disepakati."
+          ]
+        },
+        {
+          "id": "l7m03l03-variant-2",
+          "question": "Replay target sudah tercapai pada A, lalu query dialihkan ke B yang belum diperiksa. Apakah read-your-writes terbukti?",
+          "options": [
+            "Ya karena semua replica memakai schema sama.",
+            "Belum; evidence harus cocok dengan endpoint query dan snapshotnya.",
+            "Ya jika menunggu satu detik tanpa pemeriksaan."
+          ],
+          "answer": 1,
+          "explanation": "Same schema tidak menjamin same replay position atau snapshot visibility.",
+          "feedback": [
+            "Belum tepat. Struktur sama berbeda dari data fresh.",
+            "Benar. Jangan pisahkan evidence dari endpoint pembacaan.",
+            "Belum tepat. Sleep tetap tidak membuktikan replay target."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l7m03l03-edge-1",
+          "question": "Replay target tercapai, tetapi transaksi Repeatable Read memakai snapshot sebelum commit. Apa yang diperlukan?",
+          "options": [
+            "Query baca dengan snapshot baru sesudah evidence replay pada endpoint yang benar.",
+            "Query ulang dalam snapshot lama pasti melihat commit.",
+            "Ubah age menjadi nol agar snapshot berubah otomatis."
+          ],
+          "answer": 0,
+          "explanation": "Replay tidak memajukan snapshot Repeatable Read yang sudah ditetapkan.",
+          "feedback": [
+            "Benar. Snapshot visibility adalah syarat tersendiri.",
+            "Belum tepat. Snapshot lama dapat tetap menampilkan versi lama.",
+            "Belum tepat. Metadata age tidak mengubah snapshot transaksi."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l7m03l03-edge-2",
+          "question": "COMMIT payment timeout dan replica masih pending. Apa tindakan berikutnya?",
+          "options": [
+            "Buat payment baru dengan identitas berbeda.",
+            "Nyatakan rollback pasti terjadi.",
+            "Rekonsiliasi business key pada sumber otoritatif; pertahankan outcome unknown bila evidence kurang."
+          ],
+          "answer": 2,
+          "explanation": "Replica stale tidak menentukan hasil COMMIT dan retry dengan identitas baru dapat menggandakan efek.",
+          "feedback": [
+            "Belum tepat. Identitas baru dapat membuat debit kedua.",
+            "Belum tepat. Timeout tidak membuktikan rollback.",
+            "Benar. Gunakan identitas operasi yang stabil dan rekonsiliasi."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Kelompokkan request menurut kontrak domain sebelum membaca age atau LSN.",
+        "Read-your-writes membutuhkan lineage cocok, replay >= target, endpoint tepat, dan snapshot baru.",
+        "CASE harus menahan age NULL, replica tidak sehat, dan snapshot lama; fallback tetap memiliki deadline serta error."
+      ],
+      "solutionSql": "SELECT request_id, contract,\n       CASE\n         WHEN contract = 'authoritative' THEN 'primary_new_snapshot'\n         WHEN replica_healthy IS NOT TRUE OR fresh_snapshot IS NOT TRUE\n           THEN 'primary_or_bounded_wait'\n         WHEN contract = 'bounded_staleness'\n          AND observed_age_seconds IS NOT NULL\n          AND observed_age_seconds <= max_age_seconds\n           THEN 'replica_with_staleness_label'\n         WHEN contract = 'read_your_writes'\n          AND comparable_lineage IS TRUE\n          AND required_lsn IS NOT NULL AND replica_replay_lsn >= required_lsn\n           THEN 'replica_new_snapshot'\n         ELSE 'primary_or_bounded_wait'\n       END AS route_decision\nFROM pg_temp.lesson_read_routes\nORDER BY request_id;",
+      "solutionExplanation": "Reference membedakan tiga kontrak dan mempertahankan unknown. SQL tidak memasang router atau menjamin debit atomik. primary_new_snapshot menunjuk kebijakan sumber baca, sementara primary_or_bounded_wait masih membutuhkan deadline, endpoint terverifikasi, dan error handling di implementasi nyata.",
+      "critical": true
+    },
+    "reflection": "Bandingkan kontrak dashboard, saldo, dan konfirmasi payment; jelaskan mengapa endpoint, target commit, dan snapshot menentukan hasil walau semuanya memakai SELECT."
+  }
+]

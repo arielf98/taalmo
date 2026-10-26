@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
-**Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L6 and L7M01–L7M02: 93 published / 27 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
+**Initial goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
+**Current publication:** L0–L6 and L7M01–L7M03: 96 published / 24 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -298,3 +298,11 @@ Added three bilingual backup/recovery lessons using fixed authored recovery meta
 Totals: 31 authored modules, 93 published / 27 draft lessons; 96 combined lessons plus three labs (99 activity milestones). Existing E2E expectations only change the count and next draft route to l7m03l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
 
 Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L7M03**.
+
+## L7M03 — Replication dan Failover
+
+Added l7m03l01–l7m03l03 with complete Indonesian/English prose, TEMP worked SQL and authored result tables, two checks, two variants, two edge cases, progressive hints, reference solutions and reflections per lesson. Streaming positions separate flush durability from replay visibility and preserve NULL/lineage limits. Failover plans require authority, fencing, target/loss approval and cutover evidence. Read routing distinguishes bounded staleness, read-your-writes and authoritative balance decisions, including old snapshots and unknown COMMIT outcomes.
+
+Totals: 32 authored modules, 96 published / 24 draft lessons; 99 combined lessons plus three labs (102 activity milestones). Existing E2E expectations update only the count and first draft route to l7m04l01; no coverage was expanded. Registries include the new JSON for a future authorized run. Blueprint, School Finance seed, previous content versions and progress format stay unchanged; L7 assessment remains unavailable until L7M04 publication.
+
+Reviewed source/diff only. No tests, audits, SQL, runtime, manual/browser checks, lint, typecheck or build were run. Commit and push this module, then continue L7M04.

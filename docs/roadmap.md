@@ -13,13 +13,13 @@
 
 ## Database Engineering — database curriculum
 
-The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L6 and L7M01–L7M02 provide 93 published bilingual lessons; 27 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
+The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L6 and L7M01–L7M03 provide 96 published bilingual lessons; 24 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
 
-## Recommended next milestone: L7M03 authoring
+## Recommended next milestone: L7M04 authoring
 
-L7M02 follows L7M01. L7 remains incomplete and its level assessment stays unavailable. Authored recovery calculations and verification flags do not prove a real backup, completed restoration or an achieved production RPO/RTO.
+L7M03 follows L7M02. L7 remains incomplete and its level assessment stays unavailable. Replication positions, failover-plan flags and routing decisions are authored inputs, not evidence of running replication, fencing, promotion or read routing.
 
-Continue with L7M03 — Replication dan Failover: streaming positions and lag, fencing and split-brain, and replica-read consistency contracts. Distinguish local commit durability from remote acknowledgement, replay visibility and an actually orchestrated failover. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
+Continue with L7M04 — Operational Security & Incidents: least privilege and secret hygiene, connection limits and pooling, and incident response decisions for blocked writes, failed backups and replica lag. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Follow AGENTS.md: source/diff review only, no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build; commit, push and continue.
 
 ## Later learning improvements
 
