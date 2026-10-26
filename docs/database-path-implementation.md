@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L5 and L6M01–L6M03: 84 published / 36 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L6: 87 published / 33 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -274,3 +274,11 @@ Added three bilingual vacuum lessons. Lifecycle examples distinguish currently l
 Totals: 28 authored modules, 84 published / 36 draft lessons; 87 combined lessons plus three labs (90 activity milestones). Existing E2E expectations only change the count and next draft route to l6m04l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
 
 Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L6M04**.
+
+## L6M04 continuation — 25 October 2026
+
+Added three bilingual observability lessons. Activity snapshots compute query/transaction ages and separate lock/IO states, missing values and privacy boundaries. Cumulative statistics compare same-reset intervals with elapsed-time/zero guards and expose reset-invalid deltas; the valid interval yields 12 calls/minute and 5.50 ms/call. Incident snapshots compute authored deltas and hypothesis signals without attributing causality or mixing aggregate latency metrics. Review corrected reset chronology and explicit UTC timestamp rendering. No live backend, statistics view, extension or incident tool was accessed. All L6 modules are published and use the existing assessment gate.
+
+Totals: 29 authored modules, 87 published / 33 draft lessons; 90 combined lessons plus three labs (93 activity milestones). Existing E2E expectations only change the count and next draft route to l7m01l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
+
+Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L7M01**.

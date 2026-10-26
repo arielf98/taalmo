@@ -1,16 +1,6 @@
 # Remaining curriculum authoring
 
-The following 36 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
-
-## L6 — PostgreSQL Internals
-
-### L6M04 — Observability Engine
-
-Prerequisite: l6m03. Scenario: PostgreSQL Lab.
-
-- [ ] `l6m04l01` — pg_stat_activity dan waits
-- [ ] `l6m04l02` — Statistics views dan query patterns
-- [ ] `l6m04l03` — Diagnose without guessing
+The following 33 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L7 — Production & Reliability
 

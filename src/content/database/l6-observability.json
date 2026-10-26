@@ -1,0 +1,798 @@
+[
+  {
+    "id": "l6m04l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "pg-stat-activity",
+      "wait-events",
+      "lock-wait",
+      "io-wait",
+      "idle-in-transaction",
+      "privacy",
+      "postgresql-lab"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/monitoring-stats.html",
+      "https://www.postgresql.org/docs/17/monitoring.html",
+      "https://www.postgresql.org/docs/17/explicit-locking.html",
+      "https://www.postgresql.org/docs/17/functions-info.html"
+    ],
+    "hook": "Dashboard mengatakan query lambat, lalu seseorang melihat `wait_event_type = 'Lock'` dan langsung menunjuk satu root cause. Pada timestamp yang sama, ada session aktif tanpa wait, session menunggu I/O, serta transaksi idle yang mungkin masih memegang lock. Bagaimana membaca pg_stat_activity sebagai snapshot terbatas, menghitung umur query secara deterministik, dan membedakan sinyal wait dari penyebab yang sudah terbukti?",
+    "objectives": [
+      "Menjelaskan state session, wait_event_type, wait_event, query_start, dan xact_start sebagai kolom yang harus dibaca bersama.",
+      "Membedakan lock wait, I/O wait, query aktif tanpa wait yang terlihat, serta idle in transaction tanpa menyamakan label dengan root cause.",
+      "Menyusun snapshot diagnosis yang menghormati timestamp tetap, kemungkinan NULL, batas privilege/query text, dan kebutuhan evidence lanjutan."
+    ],
+    "sections": [
+      {
+        "title": "pg_stat_activity adalah snapshot, bukan rekaman insiden lengkap",
+        "paragraphs": [
+          "`pg_stat_activity` menyajikan satu baris per server process yang terlihat oleh privilege session pembaca. `state` menjawab apakah backend tampak active, idle, atau idle in transaction; ia tidak menjelaskan seluruh sejarah request. `query_start` dan `xact_start` juga memiliki arti berbeda: query_start menandai awal query yang sedang atau terakhir dilaporkan, sedangkan xact_start menandai awal transaksi yang sedang berjalan. Umur keduanya harus dihitung terhadap waktu observasi yang sama. Lesson ini menggunakan `2026-10-25 09:00:00+07` sebagai observation timestamp tetap agar angka age dapat dihitung tanpa `now()` dan tanpa ketergantungan timezone mesin.",
+          "Kolom NULL adalah informasi, bukan otomatis error. Backend idle dapat tidak memiliki query_start atau xact_start aktif. `wait_event_type` dan `wait_event` yang NULL pada snapshot berarti tidak ada wait event yang sedang dilaporkan pada saat itu; itu tidak membuktikan backend sedang memakai CPU, tidak membuktikan query sehat, dan tidak menggantikan pengamatan berulang. Sebaliknya, state active dengan wait type IO memberi petunjuk bahwa backend sedang menunggu keluarga event I/O, tetapi belum menjawab apakah storage, cache, query shape, atau tekanan lain adalah penyebab latency pengguna. Ambil snapshot berulang dan cocokkan dengan metric aplikasi sebelum menyimpulkan."
+        ]
+      },
+      {
+        "title": "Wait event membantu mengelompokkan gejala",
+        "paragraphs": [
+          "`wait_event_type = 'Lock'` dan nama event seperti `relation` adalah bukti bahwa backend sedang menunggu lock pada saat sampel. Jika waiter memiliki `blocker_pid`, pid tersebut adalah kandidat untuk ditelusuri; ia bukan otomatis pelaku root cause karena blocker dapat sedang menunggu blocker lain, menyelesaikan transaksi bisnis yang sah, atau hanya terlihat pada satu titik waktu. `IO` seperti `DataFileRead` mengarahkan pemeriksaan ke jalur pembacaan, tetapi tidak membuktikan disk rusak atau index yang hilang. Backend active dengan wait NULL dapat sedang bekerja di CPU atau berada di sela-sela event yang terlalu singkat untuk snapshot.",
+          "`idle in transaction` perlu perhatian berbeda. Ia berarti transaksi tetap terbuka setelah statement sebelumnya selesai; wait_event NULL tidak berarti transaksi sudah melepas semua lock. Dalam level isolation tertentu snapshot dan lock dapat bertahan sampai COMMIT atau ROLLBACK. Jangan membunuh pid hanya berdasarkan umur atau label. Cocokkan owner, xact_start, transaksi bisnis, blocker chain, timeout policy, dan dampak rollback. Diagnosis yang baik menyebut “lock-wait candidate” atau “old transaction candidate” ketika itulah yang didukung data, bukan mengubah kategori wait menjadi sebab tunggal."
+        ]
+      },
+      {
+        "title": "Privasi, privilege, dan tindakan aman",
+        "paragraphs": [
+          "Kolom query dapat tidak terlihat penuh bila pengguna tidak memiliki hak melihat query text atau bila aplikasi sengaja meredaksinya. Query text juga dapat memuat email, token, nomor rekening, atau parameter sensitif. Fixture hanya menyimpan `query_text_visible` dan label redaksi, bukan payload rahasia. Reviewer boleh meminta pemilik service memberi query fingerprint, route, dan parameter yang sudah disanitasi. Jangan menyalin raw query ke tiket insiden publik. `pg_stat_activity` juga bukan audit log; baris dapat berubah atau hilang sebelum investigator membacanya.",
+          "Urutan tindakan yang aman adalah menetapkan observation timestamp, menyimpan snapshot minimum yang sudah disanitasi, mengidentifikasi waiter dan kandidat blocker, lalu meminta konteks owner serta transaksi. Jika tindakan terminate atau perubahan timeout dipertimbangkan, tulis prasyarat, SQLSTATE atau hasil yang diharapkan, rollback bisnis, dan rencana rekonsiliasi terlebih dahulu. Lesson ini tidak menjalankan `pg_terminate_backend`, tidak mengubah lock timeout, dan tidak melakukan sampling live. Output authored hanya melatih pembacaan state, umur, dan batas bukti; ia tidak memberi izin operasional atau menyatakan incident production telah terpecahkan."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset O1 — authored pg_stat_activity snapshot pada 2026-10-25 09:00:00+07. State, wait, pid, umur, dan visibility query ditulis untuk latihan, bukan hasil view live.",
+      "setupSql": "CREATE TEMP TABLE lesson_activity_waits (\n  pid INTEGER PRIMARY KEY,\n  observed_at TIMESTAMPTZ NOT NULL,\n  state TEXT NOT NULL,\n  wait_event_type TEXT,\n  wait_event TEXT,\n  xact_start TIMESTAMPTZ,\n  query_start TIMESTAMPTZ,\n  blocker_pid INTEGER,\n  query_text TEXT NOT NULL,\n  query_text_visible BOOLEAN NOT NULL\n);\nINSERT INTO pg_temp.lesson_activity_waits VALUES\n  (4101, '2026-10-25 09:00:00+07', 'active', NULL, NULL, '2026-10-25 08:59:00+07', '2026-10-25 08:59:40+07', NULL, '[redacted report query]', false),\n  (4102, '2026-10-25 09:00:00+07', 'active', 'Lock', 'relation', '2026-10-25 08:58:00+07', '2026-10-25 08:59:50+07', 4103, '[redacted invoice update]', false),\n  (4103, '2026-10-25 09:00:00+07', 'idle in transaction', NULL, NULL, '2026-10-25 08:57:00+07', NULL, NULL, '[redacted owner statement]', false),\n  (4104, '2026-10-25 09:00:00+07', 'active', 'IO', 'DataFileRead', '2026-10-25 08:59:00+07', '2026-10-25 08:59:30+07', NULL, '[redacted lookup]', false),\n  (4105, '2026-10-25 09:00:00+07', 'idle', NULL, NULL, NULL, NULL, NULL, '[redacted idle backend]', false);",
+      "sql": "SELECT pid, state, wait_event_type, wait_event, blocker_pid,\n       ROUND(EXTRACT(EPOCH FROM (observed_at - query_start))::NUMERIC, 1) AS query_age_seconds,\n       ROUND(EXTRACT(EPOCH FROM (observed_at - xact_start))::NUMERIC, 1) AS xact_age_seconds,\n       (wait_event_type = 'Lock' AND blocker_pid IS NOT NULL) AS lock_wait_candidate,\n       (query_start IS NULL) AS query_start_missing,\n       query_text_visible\nFROM pg_temp.lesson_activity_waits\nORDER BY pid;",
+      "columns": [
+        "pid",
+        "state",
+        "wait_event_type",
+        "wait_event",
+        "blocker_pid",
+        "query_age_seconds",
+        "xact_age_seconds",
+        "lock_wait_candidate",
+        "query_start_missing",
+        "query_text_visible"
+      ],
+      "rows": [
+        [
+          "4101",
+          "active",
+          null,
+          null,
+          null,
+          "20.0",
+          "60.0",
+          "f",
+          "f",
+          "f"
+        ],
+        [
+          "4102",
+          "active",
+          "Lock",
+          "relation",
+          "4103",
+          "10.0",
+          "120.0",
+          "t",
+          "f",
+          "f"
+        ],
+        [
+          "4103",
+          "idle in transaction",
+          null,
+          null,
+          null,
+          null,
+          "180.0",
+          "f",
+          "t",
+          "f"
+        ],
+        [
+          "4104",
+          "active",
+          "IO",
+          "DataFileRead",
+          null,
+          "30.0",
+          "60.0",
+          "f",
+          "f",
+          "f"
+        ],
+        [
+          "4105",
+          "idle",
+          null,
+          null,
+          null,
+          null,
+          null,
+          "f",
+          "t",
+          "f"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Query menghitung age dari observation timestamp authored yang sama dan mempertahankan NULL ketika query atau transaksi tidak aktif. PID4102 adalah kandidat waiter karena wait Lock dan blocker_pid4103; baris 4103 tetap memerlukan pemeriksaan lock scope dan owner. PID4104 menunjukkan keluarga IO, sedangkan active dengan wait NULL pada 4101 tidak membuktikan CPU. `query_text_visible = f` menegaskan batas privilege/redaksi. Semua baris adalah snapshot authored, bukan pg_stat_activity production."
+    },
+    "checks": [
+      {
+        "id": "l6m04l01-check-1",
+        "question": "Apa kesimpulan paling tepat dari `wait_event_type = 'Lock'`, `wait_event = 'relation'`, dan `blocker_pid` yang terisi?",
+        "options": [
+          "Backend adalah kandidat waiter pada snapshot dan pid blocker perlu ditelusuri; root cause belum terbukti.",
+          "Root cause pasti query blocker dan aman langsung terminate tanpa memeriksa owner.",
+          "Wait event membuktikan disk rusak karena semua lock wait berasal dari I/O."
+        ],
+        "answer": 0,
+        "explanation": "Wait Lock mengelompokkan gejala pada saat snapshot. Chain, owner, transaksi, dan evidence lain masih diperlukan sebelum tindakan.",
+        "feedback": [
+          "Benar. Sebut waiter sebagai kandidat, telusuri blocker chain dan konteks sebelum menamai root cause.",
+          "Belum tepat. Blocker dapat sah, dapat menunggu proses lain, dan terminate berisiko rollback bisnis.",
+          "Belum tepat. Lock dan I/O adalah keluarga wait berbeda; wait event bukan diagnosis storage lengkap."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l6m04l01-check-2",
+        "question": "Bagaimana membaca `state = 'active'` dengan `wait_event_type` dan `wait_event` NULL?",
+        "options": [
+          "Itu membuktikan query selalu memakai CPU dan tidak pernah menunggu.",
+          "Pada snapshot itu tidak ada wait event yang dilaporkan; CPU, query progress, atau wait singkat masih perlu evidence lain.",
+          "Itu membuktikan backend sedang idle in transaction."
+        ],
+        "answer": 1,
+        "explanation": "NULL pada wait event adalah ketiadaan wait yang sedang terlihat, bukan profiler CPU atau bukti kesehatan query.",
+        "feedback": [
+          "Belum tepat. Snapshot NULL tidak dapat membuktikan CPU sepanjang query atau meniadakan wait singkat.",
+          "Benar. Nyatakan apa yang terlihat dan apa yang belum dibuktikan.",
+          "Belum tepat. State active dan idle in transaction adalah state berbeda."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l6m04l01-check-3",
+        "question": "Mengapa `xact_start` dan query text perlu diperlakukan hati-hati saat investigasi?",
+        "options": [
+          "Umur xact_start dapat menunjukkan transaksi lama, tetapi query text bisa NULL/ter-redaksi dan mengandung secret; keduanya perlu konteks privilege.",
+          "Query text selalu aman dibagikan karena pg_stat_activity adalah audit log publik.",
+          "xact_start selalu sama dengan query_start sehingga salah satunya boleh diabaikan."
+        ],
+        "answer": 0,
+        "explanation": "Transaction age dan query age menjawab pertanyaan berbeda, sementara visibility query bergantung pada privilege dan sanitasi.",
+        "feedback": [
+          "Benar. Simpan evidence minimum yang disanitasi dan bedakan umur transaksi dari umur query.",
+          "Belum tepat. Query text dapat memuat data sensitif dan view bukan audit log lengkap.",
+          "Belum tepat. Transaksi dapat menampung beberapa statement; kedua timestamp memiliki makna berbeda."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Gunakan snapshot O1 untuk memberi label evidence: active tanpa wait, lock-wait candidate, IO-wait candidate, idle in transaction, atau idle tanpa timestamp; lalu tulis satu batas kesimpulan untuk setiap label.",
+      "setup": "Dataset O1 adalah snapshot authored pada 2026-10-25 09:00:00+07. Tidak ada pg_stat_activity live, query text rahasia, lock inspection, atau terminate backend yang dijalankan.",
+      "starterSql": "SELECT pid, state, wait_event_type, wait_event, blocker_pid,\n       ROUND(EXTRACT(EPOCH FROM (observed_at - query_start))::NUMERIC, 1) AS query_age_seconds,\n       ROUND(EXTRACT(EPOCH FROM (observed_at - xact_start))::NUMERIC, 1) AS xact_age_seconds,\n       (wait_event_type = 'Lock' AND blocker_pid IS NOT NULL) AS lock_wait_candidate,\n       (query_start IS NULL) AS query_start_missing,\n       query_text_visible\nFROM pg_temp.lesson_activity_waits\nORDER BY pid;",
+      "variants": [
+        {
+          "id": "l6m04l01-variant-1",
+          "question": "PID4103 `idle in transaction` memiliki xact_age 180 detik dan wait NULL. Apa keputusan investigasi yang paling aman?",
+          "options": [
+            "Anggap pasti root cause lock dan terminate segera.",
+            "Catat sebagai transaksi lama yang perlu owner/lock-scope check; wait NULL tidak membuktikan tidak ada lock.",
+            "Abaikan karena state idle berarti transaksi sudah COMMIT."
+          ],
+          "answer": 1,
+          "explanation": "Transaksi idle dapat tetap terbuka dan mempertahankan snapshot/lock sesuai scope; tindakan perlu owner dan dampak rollback.",
+          "feedback": [
+            "Belum tepat. Umur dan state adalah sinyal, bukan otorisasi terminate atau bukti root cause.",
+            "Benar. Pisahkan idle status, xact age, lock inspection, owner, dan rencana rollback.",
+            "Belum tepat. Idle in transaction justru berarti transaksi masih terbuka."
+          ]
+        },
+        {
+          "id": "l6m04l01-variant-2",
+          "question": "Jika snapshot baru menemukan PID4104 tetap `IO/DataFileRead` tetapi p95 API normal, apa bahasa laporan yang tepat?",
+          "options": [
+            "Storage pasti rusak dan harus diganti.",
+            "Backend menunjukkan IO wait pada snapshot; korelasi dengan p95 normal tidak cukup untuk membuktikan incident atau disk fault.",
+            "IO wait harus diubah menjadi Lock wait agar diagnosis konsisten."
+          ],
+          "answer": 1,
+          "explanation": "Wait event adalah sinyal yang perlu dikorelasikan dengan workload dan metric lain, bukan vonis kerusakan.",
+          "feedback": [
+            "Belum tepat. Storage fault membutuhkan evidence storage dan dampak yang sesuai.",
+            "Benar. Catat sinyal dan batasnya; kumpulkan repeat snapshot atau I/O evidence.",
+            "Belum tepat. Jangan mengubah data agar cocok dengan hipotesis."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l6m04l01-edge-1",
+          "question": "Dua snapshot berjarak satu detik menunjukkan wait_event NULL pada PID yang sama, lalu Lock pada snapshot berikutnya. Apa batas kesimpulan?",
+          "options": [
+            "Lock adalah state permanen PID tersebut sejak proses dibuat.",
+            "Wait state berubah sepanjang waktu; snapshot kedua memberi evidence baru, bukan sejarah lengkap atau penyebab awal.",
+            "Snapshot pertama pasti salah karena wait event seharusnya tidak berubah."
+          ],
+          "answer": 1,
+          "explanation": "pg_stat_activity adalah view yang berubah; urutan snapshot membantu membatasi interval, bukan membangun trace sempurna.",
+          "feedback": [
+            "Belum tepat. Wait event tidak permanen dan dapat berubah antar pemeriksaan.",
+            "Benar. Laporkan timestamp, interval, dan evidence yang masih belum ada.",
+            "Belum tepat. Perubahan state normal dan bukan bukti view salah."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l6m04l01-edge-2",
+          "question": "Query text terlihat sebagai `[redacted]` untuk investigator. Tindakan yang sesuai apa?",
+          "options": [
+            "Cetak parameter rahasia dari log lain ke channel insiden publik.",
+            "Gunakan pid, query fingerprint/route yang disanitasi, owner, dan privilege-approved evidence; jangan menganggap teks redacted sebagai bukti query shape lengkap.",
+            "Hapus seluruh snapshot karena tanpa query text diagnosis pasti mustahil."
+          ],
+          "answer": 1,
+          "explanation": "Diagnosis dapat dilanjutkan dengan metadata minimum dan owner context sambil menjaga confidentiality boundary.",
+          "feedback": [
+            "Belum tepat. Insiden tidak menghapus privacy boundary; gunakan jalur akses yang disetujui.",
+            "Benar. Query fingerprint dan owner-approved context membantu tanpa menyalin secret.",
+            "Belum tepat. Snapshot masih berguna untuk state, wait, age, dan pid chain."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Mulai dari observation timestamp: hitung query age dan xact age, lalu pertahankan NULL sebagai NULL.",
+        "Gunakan wait_event_type untuk keluarga gejala; Lock, IO, dan NULL memiliki batas bukti berbeda.",
+        "Sebelum terminate, minta owner, blocker chain, lock scope, privacy-safe query fingerprint, dan dampak rollback."
+      ],
+      "solutionSql": "SELECT pid, state, wait_event_type, wait_event, blocker_pid,\n       ROUND(EXTRACT(EPOCH FROM (observed_at - query_start))::NUMERIC, 1) AS query_age_seconds,\n       ROUND(EXTRACT(EPOCH FROM (observed_at - xact_start))::NUMERIC, 1) AS xact_age_seconds,\n       (wait_event_type = 'Lock' AND blocker_pid IS NOT NULL) AS lock_wait_candidate,\n       (query_start IS NULL) AS query_start_missing,\n       query_text_visible\nFROM pg_temp.lesson_activity_waits\nORDER BY pid;",
+      "solutionExplanation": "Jawaban mempertahankan lima state authored, menghitung dua jenis age dari timestamp tetap, dan tidak mengubah NULL menjadi nol. PID4102 adalah lock-wait candidate; PID4103 perlu lock/owner evidence; PID4104 adalah IO-wait candidate; PID4101 tidak dapat disebut CPU proof. Redaksi query dan tidak adanya live inspection membatasi tindakan; tidak ada backend yang diterminasi.",
+      "critical": true
+    },
+    "reflection": "Jelaskan perbedaan state, wait_event_type, wait_event, query_start, dan xact_start pada snapshot O1. Sebutkan mengapa Lock wait bukan otomatis root cause, mengapa idle in transaction dengan wait NULL tetap perlu diperiksa, serta bagaimana privacy dan privilege membatasi query text yang boleh dicatat."
+  },
+  {
+    "id": "l6m04l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "statistics-views",
+      "cumulative-counters",
+      "pg-stat-statements",
+      "query-patterns",
+      "selectivity",
+      "postgresql-lab"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/monitoring-stats.html",
+      "https://www.postgresql.org/docs/17/pgstatstatements.html",
+      "https://www.postgresql.org/docs/17/monitoring.html",
+      "https://www.postgresql.org/docs/17/planner-stats.html"
+    ],
+    "hook": "Sebuah dashboard menampilkan `calls = 1500` dan `total_exec_time = 7500 ms`, lalu menyebut query itu memburuk. Angka tersebut adalah counter cumulative, bukan rate; mungkin juga baru saja reset. Di sisi lain, `n_dead_tup` hanyalah estimasi dan `pg_stat_statements` biasanya menyimpan mean aggregate, bukan p95. Bagaimana mengubah snapshot authored menjadi delta dan rate yang jujur tanpa membuat extension atau memanggil view live?",
+    "objectives": [
+      "Membedakan counter cumulative, interval pengamatan, reset timestamp, delta, rate, dan mean aggregate.",
+      "Membaca n_live_tup/n_dead_tup sebagai estimasi statistik dan menyusun hipotesis scan berlebih yang masih harus diuji dengan EXPLAIN.",
+      "Menjelaskan batas pg_stat_statements: optional extension, query yang dinormalisasi, mean aggregate, tidak otomatis p95, dan tidak ada CREATE EXTENSION pada lesson."
+    ],
+    "sections": [
+      {
+        "title": "Counter cumulative baru bermakna setelah diberi periode",
+        "paragraphs": [
+          "Banyak statistics view PostgreSQL menyimpan hitungan sejak statistics reset terakhir, bukan kecepatan per detik yang siap dibaca. `calls`, `total_exec_time`, `seq_scan`, dan `idx_scan` adalah contoh yang memerlukan dua snapshot dengan timestamp serta reset boundary yang sebanding. Delta B terhadap A dapat dibagi durasi 300 detik; angka absolut 1500 tanpa reset_at dan observed_at tidak menjawab apakah traffic bertambah selama lima menit atau terkumpul selama dua hari. Jika counter menurun atau reset timestamp berubah, jangan mengurangkan secara naif: tandai interval tidak valid, ambil baseline baru, lalu jelaskan gap.",
+          "Lesson ini memakai tiga snapshot authored pada waktu tetap: A sebagai baseline, B lima menit kemudian pada reset yang sama, dan C setelah reset. SQL menghitung `calls_delta`, `total_exec_ms_delta`, calls per minute, serta mean milliseconds per call hanya untuk interval yang valid. Guard `counter >= previous_counter`, `stats_reset` yang sama, dan elapsed positif mencegah angka rate fiktif. Hasilnya adalah aritmetika pada input latihan, bukan pembacaan server. Di production, reset dapat berasal dari restart, reset statistics, extension policy, atau perubahan observability pipeline; catat penyebab yang diketahui dan jangan menyamakan zero delta dengan tidak ada traffic tanpa konteks."
+        ]
+      },
+      {
+        "title": "Relation estimates dan query patterns bukan kebenaran tunggal",
+        "paragraphs": [
+          "`n_live_tup` dan `n_dead_tup` pada statistics view berguna sebagai estimasi untuk membentuk prioritas, tetapi bukan hitungan exact row pada setiap saat. Nilainya dipengaruhi ANALYZE, sampling, vacuum, update pattern, dan kapan statistik dikumpulkan. `seq_scan` tinggi dapat berarti workload memang membaca sebagian besar tabel, statistik belum sesuai, predicate kurang selektif, atau index tidak cocok; ia bukan bukti otomatis bahwa index baru harus dibuat. Hipotesis perlu diuji pada query representative dengan EXPLAIN yang aman, parameter dan data volume tertulis, serta review trade-off write/storage.",
+          "Query patterns sebaiknya dinormalisasi agar bentuk statement dapat dikelompokkan meskipun literal parameter berbeda. `pg_stat_statements` adalah extension opsional dan harus tersedia serta disetujui lebih dulu; lesson tidak menjalankan `CREATE EXTENSION` dan tidak mengklaim view itu aktif. Counter `calls` dan `total_exec_time` pada extension dapat membantu menghitung mean aggregate, tetapi mean tidak menyimpan distribusi per request dan tidak dapat dipakai untuk menyimpulkan p95. Latency tail memerlukan sampel per eksekusi atau telemetry lain dengan definisi dan privacy boundary yang jelas.",
+          "Statistik kumulatif juga dapat di-cache selama transaksi, bergantung pada stats_fetch_consistency. Pembacaan view berulang dalam transaksi yang sama bisa memakai nilai yang sudah diambil. Boundary transaksi baru atau pg_stat_clear_snapshot() dapat membuang snapshot statistik yang di-cache agar pembacaan berikutnya mengambil data baru; ini tidak memaksa semua backend mempublikasikan counter seketika. Bedakan waktu observasi, waktu reset, dan waktu publikasi statistik. Fixture authored ini tidak membaca view live atau memanggil fungsi tersebut."
+        ]
+      },
+      {
+        "title": "Dari scan berlebih ke hipotesis yang bisa diuji",
+        "paragraphs": [
+          "Output O2 menunjukkan B memiliki delta calls 60 selama 300 detik, delta total execution 330 ms, serta mean 5,50 ms per call. Relation snapshot yang sama menunjukkan seq_scan dan idx_scan sebagai konteks, bukan verdict. Seorang engineer dapat menulis hipotesis: “pada query pattern tertentu, predicate tidak cukup selektif atau index tidak cocok sehingga scan cost tinggi.” Hipotesis itu harus menyebut query, parameter class, data size, plan evidence, dan risiko perubahan. Ia tidak boleh ditulis sebagai “table pasti lambat” hanya karena n_dead_tup berubah atau seq_scan lebih besar dari idx_scan.",
+          "Reset pada C sengaja menghasilkan NULL untuk delta dan rate. Itu bukan kegagalan SQL; itu sinyal agar investigator membuat cohort periode baru. Bila elapsed_seconds nol, guard yang sama mencegah pembagian nol. Bila counter turun tanpa reset timestamp yang diketahui, treat as suspicious dan jangan menyamarkan dengan ABS. Dengan disiplin ini, dashboard menjadi alat percakapan: ia menunjukkan apa yang terjadi pada interval authored dan membantu memilih bukti berikutnya, bukan mesin yang mengeluarkan perintah tuning otomatis atau sertifikat performa."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset O2 — tiga snapshot authored relation statistics dan query-pattern counters pada reset yang sama lalu reset baru. Angka menggambarkan latihan delta/rate; bukan pg_stat views live.",
+      "setupSql": "CREATE TEMP TABLE lesson_observability_stats (\n  snapshot_id TEXT PRIMARY KEY,\n  observed_at TIMESTAMPTZ NOT NULL,\n  stats_reset_at TIMESTAMPTZ NOT NULL,\n  relation_name TEXT NOT NULL,\n  seq_scan INTEGER NOT NULL,\n  idx_scan INTEGER NOT NULL,\n  n_live_tup INTEGER NOT NULL,\n  n_dead_tup INTEGER NOT NULL,\n  query_id BIGINT NOT NULL,\n  normalized_query TEXT NOT NULL,\n  calls BIGINT NOT NULL,\n  total_exec_ms NUMERIC(12,2) NOT NULL\n);\nINSERT INTO pg_temp.lesson_observability_stats VALUES\n  ('A', '2026-10-25 10:00:00+07', '2026-10-25 09:50:00+07', 'commerce_invoices', 5, 100, 1000, 20, 9001, 'SELECT ... WHERE student_id = $1', 120, 600.00),\n  ('B', '2026-10-25 10:05:00+07', '2026-10-25 09:50:00+07', 'commerce_invoices', 20, 120, 1100, 40, 9001, 'SELECT ... WHERE student_id = $1', 180, 930.00),\n  ('C', '2026-10-25 10:10:00+07', '2026-10-25 10:07:00+07', 'commerce_invoices', 2, 4, 1110, 5, 9001, 'SELECT ... WHERE student_id = $1', 12, 30.00);",
+      "sql": "WITH ordered AS (\n  SELECT s.*,\n         LAG(observed_at) OVER (ORDER BY observed_at) AS previous_observed_at,\n         LAG(stats_reset_at) OVER (ORDER BY observed_at) AS previous_reset_at,\n         LAG(calls) OVER (ORDER BY observed_at) AS previous_calls,\n         LAG(total_exec_ms) OVER (ORDER BY observed_at) AS previous_total_exec_ms\n  FROM pg_temp.lesson_observability_stats AS s\n), guarded AS (\n  SELECT o.*,\n         (previous_observed_at IS NOT NULL AND stats_reset_at = previous_reset_at AND calls >= previous_calls AND total_exec_ms >= previous_total_exec_ms AND observed_at > previous_observed_at) AS interval_valid,\n         (previous_reset_at IS NOT NULL AND stats_reset_at <> previous_reset_at) AS reset_detected,\n         EXTRACT(EPOCH FROM (observed_at - previous_observed_at)) AS elapsed_seconds,\n         calls - previous_calls AS calls_delta,\n         total_exec_ms - previous_total_exec_ms AS total_exec_ms_delta\n  FROM ordered AS o\n)\nSELECT snapshot_id, relation_name, query_id, normalized_query, seq_scan, idx_scan, n_live_tup, n_dead_tup,\n       calls_delta, total_exec_ms_delta,\n       CASE WHEN interval_valid THEN ROUND(elapsed_seconds::NUMERIC, 1) END AS elapsed_seconds,\n       CASE WHEN interval_valid THEN ROUND(calls_delta * 60.0 / NULLIF(elapsed_seconds, 0), 2) END AS calls_per_minute,\n       CASE WHEN interval_valid AND calls_delta > 0 THEN ROUND(total_exec_ms_delta / calls_delta, 2) END AS mean_ms_per_call,\n       interval_valid, reset_detected\nFROM guarded\nORDER BY snapshot_id;",
+      "columns": [
+        "snapshot_id",
+        "relation_name",
+        "query_id",
+        "normalized_query",
+        "seq_scan",
+        "idx_scan",
+        "n_live_tup",
+        "n_dead_tup",
+        "calls_delta",
+        "total_exec_ms_delta",
+        "elapsed_seconds",
+        "calls_per_minute",
+        "mean_ms_per_call",
+        "interval_valid",
+        "reset_detected"
+      ],
+      "rows": [
+        [
+          "A",
+          "commerce_invoices",
+          "9001",
+          "SELECT ... WHERE student_id = $1",
+          "5",
+          "100",
+          "1000",
+          "20",
+          null,
+          null,
+          null,
+          null,
+          null,
+          "f",
+          "f"
+        ],
+        [
+          "B",
+          "commerce_invoices",
+          "9001",
+          "SELECT ... WHERE student_id = $1",
+          "20",
+          "120",
+          "1100",
+          "40",
+          "60",
+          "330.00",
+          "300.0",
+          "12.00",
+          "5.50",
+          "t",
+          "f"
+        ],
+        [
+          "C",
+          "commerce_invoices",
+          "9001",
+          "SELECT ... WHERE student_id = $1",
+          "2",
+          "4",
+          "1110",
+          "5",
+          "-168",
+          "-900.00",
+          null,
+          null,
+          null,
+          "f",
+          "t"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "A adalah baseline. B valid karena reset_at sama, counter naik, dan elapsed 300 detik; delta calls 60 menghasilkan 12,00 calls/menit dan mean 5,50 ms. C menunjukkan reset karena reset_at berubah dan counter turun; guard menolak delta/rate sebagai metric valid, sehingga delta negatif hanya dibaca sebagai sinyal reset dan tidak dipakai untuk rate. n_live_tup/n_dead_tup, seq_scan, dan idx_scan tetap authored estimates/counters. Query pattern sudah dinormalisasi, tetapi mean aggregate bukan p95 dan extension pg_stat_statements tidak dibuat atau dibaca."
+    },
+    "checks": [
+      {
+        "id": "l6m04l02-check-1",
+        "question": "Mengapa `calls = 1500` tanpa interval dan reset timestamp tidak cukup untuk menyebut query memburuk?",
+        "options": [
+          "Counter cumulative perlu dibandingkan dengan snapshot sebelumnya pada reset yang sama dan dibagi elapsed time yang valid.",
+          "Karena counter cumulative selalu berarti query lebih cepat ketika angkanya besar.",
+          "Karena statistics view hanya boleh dibaca setelah menghapus semua data table."
+        ],
+        "answer": 0,
+        "explanation": "Absolute cumulative value tidak memiliki rate atau periode yang jelas. Reset guard menghindari perbandingan lintas cohort yang rusak.",
+        "feedback": [
+          "Benar. Simpan observed_at/reset_at, validasi counter, lalu hitung delta/rate.",
+          "Belum tepat. Angka besar dapat berasal dari periode lebih panjang atau traffic lebih tinggi.",
+          "Belum tepat. Observability tidak memerlukan penghapusan data dan harus aman dibaca."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l6m04l02-check-2",
+        "question": "Apa batas `n_dead_tup` dan `total_exec_time / calls` pada lesson ini?",
+        "options": [
+          "Keduanya adalah kebenaran exact: n_dead_tup menghitung semua dead row dan mean sama dengan p95.",
+          "n_dead_tup adalah estimasi statistik, sedangkan pembagian total/calls adalah mean aggregate; keduanya memandu hipotesis tetapi bukan exact row count atau p95.",
+          "Keduanya tidak berguna karena counter PostgreSQL tidak pernah dapat dipakai untuk diagnosis."
+        ],
+        "answer": 1,
+        "explanation": "Estimates dan aggregate means berguna dalam konteks, tetapi memerlukan evidence lanjutan dan tidak mewakili seluruh distribusi.",
+        "feedback": [
+          "Belum tepat. Keduanya tidak menjanjikan exact count atau tail percentile.",
+          "Benar. Nyatakan scope metric dan gunakan EXPLAIN/sampel lain untuk menguji hipotesis.",
+          "Belum tepat. Counter berguna bila periode, reset, query shape, dan batasnya dicatat."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l6m04l02-check-3",
+        "question": "Apa yang harus dilakukan ketika snapshot C memiliki reset_at baru dan counter lebih rendah?",
+        "options": [
+          "Pakai delta negatif agar dashboard terlihat lengkap.",
+          "Tandai interval reset/tidak valid, mulai baseline baru, dan jangan memakai rate lintas reset.",
+          "Kalikan counter C dengan jumlah snapshot agar kembali cumulative."
+        ],
+        "answer": 1,
+        "explanation": "Reset mengubah titik awal counter. Nilai C boleh menjadi baseline cohort baru, bukan continuation dari B.",
+        "feedback": [
+          "Belum tepat. Delta negatif dari reset adalah artefak, bukan traffic negatif.",
+          "Benar. Simpan reset evidence dan hitung periode baru setelah baseline.",
+          "Belum tepat. Perkalian tidak memulihkan riwayat counter yang hilang."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Baca O2 sebagai tiga periode: tentukan interval valid, delta/rate yang boleh dihitung, dan satu hipotesis scan/query pattern yang masih memerlukan EXPLAIN.",
+      "setup": "Dataset O2 hanya berisi TEMP snapshot authored. Jangan membuat `pg_stat_statements`, jangan membaca statistics view live, dan jangan menyebut angka sebagai hasil benchmark.",
+      "starterSql": "WITH ordered AS (\n  SELECT s.*, LAG(observed_at) OVER (ORDER BY observed_at) AS previous_observed_at,\n         LAG(stats_reset_at) OVER (ORDER BY observed_at) AS previous_reset_at,\n         LAG(calls) OVER (ORDER BY observed_at) AS previous_calls,\n         LAG(total_exec_ms) OVER (ORDER BY observed_at) AS previous_total_exec_ms\n  FROM pg_temp.lesson_observability_stats AS s\n)\nSELECT snapshot_id, relation_name, query_id, normalized_query, seq_scan, idx_scan, n_live_tup, n_dead_tup,\n       calls - previous_calls AS calls_delta, total_exec_ms - previous_total_exec_ms AS total_exec_ms_delta,\n       (previous_observed_at IS NOT NULL AND stats_reset_at = previous_reset_at AND calls >= previous_calls AND total_exec_ms >= previous_total_exec_ms AND observed_at > previous_observed_at) AS interval_valid,\n       (previous_reset_at IS NOT NULL AND stats_reset_at <> previous_reset_at) AS reset_detected\nFROM ordered\nORDER BY snapshot_id;",
+      "variants": [
+        {
+          "id": "l6m04l02-variant-1",
+          "question": "B memiliki seq_scan delta authored lebih besar daripada A, tetapi n_dead_tup hanya estimasi. Apa langkah berikutnya?",
+          "options": [
+            "Buat hipotesis query/parameter yang mungkin scan berlebih, lalu uji dengan EXPLAIN pada fixture representative dan catat trade-off.",
+            "Buat index pada setiap kolom tanpa melihat predicate atau write cost.",
+            "Simpulkan VACUUM gagal hanya dari n_dead_tup authored."
+          ],
+          "answer": 0,
+          "explanation": "Stats membantu memilih pertanyaan. Plan dan workload representative dibutuhkan sebelum perubahan schema atau maintenance.",
+          "feedback": [
+            "Benar. Tulis query shape, data size, parameter class, plan evidence, dan risiko.",
+            "Belum tepat. Index berlebihan menambah storage/write cost dan dapat tidak cocok dengan predicate.",
+            "Belum tepat. n_dead_tup estimate bukan bukti vacuum failure atau root cause."
+          ]
+        },
+        {
+          "id": "l6m04l02-variant-2",
+          "question": "C reset setelah B. Bagaimana memulai pengamatan periode setelah C?",
+          "options": [
+            "Gunakan C sebagai baseline baru, tunggu snapshot D pada reset sama, lalu hitung delta C→D jika guard valid.",
+            "Gabungkan C dengan B karena query_id sama sehingga reset tidak relevan.",
+            "Anggap semua calls setelah reset adalah p95 query latency."
+          ],
+          "answer": 0,
+          "explanation": "Query identity tidak menghapus batas reset. Baseline baru menjaga rate dan mean tetap memiliki periode jelas.",
+          "feedback": [
+            "Benar. Reset menutup cohort lama dan C menjadi titik awal cohort baru.",
+            "Belum tepat. Counter lintas reset tidak dapat dikurangkan secara aman.",
+            "Belum tepat. Calls adalah count, bukan distribusi latency atau p95."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l6m04l02-edge-1",
+          "question": "Tim ingin menambahkan `CREATE EXTENSION pg_stat_statements` dalam lesson untuk memperoleh query metrics. Apa batas aman?",
+          "options": [
+            "Extension opsional membutuhkan konfigurasi/otorisasi dan scope deployment; lesson cukup menjelaskan pola tanpa menjalankan CREATE EXTENSION.",
+            "CREATE EXTENSION selalu read-only dan aman di semua database production.",
+            "Jika extension belum ada, gantikan query_id dengan row count agar p95 tersedia."
+          ],
+          "answer": 0,
+          "explanation": "Availability, preload/configuration, privilege, overhead, dan privacy harus disepakati. Tidak ada extension dibuat di fixture.",
+          "feedback": [
+            "Benar. Tandai optional, minta approval, dan jangan mengubah deployment dari latihan authored.",
+            "Belum tepat. DDL extension adalah perubahan environment dan bisa memiliki dampak operasional.",
+            "Belum tepat. Row count tidak menggantikan normalized query metrics atau p95."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l6m04l02-edge-2",
+          "question": "Mean aggregate 5,50 ms terlihat rendah, tetapi pengguna melaporkan tail lambat. Kesimpulan apa yang benar?",
+          "options": [
+            "Mean membuktikan p95 juga 5,50 ms.",
+            "Mean tidak menyimpan distribusi tail; ambil per-request samples atau telemetry percentile dengan cohort yang jelas.",
+            "Hapus slow calls sebelum menghitung mean ulang."
+          ],
+          "answer": 1,
+          "explanation": "Total/calls merangkum seluruh periode. Tail memerlukan distribusi atau percentile evidence yang tidak disediakan oleh aggregate mean.",
+          "feedback": [
+            "Belum tepat. Banyak distribusi berbeda dapat memiliki mean sama dan p95 berbeda.",
+            "Benar. Nyatakan definisi sampel dan jangan menutupi outlier tanpa aturan.",
+            "Belum tepat. Menghapus slow calls dapat menyembunyikan masalah dan merusak baseline."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Cari observed_at dan reset_at sebelum mengurangkan counter; interval valid memerlukan elapsed positif.",
+        "Jika counter turun atau reset berubah, mulai baseline baru dan pertahankan NULL untuk rate yang tidak sah.",
+        "Gunakan stats untuk membentuk hipotesis query shape, lalu cari EXPLAIN atau samples yang privacy-safe; mean bukan p95."
+      ],
+      "solutionSql": "WITH ordered AS (\n  SELECT s.*, LAG(observed_at) OVER (ORDER BY observed_at) AS previous_observed_at,\n         LAG(stats_reset_at) OVER (ORDER BY observed_at) AS previous_reset_at,\n         LAG(calls) OVER (ORDER BY observed_at) AS previous_calls,\n         LAG(total_exec_ms) OVER (ORDER BY observed_at) AS previous_total_exec_ms\n  FROM pg_temp.lesson_observability_stats AS s\n), guarded AS (\n  SELECT o.*,\n         (previous_observed_at IS NOT NULL AND stats_reset_at = previous_reset_at AND calls >= previous_calls AND total_exec_ms >= previous_total_exec_ms AND observed_at > previous_observed_at) AS interval_valid,\n         (previous_reset_at IS NOT NULL AND stats_reset_at <> previous_reset_at) AS reset_detected,\n         EXTRACT(EPOCH FROM (observed_at - previous_observed_at)) AS elapsed_seconds,\n         calls - previous_calls AS calls_delta, total_exec_ms - previous_total_exec_ms AS total_exec_ms_delta\n  FROM ordered AS o\n)\nSELECT snapshot_id, relation_name, query_id, normalized_query, seq_scan, idx_scan, n_live_tup, n_dead_tup, calls_delta, total_exec_ms_delta,\n       CASE WHEN interval_valid THEN ROUND(elapsed_seconds::NUMERIC, 1) END AS elapsed_seconds,\n       CASE WHEN interval_valid THEN ROUND(calls_delta * 60.0 / NULLIF(elapsed_seconds, 0), 2) END AS calls_per_minute,\n       CASE WHEN interval_valid AND calls_delta > 0 THEN ROUND(total_exec_ms_delta / calls_delta, 2) END AS mean_ms_per_call, interval_valid, reset_detected\nFROM guarded\nORDER BY snapshot_id;",
+      "solutionExplanation": "Reference memakai LAG lalu guard reset, monotonic counter, dan elapsed positif. B adalah interval valid dengan 60 calls dalam 300 detik; C tidak dipakai karena reset dan counter turun. Relation estimate serta normalized query membantu membangun hipotesis, tetapi tidak membuktikan plan, p95, index need, atau vacuum failure. Extension optional tidak dibuat.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa counter cumulative membutuhkan observed_at dan reset_at, bagaimana guard mencegah rate negatif atau pembagian nol, serta mengapa n_dead_tup dan mean pg_stat_statements tidak boleh dibaca sebagai exact row count atau p95. Tulis satu hipotesis query pattern yang masih memerlukan EXPLAIN dan evidence tambahan."
+  },
+  {
+    "id": "l6m04l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "incident-diagnosis",
+      "hypothesis-testing",
+      "latency",
+      "lock-contention",
+      "connection-pool",
+      "observability"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/monitoring-stats.html",
+      "https://www.postgresql.org/docs/17/monitoring.html",
+      "https://www.postgresql.org/docs/17/explicit-locking.html",
+      "https://www.postgresql.org/docs/17/pgstatstatements.html"
+    ],
+    "hook": "P95 API melonjak dari 180 ms ke 920 ms. Satu orang menyarankan menaikkan pool, orang lain ingin membunuh blocker, dan orang ketiga menyalahkan index—semuanya sebelum menyimpan satu snapshot. Incident report yang baik mulai dari gejala, tiga bukti yang timestamp-nya sama, hipotesis yang bisa difalsifikasi, serta guard untuk privacy dan dampak tindakan. Bagaimana menulis diagnosis yang cukup tegas untuk bergerak tetapi cukup terbatas untuk tidak menebak?",
+    "objectives": [
+      "Membangun timeline authored dari API p95, database mean, lock/IO wait, pool wait, active sessions, dan error rate.",
+      "Menghubungkan beberapa sinyal menjadi hipotesis yang falsifiable tanpa menyebut korelasi sebagai root cause atau bukti runtime.",
+      "Menyusun langkah sebelum terminate/tune: simpan evidence, cek owner/privilege, definisikan tindakan reversible, dan tulis batas observasi."
+    ],
+    "sections": [
+      {
+        "title": "Mulai dari gejala dan observation window",
+        "paragraphs": [
+          "Diagnosis insiden bukan lomba memilih label tercepat. Mulai dengan gejala yang dapat diamati: misalnya API p95 authored naik dari 180 menjadi 920 ms pada 09:05, bukan “database rusak”. Tentukan observation timestamp dan window, lalu kumpulkan sinyal dengan definisi yang cocok: p95 harus memiliki cohort request, database mean harus menyebut apakah itu server-side atau end-to-end, pool wait harus berasal dari pool metric, dan waiters harus berasal dari snapshot activity. Jika timestamp berbeda jauh, korelasi dapat menyesatkan. Dataset O3 memakai tiga titik waktu authored agar learner dapat menghitung delta tanpa `now()` atau wall clock.",
+          "Satu metric jarang cukup. P95 API tinggi dengan database mean tinggi dapat mengarahkan pemeriksaan query/lock/I/O, tetapi pool wait juga bisa menambah latency di luar database. Lock waiter yang meningkat mendukung hipotesis contention pada window itu, namun wait_event_type Lock tidak memilih root cause karena blocker chain dan transaksi bisnis belum diperiksa. IO waiter yang naik sementara lock waiter nol memberi arah berbeda, tetapi tetap bukan bukti storage fault. Tulis “signal supports hypothesis H” dan “evidence missing” secara eksplisit. Itu membuat report dapat difalsifikasi oleh snapshot berikutnya, plan, trace, atau perubahan yang terkontrol."
+        ]
+      },
+      {
+        "title": "Tiga sinyal, satu hipotesis terikat",
+        "paragraphs": [
+          "Untuk O3, snapshot incident menunjukkan api_p95 920 ms, db_mean 700 ms, lock_waiters 12, pool_wait_ms 600, dan active_sessions 30. Kombinasi ini mendukung hipotesis terikat: pada window 09:05, contention dan antrean pool sama-sama kandidat penyumbang latency. Ia tidak membuktikan bahwa satu blocker menyebabkan semua request, bahwa menaikkan pool akan menurunkan p95, atau bahwa index adalah solusi. Bandingkan baseline dan mitigation snapshot; bila lock waiter turun tetapi p95 tetap tinggi, hipotesis lock-only melemah dan perlu mencari pool, I/O, application work, atau cohort mix.",
+          "Hipotesis yang baik menyebut observasi yang akan membantahnya. Contoh: “Jika lock contention adalah penyebab dominan, lock-waiter count dan blocked duration harus ikut turun setelah transaksi owner selesai, sementara query cohort tetap sebanding.” Contoh lain: “Jika pool saturation dominan, pool wait akan membesar ketika active connections mendekati pool limit walau database mean tetap normal.” Jangan mengubah contoh ini menjadi janji angka universal. `pg_stat_statements` optional dan mean aggregate tidak memberi p95; raw query text bisa ter-redaksi. Report harus menyimpan query fingerprint, parameter class, config version, data size, privacy scope, dan siapa yang menyetujui akses."
+        ]
+      },
+      {
+        "title": "Sebelum kill atau tune, batasi risiko",
+        "paragraphs": [
+          "Terminate backend dan tuning pool adalah perubahan yang dapat memengaruhi transaksi aktif, rollback, retry storm, memory, dan availability. Sebelum tindakan, bekukan snapshot minimum yang aman: observation time, pid/session state, wait event, xact age, blocker chain, owner, query fingerprint, pool counters, error rate, dan redaction status. Pastikan investigator memiliki privilege yang sesuai dan tidak menyalin secret. Minta owner memastikan transaksi dapat dibatalkan; jika outcome commit tidak diketahui, siapkan rekonsiliasi berdasarkan business key. Jika tindakan reversible dan disetujui, tetapkan success metric serta stop condition sebelum perubahan.",
+          "O3 hanya menghitung delta authored dan menghasilkan flag pendukung hipotesis. Ia tidak menjalankan terminate, `SET`, EXPLAIN ANALYZE, extension, atau benchmark. Candidate remediation harus diuji dalam scope yang dibatasi dan dibandingkan dengan cohort sebelum/after yang setara. Report yang jujur boleh berakhir dengan “belum cukup evidence”; itu lebih berguna daripada sertifikat root cause palsu. Setelah insiden, pisahkan apa yang observed, apa yang inferred, apa yang belum diketahui, dan eksperimen apa yang akan memfalsifikasi dugaan. Dengan format itu, observability menjadi loop belajar yang aman, bukan dashboard yang memaksa tindakan tanpa konteks."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset O3 — timeline authored gejala aplikasi, database, lock/IO wait, pool, dan error pada observation timestamp tetap. Flag hipotesis adalah alat reasoning, bukan diagnosis production.",
+      "setupSql": "CREATE TEMP TABLE lesson_incident_signals (\n  snapshot_id TEXT PRIMARY KEY,\n  observed_at TIMESTAMPTZ NOT NULL,\n  phase TEXT NOT NULL,\n  api_p95_ms NUMERIC(12,2) NOT NULL,\n  db_mean_ms NUMERIC(12,2) NOT NULL,\n  lock_waiters INTEGER NOT NULL,\n  io_waiters INTEGER NOT NULL,\n  pool_wait_ms NUMERIC(12,2) NOT NULL,\n  active_sessions INTEGER NOT NULL,\n  error_rate NUMERIC(6,4) NOT NULL,\n  query_text_visible BOOLEAN NOT NULL,\n  evidence_kind TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_incident_signals VALUES\n  ('S1', '2026-10-25 09:00:00+07', 'baseline', 180.00, 110.00, 0, 1, 5.00, 8, 0.0100, false, 'authored_snapshot'),\n  ('S2', '2026-10-25 09:05:00+07', 'incident', 920.00, 700.00, 12, 2, 600.00, 30, 0.0800, false, 'authored_snapshot'),\n  ('S3', '2026-10-25 09:10:00+07', 'mitigation_observation', 750.00, 580.00, 4, 2, 400.00, 24, 0.0500, false, 'authored_snapshot');",
+      "sql": "WITH baseline AS (\n  SELECT MIN(observed_at) AS baseline_at, MIN(api_p95_ms) FILTER (WHERE phase = 'baseline') AS baseline_p95, MIN(db_mean_ms) FILTER (WHERE phase = 'baseline') AS baseline_db_mean\n  FROM pg_temp.lesson_incident_signals\n), enriched AS (\n  SELECT s.*, b.baseline_at, b.baseline_p95, b.baseline_db_mean,\n         EXTRACT(EPOCH FROM (s.observed_at - b.baseline_at)) AS seconds_from_baseline\n  FROM pg_temp.lesson_incident_signals AS s\n  CROSS JOIN baseline AS b\n)\nSELECT snapshot_id, phase, TO_CHAR(observed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') AS observed_at_utc, api_p95_ms, db_mean_ms,\n       ROUND((api_p95_ms - baseline_p95)::NUMERIC, 2) AS api_p95_delta,\n       ROUND((db_mean_ms - baseline_db_mean)::NUMERIC, 2) AS db_mean_delta,\n       lock_waiters, io_waiters, pool_wait_ms, active_sessions, error_rate,\n       (lock_waiters > 0 AND db_mean_ms > baseline_db_mean) AS lock_hypothesis_supported,\n       (pool_wait_ms > 100 AND active_sessions >= 24) AS pool_pressure_signal,\n       (query_text_visible = false) AS privacy_boundary_active,\n       evidence_kind\nFROM enriched\nORDER BY observed_at;",
+      "columns": [
+        "snapshot_id",
+        "phase",
+        "observed_at_utc",
+        "api_p95_ms",
+        "db_mean_ms",
+        "api_p95_delta",
+        "db_mean_delta",
+        "lock_waiters",
+        "io_waiters",
+        "pool_wait_ms",
+        "active_sessions",
+        "error_rate",
+        "lock_hypothesis_supported",
+        "pool_pressure_signal",
+        "privacy_boundary_active",
+        "evidence_kind"
+      ],
+      "rows": [
+        [
+          "S1",
+          "baseline",
+          "2026-10-25 02:00:00",
+          "180.00",
+          "110.00",
+          "0.00",
+          "0.00",
+          "0",
+          "1",
+          "5.00",
+          "8",
+          "0.0100",
+          "f",
+          "f",
+          "t",
+          "authored_snapshot"
+        ],
+        [
+          "S2",
+          "incident",
+          "2026-10-25 02:05:00",
+          "920.00",
+          "700.00",
+          "740.00",
+          "590.00",
+          "12",
+          "2",
+          "600.00",
+          "30",
+          "0.0800",
+          "t",
+          "t",
+          "t",
+          "authored_snapshot"
+        ],
+        [
+          "S3",
+          "mitigation_observation",
+          "2026-10-25 02:10:00",
+          "750.00",
+          "580.00",
+          "570.00",
+          "470.00",
+          "4",
+          "2",
+          "400.00",
+          "24",
+          "0.0500",
+          "t",
+          "t",
+          "t",
+          "authored_snapshot"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "S2 mendukung dua kandidat sinyal: lock waiters dan pool pressure naik bersama p95/db mean, tetapi flag tidak menyatakan root cause. S3 menunjukkan signal turun namun belum kembali baseline; hipotesis lock-only atau pool-only belum tersertifikasi. `query_text_visible = f` menjaga privacy boundary. Delta dihitung terhadap baseline authored dengan observation timestamp tetap; tidak ada API request, backend, pool, atau database view live yang diukur. observed_at_utc menampilkan waktu UTC secara eksplisit agar hasil tidak bergantung timezone session. API p95, DB mean, dan pool_wait_ms adalah sinyal aggregate terpisah; pool_wait_ms di fixture adalah nilai ilustrasi, bukan komponen yang dapat dijumlahkan atau dikurangkan dari p95."
+    },
+    "checks": [
+      {
+        "id": "l6m04l03-check-1",
+        "question": "Mengapa S2 tidak cukup untuk menyebut lock sebagai root cause tunggal?",
+        "options": [
+          "Lock waiters adalah satu signal; pool wait, blocker chain, query cohort, I/O, dan aplikasi masih perlu dikorelasikan serta diuji.",
+          "Karena lock_waiters selalu tidak berkaitan dengan latency API.",
+          "Karena semua p95 tinggi pasti disebabkan disk I/O."
+        ],
+        "answer": 0,
+        "explanation": "Multi-signal diagnosis mengubah angka menjadi hipotesis yang dapat difalsifikasi, bukan label otomatis.",
+        "feedback": [
+          "Benar. Catat signal lock sebagai kandidat dan sebutkan evidence yang masih hilang.",
+          "Belum tepat. Lock contention dapat berkontribusi, tetapi harus dicocokkan dengan window dan workload.",
+          "Belum tepat. P95 tinggi memiliki banyak kemungkinan penyebab."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l6m04l03-check-2",
+        "question": "Apa isi minimum sebelum menyarankan terminate backend atau menaikkan pool?",
+        "options": [
+          "Langsung jalankan perubahan lalu cari evidence setelah incident selesai.",
+          "Snapshot timestamp, owner/blocker, xact scope, privacy-safe query fingerprint, dampak rollback/memory, approval, success metric, dan stop condition.",
+          "Cukup satu screenshot dashboard tanpa timestamp karena angka akan tetap sama."
+        ],
+        "answer": 1,
+        "explanation": "Tindakan operasional dapat membatalkan transaksi atau memperburuk resource pressure; evidence dan guard harus ada lebih dulu.",
+        "feedback": [
+          "Belum tepat. Perubahan tanpa baseline dan stop condition sulit dibalik dan diaudit.",
+          "Benar. Bukti, owner, privacy, approval, serta risiko resource harus menjadi precondition.",
+          "Belum tepat. Snapshot berubah cepat dan screenshot tanpa waktu tidak dapat menyusun timeline."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l6m04l03-check-3",
+        "question": "Apa arti report yang menyatakan “belum cukup evidence”?",
+        "options": [
+          "Report gagal total dan harus memilih root cause secara spekulatif.",
+          "Report jujur memisahkan observed, inferred, unknown, dan next evidence; hipotesis tetap dapat diuji tanpa klaim sertifikasi.",
+          "Report boleh menghilangkan semua metric yang tidak mendukung hipotesis utama."
+        ],
+        "answer": 1,
+        "explanation": "Diagnosis yang dapat difalsifikasi memerlukan batas pengetahuan dan rencana pengukuran berikutnya.",
+        "feedback": [
+          "Belum tepat. Menahan klaim adalah bagian dari diagnosis yang aman.",
+          "Benar. Unknown yang eksplisit membuat langkah berikutnya dan risiko lebih jelas.",
+          "Belum tepat. Menghapus metric yang tidak cocok adalah confirmation bias, bukan diagnosis."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Tulis incident report O3: nyatakan tiga bukti bertimestamp, dua hipotesis yang dapat difalsifikasi, evidence yang hilang, dan guard sebelum tindakan. Jangan memilih root cause hanya dari satu flag.",
+      "setup": "O3 adalah timeline authored dengan tiga snapshot tetap. Tidak ada terminate backend, pool tuning, EXPLAIN ANALYZE, pg_stat_statements, atau benchmark live yang dijalankan.",
+      "starterSql": "WITH baseline AS (\n  SELECT MIN(observed_at) AS baseline_at, MIN(api_p95_ms) FILTER (WHERE phase = 'baseline') AS baseline_p95, MIN(db_mean_ms) FILTER (WHERE phase = 'baseline') AS baseline_db_mean\n  FROM pg_temp.lesson_incident_signals\n), enriched AS (\n  SELECT s.*, b.baseline_at, b.baseline_p95, b.baseline_db_mean, EXTRACT(EPOCH FROM (s.observed_at - b.baseline_at)) AS seconds_from_baseline\n  FROM pg_temp.lesson_incident_signals AS s CROSS JOIN baseline AS b\n)\nSELECT snapshot_id, phase, TO_CHAR(observed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') AS observed_at_utc, api_p95_ms, db_mean_ms,\n       ROUND((api_p95_ms - baseline_p95)::NUMERIC, 2) AS api_p95_delta,\n       ROUND((db_mean_ms - baseline_db_mean)::NUMERIC, 2) AS db_mean_delta,\n       lock_waiters, io_waiters, pool_wait_ms, active_sessions, error_rate,\n       (lock_waiters > 0 AND db_mean_ms > baseline_db_mean) AS lock_hypothesis_supported,\n       (pool_wait_ms > 100 AND active_sessions >= 24) AS pool_pressure_signal,\n       (query_text_visible = false) AS privacy_boundary_active, evidence_kind\nFROM enriched ORDER BY observed_at;",
+      "variants": [
+        {
+          "id": "l6m04l03-variant-1",
+          "question": "S4 authored menunjukkan api_p95 400 ms, db_mean 120 ms, lock_waiters 0, io_waiters 15, dan pool_wait 4 ms. Hipotesis awal mana yang paling terikat?",
+          "options": [
+            "Lock contention pasti membaik dan incident selesai.",
+            "IO-wait signal layak diperiksa sebagai kandidat; korelasi dengan storage/cache/query cohort masih dibutuhkan dan root cause belum terbukti.",
+            "Naikkan pool karena active sessions pasti menjadi bottleneck."
+          ],
+          "answer": 1,
+          "explanation": "Sinyal bergeser dari lock/pool ke IO pada snapshot authored. Itu mengarahkan evidence berikutnya, bukan memberi diagnosis final.",
+          "feedback": [
+            "Belum tepat. P95 turun tetapi perlu lihat error, cohort, dan durasi incident sebelum menyatakan selesai.",
+            "Benar. Cari I/O evidence dan ulangi snapshot tanpa menyamakan IO wait dengan disk failure.",
+            "Belum tepat. Pool wait rendah pada S4 tidak mendukung pool saturation sebagai kandidat utama."
+          ]
+        },
+        {
+          "id": "l6m04l03-variant-2",
+          "question": "S4 memiliki api_p95 900 ms, db_mean 105 ms, lock_waiters 0, io_waiters 0, dan pool_wait 700 ms. Apa langkah reasoning yang tepat?",
+          "options": [
+            "Pool pressure/queueing menjadi kandidat yang perlu diuji; database mean rendah tidak membuktikan semua request sehat.",
+            "Buat index segera karena semua API latency pasti berasal dari query planner.",
+            "Sebut root cause network tanpa mengukur pool limit atau application queue."
+          ],
+          "answer": 0,
+          "explanation": "Gap antara API p95 dan DB mean serta pool wait mengarahkan pemeriksaan pool/application queue, tetapi tetap memerlukan config dan cohort evidence.",
+          "feedback": [
+            "Benar. Pisahkan end-to-end latency, database time, pool wait, limit, dan transaction duration.",
+            "Belum tepat. Tidak ada lock/IO/query plan evidence yang mengharuskan index.",
+            "Belum tepat. Network adalah hipotesis lain yang membutuhkan measurement, bukan label otomatis."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l6m04l03-edge-1",
+          "question": "Waiter melihat `wait_event_type = 'Lock'`, tetapi ada beberapa blocker dan salah satunya idle in transaction. Apa report yang aman?",
+          "options": [
+            "Sebut satu pid sebagai root cause tanpa chain atau owner check.",
+            "Sebut lock contention sebagai observed candidate, petakan blocker chain/lock scope/owner, dan nilai dampak terminate sebelum tindakan.",
+            "Abaikan karena idle in transaction selalu tidak memegang lock."
+          ],
+          "answer": 1,
+          "explanation": "Lock chain dapat bercabang dan idle transaction dapat tetap memegang scope tertentu. Evidence tambahan menentukan tindakan.",
+          "feedback": [
+            "Belum tepat. Satu waiter/blocker pada snapshot tidak menjelaskan keseluruhan chain.",
+            "Benar. Bounded diagnosis membutuhkan chain, owner, scope, dan rollback impact.",
+            "Belum tepat. Idle state tidak otomatis berarti lock telah dilepas."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l6m04l03-edge-2",
+          "question": "Incident report tidak memiliki privilege untuk melihat query text. Apa yang harus dilakukan?",
+          "options": [
+            "Gunakan query fingerprint/route, owner-approved sanitized metadata, timestamp, dan redaction flag; jangan menebak literal atau membocorkan secret.",
+            "Tebak query dari nama table lalu tandai sebagai observed fact.",
+            "Minta semua investigator menyalin raw query ke chat publik."
+          ],
+          "answer": 0,
+          "explanation": "Privacy boundary adalah bagian dari evidence contract. Diagnosis dapat berlanjut dengan metadata minim yang disetujui.",
+          "feedback": [
+            "Benar. Pisahkan observed metadata dari inferensi dan hormati akses/query-text policy.",
+            "Belum tepat. Tebakan harus tetap hypothesis dan tidak boleh ditulis sebagai fact.",
+            "Belum tepat. Raw query dapat memuat data sensitif dan melanggar policy."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Tulis window dan timestamp dahulu, lalu pilih sedikitnya tiga signal yang mengukur lapisan berbeda: API, database, pool, atau wait.",
+        "Untuk setiap hipotesis, tulis evidence yang akan mendukung dan evidence yang akan membantah; flag bukan root cause.",
+        "Sebelum kill/tune, simpan snapshot privacy-safe, cek owner/privilege/rollback, dan tentukan success metric serta stop condition."
+      ],
+      "solutionSql": "WITH baseline AS (\n  SELECT MIN(observed_at) AS baseline_at, MIN(api_p95_ms) FILTER (WHERE phase = 'baseline') AS baseline_p95, MIN(db_mean_ms) FILTER (WHERE phase = 'baseline') AS baseline_db_mean\n  FROM pg_temp.lesson_incident_signals\n), enriched AS (\n  SELECT s.*, b.baseline_at, b.baseline_p95, b.baseline_db_mean, EXTRACT(EPOCH FROM (s.observed_at - b.baseline_at)) AS seconds_from_baseline\n  FROM pg_temp.lesson_incident_signals AS s CROSS JOIN baseline AS b\n)\nSELECT snapshot_id, phase, TO_CHAR(observed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') AS observed_at_utc, api_p95_ms, db_mean_ms,\n       ROUND((api_p95_ms - baseline_p95)::NUMERIC, 2) AS api_p95_delta,\n       ROUND((db_mean_ms - baseline_db_mean)::NUMERIC, 2) AS db_mean_delta,\n       lock_waiters, io_waiters, pool_wait_ms, active_sessions, error_rate,\n       (lock_waiters > 0 AND db_mean_ms > baseline_db_mean) AS lock_hypothesis_supported,\n       (pool_wait_ms > 100 AND active_sessions >= 24) AS pool_pressure_signal,\n       (query_text_visible = false) AS privacy_boundary_active, evidence_kind\nFROM enriched ORDER BY observed_at;",
+      "solutionExplanation": "Reference membandingkan S1 baseline dengan S2 dan S3 melalui delta yang bertimestamp tetap. S2 mendukung kandidat lock dan pool secara bersamaan; S3 menunjukkan penurunan tetapi masih di atas baseline. Tidak ada flag yang mengesahkan root cause. Incident report harus memisahkan observed, inferred, unknown, dan next evidence, serta meminta guard privacy/owner/rollback sebelum terminate atau tuning.",
+      "critical": true
+    },
+    "reflection": "Tulis incident report pendek yang memisahkan tiga observed signal, dua hipotesis falsifiable, evidence yang belum ada, dan guard sebelum perubahan. Jelaskan mengapa wait_event_type Lock bukan otomatis root cause, mengapa pool wait dan database time harus dipisahkan, serta bagaimana privacy/privilege membatasi query text dan tindakan terminate."
+  }
+]
