@@ -1,0 +1,626 @@
+[
+  {
+    "id": "l7m01l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "schema-releases",
+      "expand-contract",
+      "compatibility",
+      "not-valid",
+      "forward-fix"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/sql-altertable.html",
+      "https://www.postgresql.org/docs/17/ddl-alter.html",
+      "https://www.postgresql.org/docs/17/ddl-default.html",
+      "https://www.postgresql.org/docs/17/explicit-locking.html"
+    ],
+    "hook": "Commerce ingin mengganti legacy_label dengan normalized_label tanpa memutus reader lama. Mengapa expand–migrate–contract membutuhkan urutan kompatibilitas, dan mengapa rollback aplikasi tidak sama dengan mengembalikan data yang sudah diubah?",
+    "objectives": [
+      "Mengurutkan fase expand, migrate, dan contract untuk menjaga kompatibilitas reader serta writer lama dan baru.",
+      "Membedakan ADD COLUMN dengan default non-volatile, default volatile, NOT VALID, VALIDATE, dan lock/rewrite yang mungkin terjadi.",
+      "Merancang forward fix dan rollback aplikasi tanpa menjanjikan DROP atau perubahan data dapat dibatalkan otomatis."
+    ],
+    "sections": [
+      {
+        "title": "Expand membuka compatibility surface",
+        "paragraphs": [
+          "Expand menambah struktur yang dapat dipahami tanpa mengharuskan semua instance aplikasi pindah pada detik yang sama. Kolom target biasanya nullable terlebih dahulu, sementara reader baru memakai fallback dan reader lama tetap membaca kolom legacy. Writer baru dapat menulis target, tetapi kontrak dual-write harus menyebut source of truth, urutan penulisan, dan apa yang dilakukan jika dua nilai berbeda. Menambah kolom bukan berarti data target sudah benar dan bukan berarti writer lama tiba-tiba mengisinya.",
+          "PostgreSQL 17 membedakan dampak DDL. ADD COLUMN dengan default non-volatile dapat menyimpan hasil default di metadata tanpa rewrite penuh pada saat statement, sedangkan default volatile atau perubahan tipe tertentu dapat memerlukan rewrite table dan index. ALTER TABLE juga memiliki lock level yang bergantung pada subform. Karena itu migration plan harus memeriksa versi PostgreSQL, ukuran table, dependensi, lock budget, dan perilaku default; jangan menilai safety dari fixture kecil saja. ADD COLUMN dan ADD CHECK pada contoh ini membutuhkan ACCESS EXCLUSIVE meskipun scan historis ditunda; VALIDATE CHECK memakai SHARE UPDATE EXCLUSIVE. Tidak ada rewrite bukan berarti tidak ada lock."
+        ]
+      },
+      {
+        "title": "Migrate mengisi dan memvalidasi target",
+        "paragraphs": [
+          "Migrate mengisi kolom baru dari sumber yang disepakati, lalu mengukur sisa NULL, nilai kosong, konflik, dan row yang belum diproses. Backfill dapat dibatasi dalam chunk dan dijalankan bersama dual-write agar row baru tidak segera tertinggal. Untuk aturan CHECK, ADD CONSTRAINT ... NOT VALID dapat memasang enforcement untuk INSERT atau UPDATE baru tanpa langsung memindai semua row lama. VALIDATE CONSTRAINT kemudian memindai data historis dan dapat gagal; NOT VALID bukan label bahwa data sudah bersih.",
+          "Reader baru harus menerima bentuk transisi sampai bukti cutover terkumpul. Writer baru perlu kontrak idempotent atau source-of-truth yang jelas, sedangkan writer lama harus tetap valid selama expand dan migrate. Jika nilai legacy dan target tidak sama, jangan memilih pemenang berdasarkan urutan request secara diam-diam. Simpan konflik untuk rekonsiliasi, dan bedakan nilai yang sengaja dinormalisasi dari nilai yang hilang."
+        ]
+      },
+      {
+        "title": "Contract mematangkan perubahan tanpa janji rollback data",
+        "paragraphs": [
+          "Contract baru boleh menghapus fallback setelah seluruh reader dan writer yang relevan benar-benar berpindah, metrik legacy sudah turun sesuai kriteria, dan data target tervalidasi. SET NOT NULL atau penghapusan kolom dapat meminta lock, memerlukan seluruh row memenuhi aturan, atau menghilangkan data lama secara permanen. DROP COLUMN bukan rollback; ia adalah perubahan destruktif yang memerlukan backup, restore contract, dan persetujuan yang berbeda.",
+          "Jika deployment aplikasi gagal setelah backfill, rollback binary ke versi lama hanya aman bila versi lama masih kompatibel dengan schema dan nilai target. Jangan menjanjikan bahwa rollback akan mengembalikan data yang sudah dinormalisasi. Sering kali forward fix lebih jujur: perbaiki writer, rekonsiliasi konflik, lanjutkan backfill, atau tinggalkan kolom tambahan sampai migrasi berikutnya. Trace worked hanya menunjukkan fixture siap; production cutover tetap membutuhkan observability dan change control."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset Expand–Migrate–Contract: tiga order TEMP dengan legacy_label lengkap. Fixture menambah normalized_label, mengisi nilai, memasang CHECK NOT VALID, memvalidasi, lalu SET NOT NULL; table permanen dan writer production tidak disentuh.",
+      "setupSql": "CREATE TEMP TABLE lesson_release_orders (\n  order_id BIGINT PRIMARY KEY,\n  legacy_label TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_release_orders VALUES\n  (3001, '  Gold  '),\n  (3002, 'Silver'),\n  (3003, 'Bronze');",
+      "sql": "ALTER TABLE pg_temp.lesson_release_orders ADD COLUMN normalized_label TEXT;\nUPDATE pg_temp.lesson_release_orders\nSET normalized_label = upper(btrim(legacy_label));\nALTER TABLE pg_temp.lesson_release_orders\n  ADD CONSTRAINT lesson_release_label_nonempty\n  CHECK (normalized_label IS NOT NULL AND length(normalized_label) > 0) NOT VALID;\nALTER TABLE pg_temp.lesson_release_orders\n  VALIDATE CONSTRAINT lesson_release_label_nonempty;\nALTER TABLE pg_temp.lesson_release_orders\n  ALTER COLUMN normalized_label SET NOT NULL;\nSELECT order_id, legacy_label, normalized_label,\n       CASE WHEN normalized_label IS NOT NULL THEN 'ready' ELSE 'review' END AS migration_state\nFROM pg_temp.lesson_release_orders\nORDER BY order_id;",
+      "columns": [
+        "order_id",
+        "legacy_label",
+        "normalized_label",
+        "migration_state"
+      ],
+      "rows": [
+        [
+          "3001",
+          "  Gold  ",
+          "GOLD",
+          "ready"
+        ],
+        [
+          "3002",
+          "Silver",
+          "SILVER",
+          "ready"
+        ],
+        [
+          "3003",
+          "Bronze",
+          "BRONZE",
+          "ready"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Fixture menunjukkan urutan target: tambah kolom nullable, backfill normalisasi, pasang CHECK NOT VALID, VALIDATE data lama, lalu SET NOT NULL. Tiga row menjadi ready, tetapi hasil ini tidak membuktikan lock duration, zero downtime, dual-write race safety, atau keberhasilan migrasi pada table production besar."
+    },
+    "checks": [
+      {
+        "id": "l7m01l01-check-1",
+        "question": "Urutan expand–migrate–contract mana yang menjaga reader dan writer lama selama transisi?",
+        "options": [
+          "Hapus legacy_label, paksa semua instance lama memakai normalized_label, lalu backfill jika masih ada NULL.",
+          "Tambah target nullable dan fallback reader, backfill serta validasi, pindahkan writer/reader, lalu contract setelah bukti cutover.",
+          "Jalankan DROP dan ADD dalam satu deploy agar schema hanya memiliki bentuk final."
+        ],
+        "answer": 1,
+        "explanation": "Expand memberi compatibility surface, migrate mengisi serta memvalidasi target, dan contract dilakukan setelah semua consumer siap.",
+        "feedback": [
+          "Belum tepat. Menghapus kolom lama lebih awal memutus reader atau writer yang belum pindah.",
+          "Benar. Urutan tersebut menjaga bentuk lama dan baru sampai cutover memiliki evidence.",
+          "Belum tepat. Satu deploy tidak menghilangkan rolling-version atau data-read compatibility problem."
+        ]
+      },
+      {
+        "id": "l7m01l01-check-2",
+        "question": "Apa arti ADD CONSTRAINT ... NOT VALID untuk CHECK pada table berisi data?",
+        "options": [
+          "Constraint tidak berlaku untuk INSERT atau UPDATE baru sampai VALIDATE dijalankan.",
+          "PostgreSQL otomatis memperbaiki row historis yang melanggar constraint.",
+          "Scan historis ditunda, tetapi perubahan baru harus mematuhi constraint dan row lama harus divalidasi kemudian."
+        ],
+        "answer": 2,
+        "explanation": "NOT VALID memisahkan pemasangan enforcement baru dari scan data historis; VALIDATE tetap menjadi gate untuk row lama.",
+        "feedback": [
+          "Belum tepat. NOT VALID tetap menegakkan constraint pada row baru atau row yang diubah.",
+          "Belum tepat. PostgreSQL tidak mengarang atau memperbaiki nilai historis secara otomatis.",
+          "Benar. Enforcement baru aktif, sedangkan validasi historis ditunda sampai VALIDATE."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi state tiga order setelah expand–migrate–contract, lalu pilih gate yang harus dipenuhi sebelum contract.",
+      "setup": "Gunakan Dataset Expand–Migrate–Contract. SQL referensi adalah contoh terisolasi; player tidak menjalankan DDL dan tidak mengubah table production.",
+      "starterSql": "SELECT order_id, legacy_label, upper(btrim(legacy_label)) AS candidate_normalized_label\nFROM pg_temp.lesson_release_orders\nORDER BY order_id;",
+      "variants": [
+        {
+          "id": "l7m01l01-variant-1",
+          "question": "ADD COLUMN target TEXT DEFAULT 'unknown' memakai default non-volatile pada table besar. Kesimpulan yang paling tepat?",
+          "options": [
+            "PostgreSQL dapat menyimpan hasil default di metadata tanpa rewrite penuh saat ADD, tetapi lock, versi, dan workload tetap harus ditinjau.",
+            "Semua row pasti ditulis ulang dan tidak ada pengecualian.",
+            "Default membuat target pasti berasal dari legacy value setiap row."
+          ],
+          "answer": 0,
+          "explanation": "PostgreSQL 17 dapat menghindari rewrite penuh untuk default non-volatile tertentu, namun itu tidak menghapus seluruh lock atau risiko rollout.",
+          "feedback": [
+            "Benar. Optimasi metadata bukan janji zero lock, dan default konstan bukan backfill dari kolom lama.",
+            "Belum tepat. Default non-volatile memiliki jalur metadata yang berbeda dari default volatile.",
+            "Belum tepat. Default 'unknown' tidak membaca legacy value."
+          ]
+        },
+        {
+          "id": "l7m01l01-variant-2",
+          "question": "Backfill sudah selesai, tetapi satu writer lama masih hanya mengisi legacy_label. Apa keputusan contract yang aman?",
+          "options": [
+            "DROP legacy_label sekarang karena backfill sudah melihat semua row.",
+            "SET NOT NULL lalu menganggap writer lama akan mengikuti schema sendiri.",
+            "Tahan contract, perbaiki atau bungkus writer lama dengan compatibility path, dan pantau konflik sampai semua writer pindah."
+          ],
+          "answer": 2,
+          "explanation": "Backfill snapshot tidak menjamin writer berikutnya mengisi target; contract harus menunggu seluruh write path kompatibel.",
+          "feedback": [
+            "Belum tepat. DROP dapat memutus writer lama dan tidak menyediakan rollback data.",
+            "Belum tepat. Constraint tidak membuat writer lama mengisi kolom target otomatis.",
+            "Benar. Writer compatibility dan bukti konflik harus selesai sebelum kolom lama dipensiunkan."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l7m01l01-edge-1",
+          "question": "Deploy aplikasi baru gagal setelah sebagian normalized_label terisi. Apa makna rollback binary?",
+          "options": [
+            "Rollback binary otomatis mengembalikan normalized_label dan menghapus semua data backfill.",
+            "Rollback binary hanya aman bila versi lama masih kompatibel; data backfill perlu forward fix atau restore contract terpisah.",
+            "DROP kolom target selalu menjadi langkah pertama agar schema kembali bersih."
+          ],
+          "answer": 1,
+          "explanation": "Schema/data migration dan binary deployment memiliki lifecycle berbeda; rollback aplikasi bukan undo data otomatis.",
+          "feedback": [
+            "Belum tepat. Rollback aplikasi tidak membalik data yang sudah commit.",
+            "Benar. Periksa compatibility, lalu pilih forward fix atau restore yang disetujui.",
+            "Belum tepat. DROP destruktif dan dapat menghilangkan data target tanpa backup/restore plan."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l7m01l01-edge-2",
+          "question": "VALIDATE CONSTRAINT menemukan satu normalized_label kosong. Apa langkah yang sesuai?",
+          "options": [
+            "Lanjut SET NOT NULL karena NOT VALID sudah mengaktifkan enforcement baru.",
+            "Hapus row yang gagal agar VALIDATE cepat berhasil.",
+            "Hentikan gate, diagnosis sumber dan writer, remediasi dengan keputusan domain, lalu ulangi VALIDATE dengan evidence."
+          ],
+          "answer": 2,
+          "explanation": "VALIDATE adalah gate historis; kegagalan tidak boleh ditutup dengan penghapusan data tanpa keputusan domain.",
+          "feedback": [
+            "Belum tepat. SET NOT NULL tidak boleh dipaksakan ketika nilai lama masih NULL.",
+            "Belum tepat. Menghapus row untuk meloloskan migration dapat menghancurkan data.",
+            "Benar. Perlakukan failure sebagai sinyal remediasi dan ulangi validasi secara terukur."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Tulis timeline versi lama dan baru: reader, writer, target column, lalu contract.",
+        "Bedakan metadata-only default non-volatile dari volatile default, rewrite, dan lock yang masih mungkin.",
+        "NOT VALID memasang enforcement baru; VALIDATE adalah gate data lama, bukan auto-repair."
+      ],
+      "solutionSql": "ALTER TABLE pg_temp.lesson_release_orders ADD COLUMN normalized_label TEXT;\nUPDATE pg_temp.lesson_release_orders\nSET normalized_label = upper(btrim(legacy_label));\nALTER TABLE pg_temp.lesson_release_orders\n  ADD CONSTRAINT lesson_release_label_nonempty\n  CHECK (normalized_label IS NOT NULL AND length(normalized_label) > 0) NOT VALID;\nALTER TABLE pg_temp.lesson_release_orders\n  VALIDATE CONSTRAINT lesson_release_label_nonempty;\nALTER TABLE pg_temp.lesson_release_orders\n  ALTER COLUMN normalized_label SET NOT NULL;\nSELECT order_id, legacy_label, normalized_label,\n       CASE WHEN normalized_label IS NOT NULL THEN 'ready' ELSE 'review' END AS migration_state\nFROM pg_temp.lesson_release_orders\nORDER BY order_id;",
+      "solutionExplanation": "Reference mengulang fase expand, migrate, dan constraint validation pada fixture baru. Tiga row menjadi ready, tetapi solution tidak menyatakan bahwa lock, writer race, rollback data, atau production cutover sudah terbukti.",
+      "critical": true
+    },
+    "reflection": "Buat timeline expand–migrate–contract untuk mengganti satu kolom legacy. Jelaskan reader/writer compatibility, perbedaan NOT VALID dan VALIDATE, risiko default volatile/rewrite, serta mengapa rollback binary tidak menjanjikan rollback data."
+  },
+  {
+    "id": "l7m01l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "schema-releases",
+      "backfill",
+      "chunking",
+      "cas-guard",
+      "resume"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/sql-update.html",
+      "https://www.postgresql.org/docs/17/queries-with.html",
+      "https://www.postgresql.org/docs/17/transaction-iso.html",
+      "https://www.postgresql.org/docs/17/explicit-locking.html"
+    ],
+    "hook": "Backfill 100 juta row tidak boleh menjadi satu transaction raksasa. Bagaimana memilih chunk berdasarkan immutable primary key, mencegah overwrite terhadap writer baru dengan CAS NULL guard, dan melanjutkan dari checkpoint setelah satu chunk gagal?",
+    "objectives": [
+      "Membuat backfill bounded berdasarkan immutable primary key dan checkpoint last_id.",
+      "Menggunakan compare-and-set NULL guard agar writer baru tidak tertimpa secara buta.",
+      "Membedakan retry satu chunk yang atomic dari asumsi bahwa race, trigger dual-write, dan production protocol sudah terselesaikan."
+    ],
+    "sections": [
+      {
+        "title": "Chunk berdasarkan key yang tidak berubah",
+        "paragraphs": [
+          "Backfill bounded memilih rentang kerja yang dapat diulang dan dipantau. Immutable primary key memberi urutan stabil: ambil row dengan id lebih besar dari last_id, urutkan ascending, batasi jumlah, lalu catat high-water mark setelah transaction berhasil. Offset tidak ideal untuk resume karena insert atau delete dapat menggeser posisi. Chunk size bukan angka sakti; pilih berdasarkan lock duration, WAL, replica lag, statement timeout, dan waktu operasi yang dapat diterima.",
+          "Setiap chunk sebaiknya satu unit transaction: kandidat dibaca, target diisi, jumlah updated dicatat, checkpoint diperbarui, lalu COMMIT. Jika statement gagal atau lock timeout, ROLLBACK seluruh chunk dan jangan memajukan checkpoint. Retry dimulai dari last_id yang sama dengan bounded attempt dan reconciliation. Checkpoint bukan bukti semua row sebelum id itu sudah benar bila query memiliki filter lain; simpan status failed dan definisikan aturan untuk hole atau row yang berubah."
+        ]
+      },
+      {
+        "title": "CAS NULL guard melindungi writer baru",
+        "paragraphs": [
+          "Backfill tanpa guard dapat menimpa nilai yang diisi writer baru. Kondisi target.normalized_code IS NULL mempertahankan target yang sudah ada. Namun NULL guard saja tidak mendeteksi legacy_code yang berubah setelah kandidat dibaca. Contoh juga membawa expected_legacy dan membandingkannya dengan target.legacy_code pada UPDATE agar kandidat sumber yang stale dilewati. Updated_count yang lebih kecil harus ditinjau sebagai skip atau conflict; jangan memaksa overwrite. Writer yang mengubah legacy setelah backfill tetap memerlukan dual-write atomik atau aturan rekonsiliasi.",
+          "CAS bukan distributed lock dan bukan jaminan seluruh dual-write aman. Ia hanya membuat keputusan overwrite bersyarat terhadap state yang terlihat oleh statement UPDATE. Trigger, writer baru, isolation level, generated value, dan unique constraint dapat mengubah race story. Lesson memakai TEMP table satu session agar hasil deterministik; production perlu membuktikan protocol writer, monitoring, dan reconciliation pada workload nyata."
+        ]
+      },
+      {
+        "title": "Resume harus dapat dijelaskan",
+        "paragraphs": [
+          "Checkpoint last_id menyatakan rentang yang commit, bukan id yang sekadar pernah dibaca. UPDATE target dan progress ditulis dalam transaksi yang sama; perubahan progress baru durable bersama target ketika COMMIT sukses. Kegagalan chunk 2 harus me-rollback keduanya sehingga resume memakai checkpoint chunk 1. Timeout COMMIT menghasilkan outcome belum diketahui: cari checkpoint durable sebelum mengulang. Production juga perlu chunk_id, rentang, updated_count, status, error, dan kepemilikan worker untuk membedakan gagal, skip, dan conflict.",
+          "Dual-write membantu row baru, tetapi tidak otomatis menyelesaikan backfill lama. Kontrak harus menyebut apakah row yang target-nya sudah diisi writer dianggap selesai, bagaimana konflik ditangani, dan kapan constraint dapat divalidasi. Tidak ada jaminan zero downtime atau exact-once dari SQL pattern ini sendiri. Ia adalah desain bounded yang perlu diadaptasi dengan lock policy, observability, permissions, dan recovery plan."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset Backfill B: empat order TEMP berurutan. Row 3003 sudah diisi writer baru dengan PRESET; worked backfill mengisi chunk kecil memakai PK immutable dan CAS target IS NULL, lalu menyimpan last_id.",
+      "setupSql": "CREATE TEMP TABLE lesson_backfill_orders (\n  order_id BIGINT PRIMARY KEY,\n  legacy_code TEXT NOT NULL,\n  normalized_code TEXT NULL\n);\nCREATE TEMP TABLE lesson_backfill_progress (\n  job_name TEXT PRIMARY KEY,\n  last_id BIGINT NOT NULL,\n  last_status TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_backfill_orders VALUES\n  (3001, ' gold ', NULL),\n  (3002, ' silver ', NULL),\n  (3003, ' bronze ', 'PRESET'),\n  (3004, ' copper ', NULL);\nINSERT INTO pg_temp.lesson_backfill_progress VALUES ('normalize-codes', 0, 'ready');",
+      "sql": "BEGIN;\nWITH chunk AS (\n  SELECT order_id, legacy_code AS expected_legacy, upper(btrim(legacy_code)) AS candidate\n  FROM pg_temp.lesson_backfill_orders\n  WHERE order_id > (SELECT last_id FROM pg_temp.lesson_backfill_progress WHERE job_name = 'normalize-codes')\n    AND normalized_code IS NULL\n  ORDER BY order_id\n  LIMIT 2\n)\nUPDATE pg_temp.lesson_backfill_orders AS target\nSET normalized_code = chunk.candidate\nFROM chunk\nWHERE target.order_id = chunk.order_id\n  AND target.normalized_code IS NULL\n  AND target.legacy_code IS NOT DISTINCT FROM chunk.expected_legacy;\nUPDATE pg_temp.lesson_backfill_progress\nSET last_id = 3002, last_status = 'committed-chunk-1'\nWHERE job_name = 'normalize-codes';\nCOMMIT;\nBEGIN;\nWITH chunk AS (\n  SELECT order_id, legacy_code AS expected_legacy, upper(btrim(legacy_code)) AS candidate\n  FROM pg_temp.lesson_backfill_orders\n  WHERE order_id > (SELECT last_id FROM pg_temp.lesson_backfill_progress WHERE job_name = 'normalize-codes')\n    AND normalized_code IS NULL\n  ORDER BY order_id\n  LIMIT 2\n)\nUPDATE pg_temp.lesson_backfill_orders AS target\nSET normalized_code = chunk.candidate\nFROM chunk\nWHERE target.order_id = chunk.order_id\n  AND target.normalized_code IS NULL\n  AND target.legacy_code IS NOT DISTINCT FROM chunk.expected_legacy;\nUPDATE pg_temp.lesson_backfill_progress\nSET last_id = 3004, last_status = 'committed-chunk-2'\nWHERE job_name = 'normalize-codes';\nCOMMIT;\nSELECT o.order_id, o.legacy_code, o.normalized_code, p.last_id, p.last_status\nFROM pg_temp.lesson_backfill_orders AS o\nCROSS JOIN pg_temp.lesson_backfill_progress AS p\nORDER BY o.order_id;",
+      "columns": [
+        "order_id",
+        "legacy_code",
+        "normalized_code",
+        "last_id",
+        "last_status"
+      ],
+      "rows": [
+        [
+          "3001",
+          " gold ",
+          "GOLD",
+          "3004",
+          "committed-chunk-2"
+        ],
+        [
+          "3002",
+          " silver ",
+          "SILVER",
+          "3004",
+          "committed-chunk-2"
+        ],
+        [
+          "3003",
+          " bronze ",
+          "PRESET",
+          "3004",
+          "committed-chunk-2"
+        ],
+        [
+          "3004",
+          " copper ",
+          "COPPER",
+          "3004",
+          "committed-chunk-2"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Chunk pertama mengisi 3001–3002. Chunk kedua melewati 3003 karena normalized_code sudah PRESET, lalu mengisi 3004. Guard memeriksa target masih NULL dan legacy_code sama dengan kandidat yang dibaca. Progress dan target berada dalam transaksi yang sama. Batas 3002/3004 ditulis eksplisit hanya untuk fixture empat row dengan satu worker; ini bukan algoritma checkpoint dinamis. Tidak ada throughput atau writer race production yang dibuktikan.",
+      "critical": true
+    },
+    "checks": [
+      {
+        "id": "l7m01l02-check-1",
+        "question": "Mengapa last_id lebih aman daripada OFFSET sebagai checkpoint backfill?",
+        "options": [
+          "Immutable primary key memberi boundary stabil yang dapat dilanjutkan, sedangkan OFFSET dapat bergeser ketika row berubah.",
+          "OFFSET selalu membaca row yang sama walau insert dan delete terjadi.",
+          "last_id otomatis mengunci seluruh table sampai backfill selesai."
+        ],
+        "answer": 0,
+        "explanation": "Keyset-style boundary berdasarkan immutable ID lebih dapat dijelaskan untuk resume daripada posisi hasil yang dapat bergeser.",
+        "feedback": [
+          "Benar. last_id menyatakan high-water mark yang dapat diaudit; ia tidak sendiri mengunci table.",
+          "Belum tepat. Insert/delete dapat mengubah posisi OFFSET.",
+          "Belum tepat. Checkpoint adalah metadata resume, bukan table-wide lock."
+        ]
+      },
+      {
+        "id": "l7m01l02-check-2",
+        "question": "Apa fungsi kondisi target.normalized_code IS NULL pada UPDATE CAS?",
+        "options": [
+          "Memaksa backfill menimpa nilai writer baru agar seluruh row seragam.",
+          "Membuat row yang sudah memiliki target selalu dianggap gagal permanen.",
+          "Mencegah overwrite buta; row yang sudah diisi writer baru dapat dilaporkan sebagai skip atau conflict."
+        ],
+        "answer": 2,
+        "explanation": "Guard membatasi write hanya ketika target masih NULL; hasil row_count perlu direkonsiliasi terhadap candidate.",
+        "feedback": [
+          "Belum tepat. Overwrite justru merusak nilai yang mungkin lebih baru.",
+          "Belum tepat. Row yang sudah terisi bisa sukses secara bisnis dan perlu diklasifikasikan.",
+          "Benar. CAS mencegah backfill menimpa target yang sudah diisi."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi row yang di-update oleh dua chunk dan state checkpoint jika satu row sudah diisi writer baru.",
+      "setup": "Gunakan Dataset Backfill B. Anggap writer baru mengisi order 3003 menjadi PRESET sebelum chunk kedua; player menalar CAS dan resume tanpa mengeksekusi UPDATE.",
+      "starterSql": "SELECT order_id, legacy_code, normalized_code\nFROM pg_temp.lesson_backfill_orders\nORDER BY order_id;",
+      "variants": [
+        {
+          "id": "l7m01l02-variant-1",
+          "question": "Chunk pertama memilih dua order NULL, tetapi writer baru mengisi order 3002 sebelum UPDATE CAS. Apa hasil yang tepat?",
+          "options": [
+            "3001 dapat diisi, 3002 tidak ditimpa; updated_count lebih kecil dari candidate count dan checkpoint perlu aturan conflict/skip.",
+            "Backfill selalu menimpa 3002 karena candidate sudah dibaca lebih dulu.",
+            "Seluruh table harus dihapus agar chunk dapat diulang."
+          ],
+          "answer": 0,
+          "explanation": "CAS condition dievaluasi pada UPDATE; perubahan writer baru membuat target 3002 tidak lagi memenuhi NULL guard.",
+          "feedback": [
+            "Benar. Row count dan conflict report memberi sinyal bahwa candidate tidak semuanya di-update.",
+            "Belum tepat. Candidate read bukan izin overwrite unconditional.",
+            "Belum tepat. Chunk atomic dapat diulang atau direkonsiliasi tanpa menghapus table."
+          ]
+        },
+        {
+          "id": "l7m01l02-variant-2",
+          "question": "Chunk 2 gagal setelah UPDATE tetapi sebelum checkpoint COMMIT. Dari mana resume yang aman?",
+          "options": [
+            "Majukan last_id ke end_id yang direncanakan agar row tidak diproses ulang.",
+            "Rollback seluruh chunk dan mulai lagi dari last_id chunk terakhir yang sudah commit.",
+            "Abaikan status transaction dan lanjutkan chunk berikutnya dengan OFFSET."
+          ],
+          "answer": 1,
+          "explanation": "Whole-transaction rollback menjaga checkpoint dan data chunk tetap konsisten; resume memakai high-water mark terakhir yang committed.",
+          "feedback": [
+            "Belum tepat. Checkpoint tidak boleh maju sebelum chunk berhasil commit.",
+            "Benar. Rollback membuang perubahan chunk gagal dan resume dari checkpoint committed.",
+            "Belum tepat. OFFSET tidak memberi boundary resume yang stabil."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l7m01l02-edge-1",
+          "question": "Apa batas yang harus disebut ketika mengklaim CAS NULL guard aman terhadap concurrent writer?",
+          "options": [
+            "CAS sendirian menjamin trigger, source of truth, isolation, dan semua dual-write race.",
+            "CAS hanya membatasi overwrite pada predicate yang terlihat; protocol writer, isolation, trigger, dan reconciliation masih harus dirancang.",
+            "CAS berarti backfill tidak memerlukan monitoring atau conflict report."
+          ],
+          "answer": 1,
+          "explanation": "Guard adalah proteksi conditional write, bukan distributed lock atau keseluruhan concurrency protocol.",
+          "feedback": [
+            "Belum tepat. CAS tidak mendefinisikan seluruh protocol lintas writer.",
+            "Benar. Sebutkan asumsi race dan siapkan monitoring serta reconciliation.",
+            "Belum tepat. Row count dan conflict monitoring tetap dibutuhkan."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l7m01l02-edge-2",
+          "question": "Mengapa checkpoint last_id tidak cukup untuk menyatakan migrasi lengkap?",
+          "options": [
+            "last_id dapat melewati hole, conflict, atau row yang tidak lagi memenuhi predicate; status dan reconciliation tetap dibutuhkan.",
+            "last_id selalu membuktikan semua row sebelumnya valid tanpa filter tambahan.",
+            "Checkpoint hanya bisa dipakai jika semua row diproses dalam satu transaction."
+          ],
+          "answer": 0,
+          "explanation": "High-water mark menjelaskan rentang yang dicoba, bukan otomatis membuktikan setiap row mencapai state target.",
+          "feedback": [
+            "Benar. Track success, skipped, failed, dan conflict agar completion dapat dibuktikan.",
+            "Belum tepat. Predicate dan race dapat membuat row belum selesai walau id lebih kecil.",
+            "Belum tepat. Checkpoint justru berguna untuk bounded multi-transaction work."
+          ]
+        }
+      ],
+      "hints": [
+        "Gunakan ORDER BY immutable primary key dan last_id, bukan OFFSET, untuk boundary resume.",
+        "Bandingkan candidate count dengan updated_count setelah CAS NULL guard.",
+        "Checkpoint hanya maju dalam transaction yang commit; failure mengembalikan data dan checkpoint chunk itu."
+      ],
+      "solutionSql": "BEGIN;\nWITH chunk AS (\n  SELECT order_id, legacy_code AS expected_legacy, upper(btrim(legacy_code)) AS candidate\n  FROM pg_temp.lesson_backfill_orders\n  WHERE order_id > (SELECT last_id FROM pg_temp.lesson_backfill_progress WHERE job_name = 'normalize-codes')\n    AND normalized_code IS NULL\n  ORDER BY order_id\n  LIMIT 2\n)\nUPDATE pg_temp.lesson_backfill_orders AS target\nSET normalized_code = chunk.candidate\nFROM chunk\nWHERE target.order_id = chunk.order_id\n  AND target.normalized_code IS NULL\n  AND target.legacy_code IS NOT DISTINCT FROM chunk.expected_legacy;\nUPDATE pg_temp.lesson_backfill_progress\nSET last_id = 3002, last_status = 'committed-chunk-1'\nWHERE job_name = 'normalize-codes';\nCOMMIT;\nBEGIN;\nWITH chunk AS (\n  SELECT order_id, legacy_code AS expected_legacy, upper(btrim(legacy_code)) AS candidate\n  FROM pg_temp.lesson_backfill_orders\n  WHERE order_id > (SELECT last_id FROM pg_temp.lesson_backfill_progress WHERE job_name = 'normalize-codes')\n    AND normalized_code IS NULL\n  ORDER BY order_id\n  LIMIT 2\n)\nUPDATE pg_temp.lesson_backfill_orders AS target\nSET normalized_code = chunk.candidate\nFROM chunk\nWHERE target.order_id = chunk.order_id\n  AND target.normalized_code IS NULL\n  AND target.legacy_code IS NOT DISTINCT FROM chunk.expected_legacy;\nUPDATE pg_temp.lesson_backfill_progress\nSET last_id = 3004, last_status = 'committed-chunk-2'\nWHERE job_name = 'normalize-codes';\nCOMMIT;\nSELECT o.order_id, o.legacy_code, o.normalized_code, p.last_id, p.last_status\nFROM pg_temp.lesson_backfill_orders AS o\nCROSS JOIN pg_temp.lesson_backfill_progress AS p\nORDER BY o.order_id;",
+      "solutionExplanation": "Reference mengulang dua chunk pada fixture baru. NULL/source guard mempertahankan PRESET dan melewati kandidat sumber yang berubah; checkpoint dan target hanya menjadi durable bersama COMMIT. Dua batas tetap 3002/3004 hanya berlaku pada fixture tertutup satu worker. Worker nyata harus menentukan rentang, memegang ownership, merekonsiliasi hole/conflict dan memverifikasi hasil commit sebelum resume. Hasil ini bukan bukti concurrency production.",
+      "critical": true
+    },
+    "reflection": "Rancang backfill berbasis immutable PK dengan chunk size, CAS guard, checkpoint last_id, status failed, dan retry policy. Jelaskan asumsi dual-write serta mengapa pola ini bukan distributed lock atau bukti zero downtime."
+  },
+  {
+    "id": "l7m01l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "schema-releases",
+      "deployment-runbook",
+      "lock-timeout",
+      "backup-restore",
+      "concurrent-index"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/sql-altertable.html",
+      "https://www.postgresql.org/docs/17/sql-createindex.html",
+      "https://www.postgresql.org/docs/17/ddl-alter.html",
+      "https://www.postgresql.org/docs/17/continuous-archiving.html"
+    ],
+    "hook": "Runbook schema bukan daftar perintah DDL. Ia harus memutuskan kapan abort karena lock atau lag, bukti backup/restore, cara rollback aplikasi, dan apa yang dilakukan jika CREATE INDEX CONCURRENTLY gagal meninggalkan invalid index.",
+    "objectives": [
+      "Menyusun deployment decision table dengan lock timeout, monitor, abort condition, dan owner yang jelas.",
+      "Membedakan rollback aplikasi, forward fix, restore backup, dan perubahan data yang tidak reversible secara otomatis.",
+      "Menjelaskan bahwa CREATE INDEX CONCURRENTLY tidak dapat berada dalam transaction block dan dapat meninggalkan invalid index ketika gagal."
+    ],
+    "sections": [
+      {
+        "title": "Runbook dimulai dari keputusan abort",
+        "paragraphs": [
+          "Runbook release yang berguna menyatakan precondition, command boundary, monitor, abort threshold, dan evidence yang harus disimpan. lock_timeout membatasi berapa lama satu DDL menunggu lock, tetapi timeout bukan solusi untuk konflik; operator harus melihat blocker, retry policy, dan apakah statement sudah sempat mengubah metadata. statement_timeout, replication lag, error rate, connection pool, dan disk capacity juga dapat menjadi abort signal sesuai perubahan. Jangan mencantumkan angka tanpa owner dan cara membacanya.",
+          "Migration plan sebaiknya dipisah menjadi langkah yang dapat diamati: preflight backup/restore evidence, expand metadata, bounded backfill, constraint validation, index build, app cutover, lalu contract. Setiap langkah memiliki checkpoint dan keputusan lanjut/abort. SQL fixture di lesson hanya mengajarkan bentuk decision table; ia bukan runbook production dan tidak memberi otorisasi menjalankan DDL pada schema nyata."
+        ]
+      },
+      {
+        "title": "Rollback aplikasi bukan rollback data",
+        "paragraphs": [
+          "Rollback aplikasi berarti mengembalikan binary atau feature flag ke versi yang masih kompatibel dengan schema saat ini. Ia tidak otomatis menghapus kolom baru, membalik normalisasi, atau mengembalikan row yang sudah diubah. Untuk perubahan reversible, forward fix sering lebih aman: perbaiki writer, lanjutkan backfill, atau gunakan compatibility view. Untuk data destructive, backup dan restore contract harus menjelaskan recovery point, downtime, owner, dan validasi hasil; jangan menyebut restore sebagai tombol undo tanpa bukti.",
+          "Jika deploy berhenti setelah sebagian fase, runbook harus mengenali state aktual, bukan memulai dari asumsi baseline. Constraint mungkin sudah terpasang, index mungkin masih membangun, dan writer baru mungkin sudah mengirim nilai target. Simpan migration version, status per langkah, log error, dan row/conflict counts. Abort harus meninggalkan sistem pada state yang dipahami, lalu keputusan forward fix, pause, atau restore dibuat oleh owner dengan evidence."
+        ]
+      },
+      {
+        "title": "CREATE INDEX CONCURRENTLY memiliki lifecycle khusus",
+        "paragraphs": [
+          "CREATE INDEX CONCURRENTLY mengurangi pemblokiran write dibanding build index biasa, tetapi membutuhkan beberapa scan dan menunggu transaction tertentu selesai. Perintah ini tidak dapat dijalankan di dalam transaction block. Runbook tidak boleh membungkusnya bersama ALTER atau backfill dalam BEGIN–COMMIT. Monitor progress dan blocker sesuai versi serta privilege yang tersedia, lalu siapkan keputusan ketika build lambat atau gagal.",
+          "Jika concurrent build gagal, PostgreSQL dapat meninggalkan index berstatus INVALID. Index invalid diabaikan untuk query tetapi tetap dapat menambah overhead update; operator harus menginspeksi status sebelum memilih DROP INDEX atau REINDEX INDEX CONCURRENTLY. Jangan mengklaim bahwa cancel selalu membersihkan object atau bahwa CREATE INDEX CONCURRENTLY membuat constraint otomatis. Fixture lesson hanya menyajikan decision metadata, bukan eksekusi index build."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset Runbook R: tiga langkah deployment authored untuk perubahan schema Commerce. Baris berisi keputusan lock timeout, monitor, abort, backup/restore, dan rollback mode; bukan hasil deployment atau pengukuran runtime.",
+      "setupSql": "CREATE TEMP TABLE lesson_release_runbook (\n  step_no INTEGER PRIMARY KEY,\n  change_name TEXT NOT NULL,\n  transaction_boundary TEXT NOT NULL,\n  lock_timeout TEXT NOT NULL,\n  monitor TEXT NOT NULL,\n  abort_if TEXT NOT NULL,\n  recovery_mode TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_release_runbook VALUES\n  (1, 'expand nullable column', 'one DDL statement', '2s', 'pg_locks, error log, app error rate', 'lock timeout or incompatible reader', 'forward-fix or pause; no data rollback promise'),\n  (2, 'bounded backfill', 'one chunk per transaction', '2s', 'updated_count, lag, conflicts, WAL', 'repeated timeout, lag threshold, conflict spike', 'resume last committed checkpoint or restore contract'),\n  (3, 'create index concurrently', 'outside transaction block', '2s', 'progress view, blockers, invalid flag', 'failure, invalid index, unsafe lag', 'inspect invalid object; drop/rebuild only with approval');",
+      "sql": "SELECT step_no, change_name, transaction_boundary, lock_timeout, monitor, abort_if, recovery_mode\nFROM pg_temp.lesson_release_runbook\nORDER BY step_no;",
+      "columns": [
+        "step_no",
+        "change_name",
+        "transaction_boundary",
+        "lock_timeout",
+        "monitor",
+        "abort_if",
+        "recovery_mode"
+      ],
+      "rows": [
+        [
+          "1",
+          "expand nullable column",
+          "one DDL statement",
+          "2s",
+          "pg_locks, error log, app error rate",
+          "lock timeout or incompatible reader",
+          "forward-fix or pause; no data rollback promise"
+        ],
+        [
+          "2",
+          "bounded backfill",
+          "one chunk per transaction",
+          "2s",
+          "updated_count, lag, conflicts, WAL",
+          "repeated timeout, lag threshold, conflict spike",
+          "resume last committed checkpoint or restore contract"
+        ],
+        [
+          "3",
+          "create index concurrently",
+          "outside transaction block",
+          "2s",
+          "progress view, blockers, invalid flag",
+          "failure, invalid index, unsafe lag",
+          "inspect invalid object; drop/rebuild only with approval"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Decision table menyatakan boundary, monitor, dan abort per langkah. CREATE INDEX CONCURRENTLY berdiri di luar transaction block; kegagalan memerlukan inspeksi invalid index. Semua threshold dan recovery mode adalah authored policy, bukan measured deployment evidence."
+    },
+    "checks": [
+      {
+        "id": "l7m01l03-check-1",
+        "question": "Apa yang harus ada di setiap langkah deployment runbook selain command DDL?",
+        "options": [
+          "Lock/lag monitor, abort condition, owner, evidence, dan recovery decision yang dapat dibaca.",
+          "Janji bahwa operator tidak perlu backup karena migration selalu transaksional.",
+          "Satu nilai timeout tanpa cara memeriksa blocker atau dampak aplikasi."
+        ],
+        "answer": 0,
+        "explanation": "Runbook adalah decision aid dengan precondition, observability, abort, dan recovery, bukan daftar command tanpa konteks.",
+        "feedback": [
+          "Benar. Operator perlu tahu kapan lanjut, kapan abort, dan bagaimana membuktikan state.",
+          "Belum tepat. Tidak semua DDL/data change dapat di-rollback sebagai satu transaction atau menghapus dampak eksternal.",
+          "Belum tepat. Timeout tanpa blocker dan impact tidak cukup untuk keputusan aman."
+        ]
+      },
+      {
+        "id": "l7m01l03-check-2",
+        "question": "Apa batas penting CREATE INDEX CONCURRENTLY?",
+        "options": [
+          "Ia harus berada di dalam BEGIN–COMMIT bersama migration lain agar atomic.",
+          "Ia selalu selesai tanpa scan tambahan dan tidak mungkin meninggalkan object invalid.",
+          "Ia tidak dapat dijalankan di dalam transaction block dan kegagalan dapat meninggalkan invalid index yang harus diinspeksi."
+        ],
+        "answer": 2,
+        "explanation": "Concurrent index build memiliki lifecycle multi-scan dan failure state khusus; runbook harus memisahkan boundary serta cleanup decision.",
+        "feedback": [
+          "Belum tepat. CREATE INDEX CONCURRENTLY justru tidak boleh berada dalam transaction block.",
+          "Belum tepat. Build melakukan beberapa scan dan dapat meninggalkan invalid index.",
+          "Benar. Pisahkan command dan inspeksi invalid object sebelum drop/rebuild."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Baca Dataset Runbook R dan pilih keputusan abort/recovery untuk setiap langkah schema release.",
+      "setup": "Gunakan Dataset Runbook R. Decision table adalah authored design input; player tidak menjalankan DDL, CREATE INDEX CONCURRENTLY, backup, restore, atau live monitor.",
+      "starterSql": "SELECT step_no, change_name, transaction_boundary, lock_timeout, monitor, abort_if, recovery_mode\nFROM pg_temp.lesson_release_runbook\nORDER BY step_no;",
+      "variants": [
+        {
+          "id": "l7m01l03-variant-1",
+          "question": "Backfill menunjukkan replication lag melewati threshold dan conflict spike. Apa keputusan runbook yang paling aman?",
+          "options": [
+            "Tambah chunk size agar migration selesai lebih cepat tanpa mengubah observability.",
+            "Abort/pause sesuai policy, pertahankan last committed checkpoint, diagnosis lag/conflict, lalu resume atau forward-fix dengan owner.",
+            "Hapus checkpoint agar semua row diproses ulang dari awal tanpa laporan."
+          ],
+          "answer": 1,
+          "explanation": "Abort condition mencegah resource pressure berubah menjadi insiden; checkpoint committed membuat resume dapat dijelaskan.",
+          "feedback": [
+            "Belum tepat. Chunk lebih besar dapat memperburuk lag dan rollback scope.",
+            "Benar. Pause, simpan evidence, dan gunakan checkpoint/recovery decision yang disetujui.",
+            "Belum tepat. Menghapus checkpoint merusak auditability dan tidak menyelesaikan conflict."
+          ]
+        },
+        {
+          "id": "l7m01l03-variant-2",
+          "question": "CREATE INDEX CONCURRENTLY gagal dan object invalid terlihat. Apa langkah berikutnya?",
+          "options": [
+            "Anggap index siap dipakai karena namanya sudah ada.",
+            "Bungkus DROP dan CREATE INDEX CONCURRENTLY berikutnya dalam satu transaction supaya atomic.",
+            "Inspeksi status serta dampak update, lalu pilih DROP/rebuild atau REINDEX CONCURRENTLY dengan approval dan monitor."
+          ],
+          "answer": 2,
+          "explanation": "Index invalid dapat diabaikan planner tetapi tetap memiliki overhead; cleanup/rebuild harus mengikuti state dan policy.",
+          "feedback": [
+            "Belum tepat. Invalid index tidak boleh diperlakukan sebagai ready untuk query.",
+            "Belum tepat. CREATE INDEX CONCURRENTLY tidak boleh dijalankan dalam transaction block.",
+            "Benar. Inspeksi dulu, lalu lakukan recovery object secara terkontrol dan terpisah."
+          ],
+          "critical": true
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l7m01l03-edge-1",
+          "question": "Mengapa backup/restore contract harus disebut sebelum migration yang menghapus atau menulis ulang data?",
+          "options": [
+            "Karena DROP dan transformasi data tidak menjanjikan undo otomatis; restore perlu recovery point, owner, dan validation plan.",
+            "Karena backup membuat semua DDL bebas lock dan bebas downtime.",
+            "Karena restore selalu lebih cepat daripada forward fix tanpa perlu diuji."
+          ],
+          "answer": 0,
+          "explanation": "Perubahan destruktif membutuhkan jalur pemulihan yang disepakati, bukan asumsi rollback transaction atau binary.",
+          "feedback": [
+            "Benar. Backup saja tidak cukup tanpa bukti restore dan pemeriksaan hasil.",
+            "Belum tepat. Backup tidak mengubah lock behavior atau execution time.",
+            "Belum tepat. Restore cost dan suitability harus dibuktikan, bukan diasumsikan."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l7m01l03-edge-2",
+          "question": "Apa yang harus dicatat jika operator membatalkan langkah setelah sebagian perubahan metadata terjadi?",
+          "options": [
+            "Hanya tulis bahwa rollback sukses karena proses dihentikan.",
+            "State aktual, migration version, command outcome, blockers/log, row counts, dan keputusan pause/forward-fix/restore.",
+            "Hapus log agar deployment berikutnya terlihat seperti mulai dari baseline."
+          ],
+          "answer": 1,
+          "explanation": "Abort tidak otomatis mengembalikan state; evidence aktual menentukan recovery path dan mencegah asumsi baseline palsu.",
+          "feedback": [
+            "Belum tepat. Henti proses tidak sama dengan rollback semua perubahan.",
+            "Benar. Catatan state dan evidence menjadi dasar keputusan berikutnya.",
+            "Belum tepat. Menghapus log menghilangkan bukti yang diperlukan untuk recovery."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Cari empat kolom keputusan: boundary, monitor, abort_if, dan recovery_mode.",
+        "Rollback binary tidak sama dengan undo data; untuk destructive change lihat restore contract atau forward fix.",
+        "CREATE INDEX CONCURRENTLY adalah command di luar transaction block dan failure dapat meninggalkan INVALID object."
+      ],
+      "solutionSql": "SELECT step_no, change_name, transaction_boundary, lock_timeout, monitor, abort_if, recovery_mode\nFROM pg_temp.lesson_release_runbook\nORDER BY step_no;",
+      "solutionExplanation": "Reference mempertahankan tiga policy row: expand dapat pause/forward-fix, backfill dapat resume dari checkpoint atau memakai restore contract, dan concurrent index harus diinspeksi di luar transaction block bila invalid. Tidak ada DDL, backup, restore, atau index build yang dijalankan.",
+      "critical": true
+    },
+    "reflection": "Tulis runbook bounded untuk satu schema release: preflight backup/restore, expand, backfill, validation, index, cutover, abort, dan recovery. Jelaskan lock timeout, monitoring, rollback aplikasi versus data restore, serta lifecycle invalid index."
+  }
+]

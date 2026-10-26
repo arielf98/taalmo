@@ -13,13 +13,13 @@
 
 ## Database Engineering — database curriculum
 
-The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L6 provide 87 published bilingual lessons; 33 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
+The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L6 and L7M01 provide 90 published bilingual lessons; 30 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
 
-## Recommended next milestone: L7M01 authoring
+## Recommended next milestone: L7M02 authoring
 
-L6M04 completes publication of L6. Its level assessment follows the existing publication and learner-mastery gates. Reading authored monitoring inputs does not establish live diagnosis, operational access or production incident resolution.
+L7M01 follows the completed L6 curriculum. L7 remains incomplete and its level assessment stays unavailable. Authored migration outcomes and runbook policies do not establish zero downtime, production writer compatibility or a verified restore.
 
-Continue with L7M01 — Schema Releases & Online Changes: compatible expand/contract ordering, resumable guarded backfills and a bounded deployment runbook. Distinguish reversible application rollout from data loss, forward repair and an actually verified restore. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
+Continue with L7M02 — Backup, Restore, dan PITR: RPO/RTO and backup strategy, evidence from restoration, and point-in-time recovery. Distinguish a backup artifact from a usable recovery chain and a planned target from actual restore evidence; no live backup, restore or cluster mutation is authorized. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Use UML/ERD for structure, ordinary tables for data and React Flow for actual processes. Follow AGENTS.md: no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build without explicit user authorization; review source/diff, commit, push and continue.
 
 ## Later learning improvements
 

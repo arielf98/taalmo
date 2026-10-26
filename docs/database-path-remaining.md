@@ -1,16 +1,8 @@
 # Remaining curriculum authoring
 
-The following 33 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
+The following 30 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L7 — Production & Reliability
-
-### L7M01 — Schema Releases & Online Changes
-
-Prerequisite: l6m04. Scenario: Production Simulator.
-
-- [ ] `l7m01l01` — Migration ordering dan rollback
-- [ ] `l7m01l02` — Backfill terkontrol
-- [ ] `l7m01l03` — Deployment runbook
 
 ### L7M02 — Backup, Restore, dan PITR
 

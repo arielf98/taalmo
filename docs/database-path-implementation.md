@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L6: 87 published / 33 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L6 and L7M01: 90 published / 30 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -282,3 +282,11 @@ Added three bilingual observability lessons. Activity snapshots compute query/tr
 Totals: 29 authored modules, 87 published / 33 draft lessons; 90 combined lessons plus three labs (93 activity milestones). Existing E2E expectations only change the count and next draft route to l7m01l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
 
 Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L7M01**.
+
+## L7M01 continuation — 26 October 2026
+
+Added three bilingual schema-release lessons. Expand/backfill/CHECK NOT VALID/VALIDATE/NOT NULL produces GOLD/SILVER/BRONZE in an isolated fixture. The two-chunk example preserves PRESET, checks that the legacy source remains unchanged and commits progress with its target writes. Checkpoints 3002/3004 are explicit bounds for four rows under one worker; reconciliation, ownership and live dual-write correctness are still outside its proof. Runbook rows describe boundaries, monitoring, abort and recovery decisions, including concurrent-index restrictions. Completed the previously interrupted English dictionary. No production migration, deployment, index build, backup or restore was performed.
+
+Totals: 30 authored modules, 90 published / 30 draft lessons; 93 combined lessons plus three labs (96 activity milestones). Existing E2E expectations only change the count and next draft route to l7m02l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
+
+Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L7M02**.

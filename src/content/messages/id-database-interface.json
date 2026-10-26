@@ -282,5 +282,16 @@
   "incident-diagnosis": "diagnosis insiden",
   "hypothesis-testing": "pengujian hipotesis",
   "lock-contention": "kontensi lock",
-  "observability": "observability"
+  "observability": "observability",
+  "schema-releases": "rilis schema",
+  "expand-contract": "expand-contract",
+  "compatibility": "kompatibilitas",
+  "not-valid": "NOT VALID",
+  "forward-fix": "perbaikan maju",
+  "chunking": "pemrosesan chunk",
+  "cas-guard": "guard CAS",
+  "resume": "lanjutkan",
+  "deployment-runbook": "runbook deployment",
+  "backup-restore": "backup dan restore",
+  "concurrent-index": "indeks concurrent"
 }
