@@ -26,7 +26,7 @@ def transaction(query):
     return query if re.search(r'\b(?:BEGIN|COMMIT|ROLLBACK)\s*;', query, re.I) else 'BEGIN;\n' + query + '\nROLLBACK;'
 
 seed = (root/'curriculum/taalmo-database-zero-to-master/school_finance_seed.sql').read_text()
-lessons = sum([json.loads((root/f'src/content/database/{file}.json').read_text()) for file in ['l0','l1-query','l1-mutation','l2-subqueries','l2-windows','l2-time-reports','l2-correctness','l3-modeling','l3-normalization','l3-types-constraints','l3-evolution','l4-acid','l4-isolation','l4-concurrency','l4-payments','l4-side-effects','l5-planner','l5-indexes','l5-joins-rewrite','l5-large-data','l5-tuning','l6-storage','l6-wal','l6-vacuum','l6-observability','l7-releases']], [])
+lessons = sum([json.loads((root/f'src/content/database/{file}.json').read_text()) for file in ['l0','l1-query','l1-mutation','l2-subqueries','l2-windows','l2-time-reports','l2-correctness','l3-modeling','l3-normalization','l3-types-constraints','l3-evolution','l4-acid','l4-isolation','l4-concurrency','l4-payments','l4-side-effects','l5-planner','l5-indexes','l5-joins-rewrite','l5-large-data','l5-tuning','l6-storage','l6-wal','l6-vacuum','l6-observability','l7-releases','l7-backup-recovery']], [])
 try:
     run(docker + ['run', '--pull=never', '-d', '--name', name, '--label', 'taalmo.curriculum-check=true', '--network', 'none', '--memory', '512m', '--cpus', '1', '-e', 'POSTGRES_HOST_AUTH_METHOD=trust', '-e', 'POSTGRES_DB=taalmo_curriculum_check', 'postgres:17-alpine', 'postgres', '-c', 'shared_buffers=32MB', '-c', 'max_connections=10'])
     for _ in range(100):

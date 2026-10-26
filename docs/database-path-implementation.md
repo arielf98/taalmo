@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L6 and L7M01: 90 published / 30 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L6 and L7M01–L7M02: 93 published / 27 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -290,3 +290,11 @@ Added three bilingual schema-release lessons. Expand/backfill/CHECK NOT VALID/VA
 Totals: 30 authored modules, 90 published / 30 draft lessons; 93 combined lessons plus three labs (96 activity milestones). Existing E2E expectations only change the count and next draft route to l7m02l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
 
 Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L7M02**.
+
+## L7M02 continuation — 26 October 2026
+
+Added three bilingual backup/recovery lessons using fixed authored recovery metadata. The module distinguishes recovery requirements from planned windows, logical dumps from physical backup/WAL chains, and backup artifacts from isolated restoration plus business/integrity acceptance evidence. The PITR exercise reasons about backup eligibility, WAL continuity, timeline and target boundaries without replaying WAL or modifying any cluster. No backup, restore, deletion, archive operation or production recovery command was executed; all results remain authored expectations under source/diff review.
+
+Totals: 31 authored modules, 93 published / 27 draft lessons; 96 combined lessons plus three labs (99 activity milestones). Existing E2E expectations only change the count and next draft route to l7m03l01; no test cases or browser lesson coverage were added. Content/SQL file registries include the JSON for a future authorized run.
+
+Reviewed source and diff only. No tests, audits, SQL, lint, typecheck, build, manual or browser checks were run. Results are authored expectations rather than executed evidence. Per the updated AGENTS.md, commit and push this work before continuing **L7M03**.

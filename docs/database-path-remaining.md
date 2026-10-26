@@ -1,16 +1,8 @@
 # Remaining curriculum authoring
 
-The following 30 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
+The following 27 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L7 — Production & Reliability
-
-### L7M02 — Backup, Restore, dan PITR
-
-Prerequisite: l7m01. Scenario: Production Simulator.
-
-- [ ] `l7m02l01` — Backup strategy dan RPO/RTO
-- [ ] `l7m02l02` — Restore dan verification
-- [ ] `l7m02l03` — Point-in-Time Recovery
 
 ### L7M03 — Replication dan Failover
 

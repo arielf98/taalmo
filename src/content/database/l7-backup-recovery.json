@@ -1,0 +1,696 @@
+[
+  {
+    "id": "l7m02l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "backup",
+      "rpo",
+      "rto",
+      "pg-dump",
+      "base-backup",
+      "wal-archive",
+      "snapshots",
+      "postgresql-lab"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/backup.html",
+      "https://www.postgresql.org/docs/17/backup-dump.html",
+      "https://www.postgresql.org/docs/17/continuous-archiving.html",
+      "https://www.postgresql.org/docs/17/backup-file.html"
+    ],
+    "hook": "Tim meminta backup untuk dua layanan Commerce, tetapi hanya menyebut ukuran database. Bagaimana menerjemahkan kebutuhan bisnis menjadi RPO dan RTO, lalu memilih logical dump, physical base backup, WAL archiving, atau snapshot tanpa menyamakan backup yang ada dengan recovery yang terbukti?",
+    "objectives": [
+      "Membedakan RPO sebagai batas kehilangan data tolerabel dari RTO sebagai batas durasi pemulihan.",
+      "Membandingkan logical pg_dump, physical base backup plus WAL, dan filesystem snapshot berdasarkan konsistensi serta scope recovery.",
+      "Menyebutkan roles, global objects, dan konfigurasi sebagai scope yang perlu direncanakan dan diverifikasi; physical backup dapat membawa role catalog, sementara external configuration dan secrets memerlukan coverage terpisah."
+    ],
+    "sections": [
+      {
+        "title": "RPO dan RTO dimulai dari kebutuhan bisnis",
+        "paragraphs": [
+          "RPO adalah jumlah kehilangan perubahan yang masih dapat diterima ketika layanan dipulihkan. Jika target RPO tiga ratus detik, organisasi harus memiliki titik recovery yang tidak lebih tua dari batas itu untuk workload yang dimaksud; angka tersebut bukan janji bahwa setiap row terakhir selalu ada. RTO adalah durasi maksimum sampai layanan kembali pada tingkat fungsi yang disepakati, termasuk memilih artifact, menyalakan target, memeriksa hasil, mengubah koneksi, dan memberi tanda siap. RPO menjawab seberapa jauh data boleh tertinggal, sedangkan RTO menjawab seberapa lama pemulihan boleh berlangsung.",
+          "Kebutuhan itu harus dikaitkan dengan transaksi, jam kritis, dependensi, dan pemilik keputusan. Layanan pembayaran mungkin membutuhkan RPO pendek karena transaksi baru sulit direkonstruksi, sementara katalog analitik mungkin menerima RPO lebih longgar. RTO juga bukan hanya lama menyalin file: validasi, pemulihan roles, ekstensi, konfigurasi, dan smoke check ikut memakan waktu. Dataset lesson memakai interval dan durasi authored agar margin dapat dihitung; tidak ada pengukuran production atau target universal yang dapat disalin begitu saja.",
+          "Pada Dataset S, recovery_interval_seconds berarti usia modeled dari titik data konsisten terakhir yang lengkap dan sudah tersedia untuk recovery, bukan interval cron backup. Snapshot awal pg_dump, durasi pembuatan artifact, pengiriman, serta ketersediaan WAL atau archive dapat memperbesar usia efektif itu. Jadwal backup saja tidak menetapkan RPO yang tercapai. restore_duration_seconds juga memodelkan durasi sampai kriteria layanan diterima, termasuk validasi dan cutover, bukan sekadar lama menyalin atau memuat file. Nilai ini tetap asumsi authored, bukan durasi terukur."
+        ]
+      },
+      {
+        "title": "Logical dump, physical backup, WAL, dan snapshot memiliki scope berbeda",
+        "paragraphs": [
+          "Logical pg_dump membaca database melalui snapshot konsisten yang diambil saat dump dimulai, atau melalui designated synchronization snapshot bila beberapa dump dikoordinasikan; waktu selesai menentukan kapan artifact tersedia, bukan umur snapshot data yang dibaca. Ia berguna untuk selective restore, migrasi, dan pemeriksaan isi, tetapi bukan salinan seluruh cluster: roles dan global objects perlu artifact lain, dan dump database tunggal tidak mengarsipkan roles cluster. Physical base backup menyalin cluster data directory pada boundary fisik yang sesuai, tetapi baru dapat dipakai sebagai dasar konsisten setelah WAL yang dibutuhkan sampai backup selesai tersedia; WAL archive kemudian memungkinkan perubahan setelah base backup diputar sampai target. Base backup tanpa WAL yang diperlukan tidak boleh dianggap usable PITR base.",
+          "Filesystem snapshot juga bukan kata ajaib untuk konsistensi. Snapshot harus dikoordinasikan dengan database dan storage serta mencakup tablespace, WAL, dan metadata yang diperlukan agar salinan mencakup keadaan yang dapat dipulihkan; provider metadata, filesystem, dan retention tetap harus dipahami. Physical cluster snapshot dapat membawa role catalog yang berada di data directory, tetapi external configuration, secrets, tablespace di luar scope snapshot, dan global operational settings perlu coverage terpisah. Karena itu report harus menyebut consistency scope, artifact yang hilang, dan langkah restore, bukan sekadar memberi label full atau incremental."
+        ]
+      },
+      {
+        "title": "Roles dan konfigurasi ikut menentukan kemampuan recover",
+        "paragraphs": [
+          "Database yang dapat dibaca belum tentu dapat melayani aplikasi. Roles, grants, tablespace mapping, extensions, parameter konfigurasi, secret references, DNS, dan kredensial dapat berada di luar dump logical. Sebagian konfigurasi tidak boleh disimpan sebagai plaintext di backup; runbook harus merujuk owner dan secret-management contract. Artifact global dapat dipulihkan pada target yang tepat, tetapi pemulihan roles ke production tanpa review dapat memberi akses berlebih. Scope harus dinyatakan sebagai database, cluster, storage, atau lingkungan aplikasi.",
+          "Laporan authored di bawah hanya menghitung margin antara interval backup atau WAL dan target RPO, serta durasi restore dan target RTO. Status `meets` berarti angka latihan melewati gate yang ditulis, bukan bukti backup benar-benar dibuat atau direstore. Sebelum memilih, operator masih perlu memeriksa izin, kapasitas, retention, enkripsi, network, observability, dan bukti restore. Perubahan business requirement juga dapat mengubah strategi tanpa mengubah SQL report ini."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset Backup Strategy S: empat profil kebutuhan Commerce dengan interval recovery, durasi restore, scope konsistensi, dan evidence authored. Angka tidak berasal dari pg_dump, base backup, WAL archive, storage snapshot, atau stopwatch production.",
+      "setupSql": "CREATE TEMP TABLE lesson_backup_profiles (\n  profile_id TEXT PRIMARY KEY,\n  method TEXT NOT NULL,\n  target_rpo_seconds INTEGER NOT NULL,\n  recovery_interval_seconds INTEGER NOT NULL,\n  target_rto_seconds INTEGER NOT NULL,\n  restore_duration_seconds INTEGER NOT NULL,\n  consistency_scope TEXT NOT NULL,\n  roles_globals_scope TEXT NOT NULL,\n  evidence_state TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_backup_profiles VALUES\n  ('catalog_daily','logical_pg_dump',86400,86400,14400,7200,'database_snapshot','role_catalog_external_artifact','authored'),\n  ('payments_tight','physical_base_backup_wal',300,300,1800,1200,'cluster_base_plus_wal','role_catalog_in_physical_backup_external_config_separate','authored'),\n  ('reporting_snapshot','physical_filesystem_snapshot',900,3600,1800,1800,'coordinated_storage_snapshot','role_catalog_in_physical_backup_external_config_separate','authored'),\n  ('tenant_export','logical_pg_dump',600,900,1800,1200,'database_snapshot','missing_from_dump','authored');",
+      "sql": "SELECT profile_id, method, target_rpo_seconds, recovery_interval_seconds,\n       target_rto_seconds, restore_duration_seconds,\n       target_rpo_seconds - recovery_interval_seconds AS rpo_margin_seconds,\n       target_rto_seconds - restore_duration_seconds AS rto_margin_seconds,\n       roles_globals_scope,\n       CASE\n         WHEN target_rpo_seconds >= recovery_interval_seconds\n          AND target_rto_seconds >= restore_duration_seconds\n          AND roles_globals_scope <> 'missing_from_dump'\n         THEN 'meets_authored_gate'\n         ELSE 'gap_needs_review'\n       END AS decision\nFROM pg_temp.lesson_backup_profiles\nORDER BY profile_id;",
+      "columns": [
+        "profile_id",
+        "method",
+        "target_rpo_seconds",
+        "recovery_interval_seconds",
+        "target_rto_seconds",
+        "restore_duration_seconds",
+        "rpo_margin_seconds",
+        "rto_margin_seconds",
+        "roles_globals_scope",
+        "decision"
+      ],
+      "rows": [
+        [
+          "catalog_daily",
+          "logical_pg_dump",
+          "86400",
+          "86400",
+          "14400",
+          "7200",
+          "0",
+          "7200",
+          "role_catalog_external_artifact",
+          "meets_authored_gate"
+        ],
+        [
+          "payments_tight",
+          "physical_base_backup_wal",
+          "300",
+          "300",
+          "1800",
+          "1200",
+          "0",
+          "600",
+          "role_catalog_in_physical_backup_external_config_separate",
+          "meets_authored_gate"
+        ],
+        [
+          "reporting_snapshot",
+          "physical_filesystem_snapshot",
+          "900",
+          "3600",
+          "1800",
+          "1800",
+          "-2700",
+          "0",
+          "role_catalog_in_physical_backup_external_config_separate",
+          "gap_needs_review"
+        ],
+        [
+          "tenant_export",
+          "logical_pg_dump",
+          "600",
+          "900",
+          "1800",
+          "1200",
+          "-300",
+          "600",
+          "missing_from_dump",
+          "gap_needs_review"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "SQL menghitung margin authored untuk RPO dan RTO, lalu menahan profil yang gagal interval atau belum memiliki scope roles/global yang disepakati. `meets_authored_gate` hanya berarti angka dan flag pada Dataset S memenuhi gate latihan. Ia tidak membuktikan dump, WAL, snapshot, enkripsi, retention, permissions, atau restore pernah dijalankan."
+    },
+    "checks": [
+      {
+        "id": "l7m02l01-check-1",
+        "question": "Apa perbedaan paling tepat antara RPO dan RTO?",
+        "options": [
+          "RPO adalah lama layanan kembali online, sedangkan RTO adalah jumlah row yang hilang.",
+          "RPO membatasi usia titik data yang boleh hilang, sedangkan RTO membatasi durasi sampai layanan pulih sesuai kriteria.",
+          "RPO dan RTO adalah dua nama untuk interval cron backup yang sama."
+        ],
+        "answer": 1,
+        "explanation": "RPO berbicara tentang kehilangan data yang dapat diterima; RTO berbicara tentang waktu pemulihan layanan, termasuk validasi dan cutover.",
+        "feedback": [
+          "Belum tepat. Lama pemulihan adalah bagian RTO, bukan RPO.",
+          "Benar. Pisahkan batas kehilangan perubahan dari batas durasi recovery.",
+          "Belum tepat. Interval backup memengaruhi RPO, tetapi tidak sendirian menentukan RTO."
+        ]
+      },
+      {
+        "id": "l7m02l01-check-2",
+        "question": "Mengapa logical pg_dump tidak boleh diperlakukan sebagai backup seluruh cluster?",
+        "options": [
+          "Karena pg_dump tidak pernah menghasilkan snapshot konsisten untuk database.",
+          "Karena pg_dump selalu menyalin WAL dan seluruh konfigurasi server secara otomatis.",
+          "Karena dump berfokus pada satu database dan roles/global objects atau konfigurasi cluster perlu scope serta artifact terpisah."
+        ],
+        "answer": 2,
+        "explanation": "Logical dump berguna untuk isi dan definisi database, tetapi roles, global objects, konfigurasi, dan kebutuhan WAL memiliki lifecycle berbeda.",
+        "feedback": [
+          "Belum tepat. Logical dump dirancang untuk membaca database secara konsisten pada snapshotnya.",
+          "Belum tepat. WAL dan global configuration bukan otomatis tercakup sebagai satu dump database.",
+          "Benar. Scope backup harus menyebut database, cluster, roles, global objects, dan konfigurasi secara eksplisit."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Baca Dataset Backup Strategy S, hitung margin RPO/RTO, lalu pilih profile yang masih membutuhkan review sebelum dinyatakan memenuhi kebutuhan.",
+      "setup": "Dataset S adalah input authored. Player tidak menjalankan pg_dump, base backup, WAL archiving, filesystem snapshot, restore, atau pengukuran durasi.",
+      "starterSql": "SELECT profile_id, method, target_rpo_seconds, recovery_interval_seconds,\n       target_rto_seconds, restore_duration_seconds, roles_globals_scope\nFROM pg_temp.lesson_backup_profiles\nORDER BY profile_id;",
+      "variants": [
+        {
+          "id": "l7m02l01-variant-1",
+          "question": "Profile baru memiliki target RPO 300 detik, tetapi interval recovery authored 900 detik dan WAL archiving belum dinyatakan. Apa keputusan bounded?",
+          "options": [
+            "Tandai gap RPO, minta WAL/backup cadence yang memenuhi target, dan jangan menyebut profile recoverable sebelum evidence lengkap.",
+            "Anggap RPO tercapai karena backup tetap berjalan setiap hari.",
+            "Turunkan RTO agar interval 900 detik otomatis menjadi 300 detik."
+          ],
+          "answer": 0,
+          "explanation": "Interval authored lebih tua daripada batas kehilangan yang diterima; kebutuhan RPO tidak berubah hanya karena RTO atau nama backup berubah.",
+          "feedback": [
+            "Benar. Perlakukan margin negatif sebagai gap dan rancang artifact/WAL cadence serta evidence yang sesuai.",
+            "Belum tepat. Backup harian tidak memenuhi RPO lima menit.",
+            "Belum tepat. RTO mengatur durasi pemulihan, bukan usia titik data."
+          ]
+        },
+        {
+          "id": "l7m02l01-variant-2",
+          "question": "Profile memiliki RPO 300 detik, RTO 1800 detik, interval 300 detik, tetapi durasi restore authored 2400 detik. Apa yang gagal?",
+          "options": [
+            "RPO saja, karena durasi restore tidak berkaitan dengan RTO.",
+            "RTO saja; interval memenuhi RPO, tetapi pemulihan melewati batas durasi.",
+            "Tidak ada; RPO dan RTO selalu terpenuhi jika ada base backup."
+          ],
+          "answer": 1,
+          "explanation": "RPO margin dapat nol atau positif, tetapi RTO margin negatif sehingga runbook masih belum memenuhi gate authored.",
+          "feedback": [
+            "Belum tepat. Interval menentukan bagian RPO; durasi restore langsung memengaruhi RTO.",
+            "Benar. Pisahkan gap recovery time dari gap data age.",
+            "Belum tepat. Base backup tanpa durasi, WAL, roles, dan validation evidence tidak menjamin target."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l7m02l01-edge-1",
+          "question": "Filesystem snapshot diberi label konsisten, tetapi koordinasi database dan WAL tidak memiliki evidence. Apa kesimpulan aman?",
+          "options": [
+            "Anggap snapshot pasti equivalent dengan base backup yang siap PITR.",
+            "Tandai evidence kurang; snapshot perlu consistency protocol dan WAL/metadata scope yang dapat dibuktikan.",
+            "Hapus snapshot karena semua snapshot filesystem tidak pernah berguna."
+          ],
+          "answer": 1,
+          "explanation": "Label authored tidak membuktikan crash-consistency, WAL coverage, roles, atau restore procedure.",
+          "feedback": [
+            "Belum tepat. Snapshot dapat berguna, tetapi konsistensi dan scope harus dibuktikan.",
+            "Benar. Minta evidence koordinasi, WAL, metadata, dan restore sebelum memberi klaim recoverability.",
+            "Belum tepat. Masalahnya adalah evidence dan contract, bukan larangan universal atas snapshot."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l7m02l01-edge-2",
+          "question": "Logical dump lolos row check, tetapi roles dan global configuration tidak ada dalam artifact. Apa yang harus dicatat?",
+          "options": [
+            "Database pasti siap melayani aplikasi karena row check selalu mencakup permissions.",
+            "RPO otomatis gagal walaupun restore time memenuhi target.",
+            "Database content lolos scope check, tetapi cluster/application recovery belum lengkap sampai roles dan global configuration punya artifact serta verification."
+          ],
+          "answer": 2,
+          "explanation": "Isi database dan kesiapan lingkungan bukan satu scope. Roles, grants, extensions, dan configuration dapat menentukan apakah aplikasi benar-benar pulih.",
+          "feedback": [
+            "Belum tepat. Row check tidak membuktikan grants atau global configuration.",
+            "Belum tepat. Kekurangan scope environment tidak otomatis mengubah usia titik data.",
+            "Benar. Pisahkan database-content evidence dari cluster dan application recovery evidence."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Hitung RPO margin sebagai target_rpo_seconds dikurangi recovery interval, lalu pisahkan dari RTO margin.",
+        "Tanya scope artifact: logical database, physical cluster plus WAL, storage snapshot, roles/global objects, dan configuration.",
+        "Status meets authored gate bukan bukti runtime; minta evidence backup, retention, permissions, restore, dan validation."
+      ],
+      "solutionSql": "SELECT profile_id, method, target_rpo_seconds, recovery_interval_seconds,\n       target_rto_seconds, restore_duration_seconds,\n       target_rpo_seconds - recovery_interval_seconds AS rpo_margin_seconds,\n       target_rto_seconds - restore_duration_seconds AS rto_margin_seconds,\n       roles_globals_scope,\n       CASE\n         WHEN target_rpo_seconds >= recovery_interval_seconds\n          AND target_rto_seconds >= restore_duration_seconds\n          AND roles_globals_scope <> 'missing_from_dump'\n         THEN 'meets_authored_gate'\n         ELSE 'gap_needs_review'\n       END AS decision\nFROM pg_temp.lesson_backup_profiles\nORDER BY profile_id;",
+      "solutionExplanation": "Reference menghitung margin data-age dan recovery-time pada empat profile. Dua profile melewati angka gate, satu gagal RPO karena interval terlalu panjang, dan satu juga kehilangan roles/global scope. Semua hasil adalah klasifikasi authored; tidak ada backup atau restore yang dijalankan.",
+      "critical": true
+    },
+    "reflection": "Jelaskan bagaimana kebutuhan bisnis membentuk RPO/RTO, kapan logical dump lebih sesuai daripada physical base backup plus WAL, dan mengapa roles/global objects, konfigurasi, consistency, retention, serta bukti restore harus masuk strategy."
+  },
+  {
+    "id": "l7m02l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "restore",
+      "verification",
+      "staging",
+      "integrity",
+      "schema",
+      "roles",
+      "extensions",
+      "postgresql-lab"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/backup.html",
+      "https://www.postgresql.org/docs/17/backup-dump.html",
+      "https://www.postgresql.org/docs/17/restore.html",
+      "https://www.postgresql.org/docs/17/ddl-priv.html"
+    ],
+    "hook": "Tim menemukan file backup dan langsung menyebutnya valid. Apa yang sebenarnya harus dibuktikan ketika artifact direstore ke staging, lalu bagaimana memisahkan pemeriksaan schema, roles, extensions, sampel row, counts, dan keamanan target dari klaim bahwa production sudah pulih?",
+    "objectives": [
+      "Membedakan artifact backup yang tersimpan dari restore yang benar-benar dapat dibuka dan diverifikasi.",
+      "Menyusun restore runbook terisolasi dengan pemeriksaan schema, roles, extensions, sampel row, counts, dan evidence flags.",
+      "Menolak klaim production recovery ketika hasil masih authored, target belum terisolasi, atau reconciliation belum selesai."
+    ],
+    "sections": [
+      {
+        "title": "Backup artifact bukan bukti restore",
+        "paragraphs": [
+          "Nama file, ukuran, checksum, dan status upload hanya memberi evidence bahwa sebuah artifact tersimpan atau dapat dibaca pada scope tertentu. Artifact belum membuktikan format lengkap, dependency, ownership, role mapping, extension, encoding, tablespace, atau urutan restore. Bahkan checksum yang cocok hanya menghubungkan file dengan manifest; ia tidak membuktikan database target dapat start dan menerima query. Restore drill harus menjawab apakah artifact dapat dibuka, apakah objek penting muncul, dan apakah hasilnya sesuai contract.",
+          "Restore juga memiliki tujuan yang berbeda. Salinan untuk audit, migrasi, staging, forensic review, dan cutover production mungkin memerlukan filter, secrets, roles, atau network boundary yang berbeda. Jangan memakai satu status `backup_exists` sebagai pengganti evidence per tahap. Dataset V2 menulis flag authored untuk menunjukkan gate yang harus diperiksa; flag itu bukan output pg_restore, database engine, atau operator yang benar-benar memulihkan file."
+        ]
+      },
+      {
+        "title": "Runbook restore harus mengisolasi target",
+        "paragraphs": [
+          "Target restore sebaiknya disposable atau staging yang tidak menerima koneksi production secara tidak sengaja. Sebelum membuka artifact, tetapkan owner, tujuan, network boundary, credentials, extension policy, storage capacity, dan nama database target. Logical restore dapat memerlukan roles lebih dahulu, sedangkan physical recovery membawa cluster state dengan aturan yang berbeda. Keduanya harus diperlakukan sebagai runbook terpisah, bukan perintah yang dapat dicampur tanpa memahami scope.",
+          "Staging bukan berarti aman secara otomatis. Secrets, outbound webhook, scheduled jobs, background workers, dan DNS dapat membuat data hasil restore berinteraksi dengan sistem nyata. Matikan atau isolasi side effect, gunakan role yang tepat, dan catat command outcome tanpa menyalin kredensial. Lesson ini sengaja tidak menjalankan restore command, tidak membuka koneksi production, dan tidak mengubah filesystem; learner hanya membaca state authored dan memilih gate yang belum lengkap."
+        ]
+      },
+      {
+        "title": "Verification menggabungkan struktur, isi, dan bukti",
+        "paragraphs": [
+          "Verification perlu lebih dari satu sampel. Bandingkan schema objects, constraints, indexes, row counts, representative rows, key aggregates, timestamp boundaries, dan error log dengan expected evidence yang disepakati. Roles dan grants perlu direview terpisah karena data yang sama dapat memiliki akses yang berbeda. Extensions, collations, tablespaces, sequences, ownership, dan configuration dapat menjelaskan mengapa query bekerja di satu target tetapi gagal di target lain.",
+          "Hasil check harus dapat ditelusuri: siapa menjalankan, artifact mana, target mana, kapan, query atau prosedur apa, dan keputusan apa yang diambil. `row_gap = 0` hanyalah satu property; ia tidak mengesahkan schema, permissions, extension, application behavior, atau recovery point. Report V2 memakai `ready_for_review` hanya jika semua flag authored dan counts cocok. Status itu tetap bukan klaim bahwa restore nyata berhasil sampai evidence actual disimpan."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset Restore Verification V: tiga hasil restore authored untuk target staging. Artifact, schema, roles, extensions, isolation, sample, dan counts adalah evidence flags latihan, bukan hasil restore database nyata.",
+      "setupSql": "CREATE TEMP TABLE lesson_restore_checks (\n  case_id TEXT PRIMARY KEY,\n  artifact_kind TEXT NOT NULL,\n  artifact_evidence TEXT NOT NULL,\n  restore_target TEXT NOT NULL,\n  target_isolated TEXT NOT NULL,\n  schema_evidence TEXT NOT NULL,\n  roles_evidence TEXT NOT NULL,\n  extensions_evidence TEXT NOT NULL,\n  expected_rows INTEGER NOT NULL,\n  observed_rows INTEGER NOT NULL,\n  sample_evidence TEXT NOT NULL,\n  evidence_kind TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_restore_checks VALUES\n  ('staging_full_01','logical_dump','manifest_recorded','staging_restore','yes','checked','checked','checked',100,100,'sample_match','authored'),\n  ('staging_missing_roles','logical_dump','manifest_recorded','staging_restore','yes','checked','missing','checked',100,100,'sample_match','authored'),\n  ('staging_row_gap','physical_base_plus_wal','manifest_recorded','staging_restore','yes','checked','checked','unknown',100,97,'sample_mismatch','authored');",
+      "sql": "SELECT case_id, artifact_kind, restore_target, target_isolated,\n       schema_evidence, roles_evidence, extensions_evidence,\n       expected_rows, observed_rows, expected_rows - observed_rows AS row_gap,\n       sample_evidence,\n       CASE\n         WHEN artifact_evidence = 'manifest_recorded'\n          AND target_isolated = 'yes'\n          AND schema_evidence = 'checked'\n          AND roles_evidence = 'checked'\n          AND extensions_evidence = 'checked'\n          AND expected_rows = observed_rows\n          AND sample_evidence = 'sample_match'\n         THEN 'ready_for_review'\n         ELSE 'not_verified'\n       END AS verification_state\nFROM pg_temp.lesson_restore_checks\nORDER BY case_id;",
+      "columns": [
+        "case_id",
+        "artifact_kind",
+        "restore_target",
+        "target_isolated",
+        "schema_evidence",
+        "roles_evidence",
+        "extensions_evidence",
+        "expected_rows",
+        "observed_rows",
+        "row_gap",
+        "sample_evidence",
+        "verification_state"
+      ],
+      "rows": [
+        [
+          "staging_full_01",
+          "logical_dump",
+          "staging_restore",
+          "yes",
+          "checked",
+          "checked",
+          "checked",
+          "100",
+          "100",
+          "0",
+          "sample_match",
+          "ready_for_review"
+        ],
+        [
+          "staging_missing_roles",
+          "logical_dump",
+          "staging_restore",
+          "yes",
+          "checked",
+          "missing",
+          "checked",
+          "100",
+          "100",
+          "0",
+          "sample_match",
+          "not_verified"
+        ],
+        [
+          "staging_row_gap",
+          "physical_base_plus_wal",
+          "staging_restore",
+          "yes",
+          "checked",
+          "checked",
+          "unknown",
+          "100",
+          "97",
+          "3",
+          "sample_mismatch",
+          "not_verified"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "V2 mengklasifikasikan tiga hasil authored: hanya staging_full_01 melewati seluruh gate report, sementara roles yang hilang atau row/sample mismatch menahan status. `ready_for_review` berarti evidence flags dan counts pada fixture cocok; ia bukan hasil restore aktual, bukti production safety, atau approval cutover."
+    },
+    "checks": [
+      {
+        "id": "l7m02l02-check-1",
+        "question": "Kapan sebuah backup dapat disebut terbukti dapat direstore?",
+        "options": [
+          "Saat file backup memiliki nama dan ukuran yang terlihat masuk akal.",
+          "Saat artifact sudah dipulihkan ke target yang sesuai lalu schema, permissions, extensions, sampel, counts, dan evidence diperiksa.",
+          "Saat operator menyimpan checksum tanpa membuka artifact."
+        ],
+        "answer": 1,
+        "explanation": "Artifact metadata membantu chain of custody, tetapi restore dan verifikasi target diperlukan untuk mendukung klaim recoverability.",
+        "feedback": [
+          "Belum tepat. Nama dan ukuran tidak membuktikan format, dependencies, atau isi.",
+          "Benar. Restore drill dan evidence per scope memisahkan backup yang ada dari recovery yang dapat digunakan.",
+          "Belum tepat. Checksum mengikat artifact ke manifest, bukan membuktikan database dapat digunakan."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l7m02l02-check-2",
+        "question": "Mengapa target restore harus diisolasi dari production?",
+        "options": [
+          "Agar hasil restore boleh langsung mengirim webhook dan job background untuk menguji realism.",
+          "Agar row count tidak perlu dibandingkan karena staging selalu sama dengan production.",
+          "Agar pemeriksaan artifact tidak menulis, mengirim side effect, atau memberi akses tak sengaja ke sistem production."
+        ],
+        "answer": 2,
+        "explanation": "Isolation melindungi production dan external systems selama restore, verification, serta troubleshooting; ia tidak menghapus kebutuhan evidence.",
+        "feedback": [
+          "Belum tepat. Side effect harus ditahan atau dinonaktifkan selama drill.",
+          "Belum tepat. Staging dapat berbeda dan tetap perlu reconciliation.",
+          "Benar. Restore target, credentials, network, jobs, dan outbound effects harus dibatasi."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Baca Dataset Restore Verification V dan tentukan case mana yang dapat masuk review lanjutan serta gate apa yang masih gagal.",
+      "setup": "Dataset V adalah evidence authored. Player tidak menjalankan restore, pg_restore, database connection, filesystem operation, role change, atau production query.",
+      "starterSql": "SELECT case_id, artifact_kind, restore_target, target_isolated,\n       schema_evidence, roles_evidence, extensions_evidence,\n       expected_rows, observed_rows, sample_evidence\nFROM pg_temp.lesson_restore_checks\nORDER BY case_id;",
+      "variants": [
+        {
+          "id": "l7m02l02-variant-1",
+          "question": "Artifact hash dan sample row cocok, tetapi `artifact_evidence` belum memiliki manifest yang dapat ditelusuri. Apa statusnya?",
+          "options": [
+            "Tandai belum terverifikasi dan minta evidence artifact/manifest sebelum menyebut restore siap review.",
+            "Anggap verified karena sample row selalu membuktikan file lengkap.",
+            "Hapus sample check agar hanya hash yang menentukan."
+          ],
+          "answer": 0,
+          "explanation": "Sample dan hash adalah evidence berbeda; chain of custody serta format artifact tetap perlu dibuktikan.",
+          "feedback": [
+            "Benar. Kekurangan manifest atau artifact evidence menahan klaim, walaupun sample terlihat cocok.",
+            "Belum tepat. Sample kecil tidak membuktikan seluruh artifact dan metadata restore.",
+            "Belum tepat. Menghapus check memperlemah verification dan tidak mengisi evidence yang hilang."
+          ]
+        },
+        {
+          "id": "l7m02l02-variant-2",
+          "question": "Counts dan sample cocok, tetapi roles `missing` dan extensions `unknown`. Apa keputusan report?",
+          "options": [
+            "Nyatakan production siap karena data row adalah satu-satunya scope recovery.",
+            "Nyatakan not_verified dan buka reconciliation roles/extensions sebelum cutover atau approval.",
+            "Ubah flag menjadi checked agar report konsisten dengan counts."
+          ],
+          "answer": 1,
+          "explanation": "Isi database cocok belum menutup permission dan runtime dependency gap.",
+          "feedback": [
+            "Belum tepat. Production readiness juga bergantung pada roles, grants, extensions, dan configuration.",
+            "Benar. Pisahkan data match dari environment readiness dan simpan gap untuk owner.",
+            "Belum tepat. Flag evidence tidak boleh diubah demi membuat status lulus."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l7m02l02-edge-1",
+          "question": "Operator menemukan target restore masih memakai connection string production. Apa tindakan paling aman?",
+          "options": [
+            "Hentikan drill, isolasi target dan credentials, lalu periksa tidak ada side effect production sebelum lanjut.",
+            "Lanjutkan karena query read-only tidak mungkin memengaruhi production dalam konfigurasi apa pun.",
+            "Jalankan lebih banyak query sampel agar target yang salah lebih mudah didiagnosis."
+          ],
+          "answer": 0,
+          "explanation": "Boundary target adalah gate keselamatan. Laporan tidak boleh mengubah koneksi yang tidak aman menjadi klaim evidence.",
+          "feedback": [
+            "Benar. Hentikan, isolasi, dan rekonsiliasi boundary target sebelum restore atau verification berikutnya.",
+            "Belum tepat. Credentials, functions, jobs, dan extensions dapat menghasilkan side effect walau query yang diniatkan read-only.",
+            "Belum tepat. Query tambahan memperbesar exposure; ia tidak memperbaiki boundary."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l7m02l02-edge-2",
+          "question": "Jumlah row cocok, tetapi schema dan constraint belum diperiksa. Apa yang dapat disimpulkan?",
+          "options": [
+            "Restore sepenuhnya verified karena counts lebih kuat daripada evidence schema.",
+            "Hanya property row-count authored yang terpenuhi; verification schema dan constraint masih terbuka.",
+            "Backup pasti corrupt dan harus segera dihapus."
+          ],
+          "answer": 1,
+          "explanation": "Jumlah row yang cocok dapat menyembunyikan constraint, index, ownership, default, atau bentuk data yang bermasalah.",
+          "feedback": [
+            "Belum tepat. Counts tidak membuktikan struktur atau perilaku aplikasi.",
+            "Benar. Catat count match sambil membiarkan gate schema dan constraint tetap terbuka.",
+            "Belum tepat. Evidence yang hilang bukan bukti corruption atau alasan menghancurkan artifact."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Pisahkan artifact evidence dari restore target dan target isolation.",
+        "Bandingkan schema, roles, extensions, sample, dan counts; row_gap nol hanya satu gate.",
+        "`ready_for_review` authored tidak sama dengan restore production atau approval cutover."
+      ],
+      "solutionSql": "SELECT case_id, artifact_kind, restore_target, target_isolated,\n       schema_evidence, roles_evidence, extensions_evidence,\n       expected_rows, observed_rows, expected_rows - observed_rows AS row_gap,\n       sample_evidence,\n       CASE\n         WHEN artifact_evidence = 'manifest_recorded'\n          AND target_isolated = 'yes'\n          AND schema_evidence = 'checked'\n          AND roles_evidence = 'checked'\n          AND extensions_evidence = 'checked'\n          AND expected_rows = observed_rows\n          AND sample_evidence = 'sample_match'\n         THEN 'ready_for_review'\n         ELSE 'not_verified'\n       END AS verification_state\nFROM pg_temp.lesson_restore_checks\nORDER BY case_id;",
+      "solutionExplanation": "Reference menahan dua case: roles missing serta extension/count atau sample gap membuat restore belum verified. Hanya row dengan seluruh flag authored cocok masuk ready_for_review. Tidak ada koneksi production, restore artifact, atau validasi engine yang dijalankan.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa backup artifact belum cukup, bagaimana membuat restore target terisolasi, dan bagaimana schema, roles, extensions, sampel, counts, row gap, serta evidence owner membentuk keputusan verification tanpa mengklaim production recovery."
+  },
+  {
+    "id": "l7m02l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "pitr",
+      "wal-archive",
+      "base-backup",
+      "timeline",
+      "recovery-target",
+      "restore-safety",
+      "postgresql-lab"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/continuous-archiving.html",
+      "https://www.postgresql.org/docs/17/recovery-target-settings.html",
+      "https://www.postgresql.org/docs/17/warm-standby.html",
+      "https://www.postgresql.org/docs/17/backup.html"
+    ],
+    "hook": "Seseorang tidak sengaja menghapus data pada 10:12 UTC. Base backup ada, tetapi satu WAL segment hilang dan tim memakai waktu event aplikasi sebagai target tanpa memeriksa commit. Bagaimana menilai chain, timeline, inclusive/exclusive recovery target, dan keselamatan restore tanpa menyentuh production?",
+    "objectives": [
+      "Menjelaskan bahwa PITR membutuhkan base backup dan continuous WAL chain pada timeline yang benar.",
+      "Membedakan recovery target berdasarkan commit timestamp serta efek inclusive dan exclusive.",
+      "Menyusun restore target terpisah dari production dan menandai gap chain sebagai batas recoverability."
+    ],
+    "sections": [
+      {
+        "title": "PITR membutuhkan base backup dan rantai WAL",
+        "paragraphs": [
+          "Point-in-Time Recovery memulai dari base backup yang konsisten lalu menerapkan WAL berurutan sampai target recovery. Base backup memberi titik dasar; WAL memberi perubahan setelah titik itu. Archive yang terputus, segment yang korup, timeline yang salah, atau retention yang sudah menghapus bagian chain dapat membuat target tertentu tidak dapat dicapai walaupun file base backup masih ada. Karena itu runbook harus menyimpan manifest, urutan segment, timeline, checksum atau evidence archive, serta alasan mengapa setiap gap dapat atau tidak dapat ditutup.",
+          "Timeline menjadi penting ketika recovery atau promotion membuat cabang history. Segment dengan nomor atau nama yang tampak berurutan belum tentu berada pada timeline yang benar. Jangan menggabungkan branch tanpa membaca history dan aturan target. Dataset P hanya memuat tiga segment authored pada satu timeline; jeda lima menit adalah ilustrasi rentang waktu authored, bukan bukti continuity WAL. SQL hanya menghitung adjacency waktu pada fixture curated ini; recovery nyata tetap membutuhkan base-backup range, LSN/file availability, dan timeline history yang terverifikasi."
+        ]
+      },
+      {
+        "title": "Target recovery mengikuti commit dan boundary yang dipilih",
+        "paragraphs": [
+          "Recovery target time harus dibaca sebagai boundary transaksi yang diketahui recovery dari WAL, bukan sekadar timestamp ketika aplikasi menerima request atau ketika user melihat layar. Dua event dapat memiliki waktu bisnis, waktu request, dan commit timestamp yang berbeda. Untuk latihan, target dikaitkan dengan commit_time authored sehingga learner dapat membedakan keputusan `inclusive` dan `exclusive`: inclusive mengikutsertakan transaksi target, sedangkan exclusive berhenti sebelum transaksi target sesuai semantics recovery target. Detail target tetap perlu dibaca bersama dokumentasi versi PostgreSQL dan evidence WAL.",
+          "Target sebelum atau sesudah event tidak dapat diputuskan dari nama event saja. Jika commit timestamp belum ada, outcome recovery perlu ditandai unknown dan direkonsiliasi, bukan ditebak dari wall clock. Target yang berada setelah gap WAL juga tidak boleh disebut berhasil hanya karena target time lebih baru. Report P menampilkan classification authored dan chain summary sebagai alat berpikir, bukan hasil recovery command."
+        ]
+      },
+      {
+        "title": "Pulihkan ke target aman lalu validasi sebelum cutover",
+        "paragraphs": [
+          "PITR drill harus memakai target cluster atau environment terpisah, dengan network, credentials, jobs, webhook, dan write path yang dikendalikan. Jangan memutar WAL langsung ke production untuk mencoba-coba. Setelah recovery, lakukan pemeriksaan row, constraint, schema, roles, extensions, application invariants, dan titik terakhir yang diketahui; simpan evidence serta owner keputusan. Restore yang start bukan berarti data sudah benar atau aman menerima traffic.",
+          "Jika target chain tidak lengkap, pilihan yang jujur adalah mencari archive yang hilang, memilih target sebelum gap, atau menyatakan recovery tidak terbukti. Branch timeline dan fork juga membutuhkan keputusan cutover yang eksplisit. Lesson ini tidak memulai PostgreSQL, membaca WAL file, menghapus filesystem, menjalankan recovery, atau menyentuh production. Semua segment, timestamp, classification, dan gap pada fixture dibuat untuk reasoning yang dapat diaudit."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset PITR Chain P: tiga WAL segment authored pada timeline 1 dan tiga target commit authored. Segment A1 dan A2 bersebelahan dalam rentang waktu authored, A4 mulai lima menit setelah A2 berakhir; rentang waktu ini bukan validasi byte/LSN WAL. Target classification bukan hasil recovery engine.",
+      "setupSql": "CREATE TEMP TABLE lesson_pitr_segments (\n  segment_id TEXT PRIMARY KEY,\n  timeline_id INTEGER NOT NULL,\n  segment_start TIMESTAMPTZ NOT NULL,\n  segment_end TIMESTAMPTZ NOT NULL,\n  archive_state TEXT NOT NULL\n);\nCREATE TEMP TABLE lesson_recovery_targets (\n  target_id TEXT PRIMARY KEY,\n  target_time TIMESTAMPTZ NOT NULL,\n  commit_time TIMESTAMPTZ NOT NULL,\n  inclusive_mode TEXT NOT NULL,\n  target_class TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_pitr_segments VALUES\n  ('A1',1,TIMESTAMPTZ '2026-10-15 10:00:00+00',TIMESTAMPTZ '2026-10-15 10:05:00+00','archived'),\n  ('A2',1,TIMESTAMPTZ '2026-10-15 10:05:00+00',TIMESTAMPTZ '2026-10-15 10:10:00+00','archived'),\n  ('A4',1,TIMESTAMPTZ '2026-10-15 10:15:00+00',TIMESTAMPTZ '2026-10-15 10:20:00+00','archived');\nINSERT INTO pg_temp.lesson_recovery_targets VALUES\n  ('before_delete',TIMESTAMPTZ '2026-10-15 10:12:00+00',TIMESTAMPTZ '2026-10-15 10:12:00+00','exclusive','blocked_by_chain_gap_before_target'),\n  ('include_delete',TIMESTAMPTZ '2026-10-15 10:12:00+00',TIMESTAMPTZ '2026-10-15 10:12:00+00','inclusive','blocked_by_chain_gap_at_target'),\n  ('after_archive_gap',TIMESTAMPTZ '2026-10-15 10:16:00+00',TIMESTAMPTZ '2026-10-15 10:16:00+00','inclusive','blocked_by_chain_gap');",
+      "sql": "WITH ordered_segments AS (\n  SELECT segment_id, timeline_id, segment_start, segment_end,\n         LAG(segment_end) OVER (PARTITION BY timeline_id ORDER BY timeline_id, segment_start) AS prior_end\n  FROM pg_temp.lesson_pitr_segments\n  WHERE archive_state = 'archived' AND timeline_id = 1\n), chain_summary AS (\n  SELECT COUNT(*) FILTER (WHERE prior_end IS NOT NULL AND segment_start > prior_end) AS gap_count,\n         COALESCE(SUM(CASE WHEN prior_end IS NOT NULL AND segment_start > prior_end\n                           THEN EXTRACT(EPOCH FROM (segment_start - prior_end))\n                           ELSE 0 END), 0) AS gap_seconds\n  FROM ordered_segments\n)\nSELECT target_id,\n       to_char(target_time AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS') || 'Z' AS target_time_utc,\n       to_char(commit_time AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS') || 'Z' AS commit_time_utc,\n       inclusive_mode, target_class,\n       gap_count::TEXT,\n       to_char(gap_seconds,'FM999999990') AS gap_seconds,\n       CASE WHEN gap_count = 0 THEN 'chain_complete' ELSE 'chain_gap_detected' END AS chain_state\nFROM pg_temp.lesson_recovery_targets\nCROSS JOIN chain_summary\nORDER BY target_id;",
+      "columns": [
+        "target_id",
+        "target_time_utc",
+        "commit_time_utc",
+        "inclusive_mode",
+        "target_class",
+        "gap_count",
+        "gap_seconds",
+        "chain_state"
+      ],
+      "rows": [
+        [
+          "after_archive_gap",
+          "2026-10-15 10:16:00Z",
+          "2026-10-15 10:16:00Z",
+          "inclusive",
+          "blocked_by_chain_gap",
+          "1",
+          "300",
+          "chain_gap_detected"
+        ],
+        [
+          "before_delete",
+          "2026-10-15 10:12:00Z",
+          "2026-10-15 10:12:00Z",
+          "exclusive",
+          "blocked_by_chain_gap_before_target",
+          "1",
+          "300",
+          "chain_gap_detected"
+        ],
+        [
+          "include_delete",
+          "2026-10-15 10:12:00Z",
+          "2026-10-15 10:12:00Z",
+          "inclusive",
+          "blocked_by_chain_gap_at_target",
+          "1",
+          "300",
+          "chain_gap_detected"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Window LAG membandingkan boundary waktu pada segment authored timeline 1 yang sama dan menemukan gap 300 detik antara A2 dan A4 pada fixture curated. Ketiga target berada di dalam atau setelah interval 10:10–10:15 yang hilang, sehingga tidak ada yang boleh disebut recoverable; mode inclusive/exclusive tetap memperlihatkan boundary commit authored. Target 10:16 diberi classification blocked_by_chain_gap. Ini bukan output recovery, WAL inspection, timeline history, atau bukti file archive tersedia."
+    },
+    "checks": [
+      {
+        "id": "l7m02l03-check-1",
+        "question": "Apa syarat minimum yang paling tepat untuk menyatakan target PITR dapat dicapai?",
+        "options": [
+          "Cukup memiliki base backup terbaru; WAL setelahnya hanya untuk optimasi.",
+          "Memiliki base backup, WAL berurutan dan tersedia pada timeline yang benar, serta target restore yang dapat diverifikasi.",
+          "Memiliki timestamp event aplikasi tanpa perlu mengetahui commit atau archive segment."
+        ],
+        "answer": 1,
+        "explanation": "PITR bergantung pada base backup dan rantai WAL lengkap pada history yang tepat; target time saja tidak menutup gap.",
+        "feedback": [
+          "Belum tepat. Base backup tanpa WAL yang diperlukan tidak mencapai perubahan setelah base.",
+          "Benar. Chain, timeline, target, dan evidence restore harus dibaca sebagai satu contract.",
+          "Belum tepat. Event timestamp dapat berbeda dari commit dan tidak membuktikan archive."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l7m02l03-check-2",
+        "question": "Apa perbedaan authored `inclusive` dan `exclusive` pada target commit yang sama?",
+        "options": [
+          "Inclusive mengikutsertakan transaksi target, sedangkan exclusive berhenti sebelum transaksi target sesuai boundary recovery.",
+          "Inclusive dan exclusive hanya mengubah zona waktu, bukan row yang dipulihkan.",
+          "Exclusive selalu berarti WAL segment target hilang."
+        ],
+        "answer": 0,
+        "explanation": "Boundary recovery target menentukan apakah commit yang tepat pada target ikut dipertahankan atau dilewati; ini bukan sekadar format timestamp.",
+        "feedback": [
+          "Benar. Commit timestamp dan mode boundary harus dicatat bersama target.",
+          "Belum tepat. Zona waktu dan inclusivity adalah keputusan berbeda.",
+          "Belum tepat. Exclusive tidak menyimpulkan archive gap."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Baca Dataset PITR Chain P, hitung gap segment, lalu klasifikasikan target commit dan pilih apakah recovery dapat dinyatakan terbukti.",
+      "setup": "Dataset P adalah chain dan target authored. Player tidak menjalankan recovery, membaca WAL archive, mengubah timeline, menghapus files, atau memulihkan target ke production.",
+      "starterSql": "SELECT segment_id, timeline_id, segment_start, segment_end, archive_state\nFROM pg_temp.lesson_pitr_segments\nORDER BY timeline_id, segment_start;",
+      "variants": [
+        {
+          "id": "l7m02l03-variant-1",
+          "question": "Target berada setelah gap 300 detik dan segment yang menutup gap belum ditemukan. Apa status paling aman?",
+          "options": [
+            "Tandai blocked_by_chain_gap atau pilih target sebelum gap; jangan menyatakan PITR berhasil.",
+            "Abaikan gap karena segment setelahnya memiliki nama yang lebih besar.",
+            "Ganti commit timestamp dengan waktu request agar gap hilang."
+          ],
+          "answer": 0,
+          "explanation": "WAL chain yang hilang membatasi replay yang dapat dibuktikan sampai gap ditutup atau target dipindahkan sebelum gap.",
+          "feedback": [
+            "Benar. Simpan gap sebagai blocker dan cari archive atau target alternatif dengan owner.",
+            "Belum tepat. Nama segment tidak mengisi data WAL yang hilang.",
+            "Belum tepat. Mengganti timestamp tidak memulihkan chain atau mengubah commit history."
+          ]
+        },
+        {
+          "id": "l7m02l03-variant-2",
+          "question": "Event accidental delete terjadi pukul 10:12:00, tetapi commit authored pukul 10:12:07. Target yang ingin berhenti sebelum delete harus memakai evidence apa?",
+          "options": [
+            "Hanya waktu event karena commit selalu sama dengan waktu aplikasi.",
+            "Nama tabel saja karena PITR tidak membedakan commit.",
+            "Commit timestamp dari recovery/WAL evidence dan mode exclusive, bukan asumsi wall-clock event."
+          ],
+          "answer": 2,
+          "explanation": "Recovery boundary perlu dikaitkan dengan commit yang diketahui; event time dapat mendahului atau berbeda dari commit.",
+          "feedback": [
+            "Belum tepat. Event time dan commit time dapat berbeda.",
+            "Belum tepat. Nama tabel tidak menentukan target transaction.",
+            "Benar. Cari commit evidence lalu pilih boundary exclusive dengan target yang dapat dijelaskan."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l7m02l03-edge-1",
+          "question": "Operator mengusulkan replay PITR langsung ke production untuk mempercepat cutover. Apa keputusan safety?",
+          "options": [
+            "Tolak; pulihkan ke target terpisah, validasi, lalu buat keputusan cutover terkontrol dengan owner.",
+            "Setujui jika target timestamp terlihat tepat karena production adalah sumber data asli.",
+            "Hapus WAL lama setelah recovery dimulai agar production tidak penuh."
+          ],
+          "answer": 0,
+          "explanation": "Recovery drill membutuhkan isolation dan validation; replay langsung dapat merusak availability atau data production.",
+          "feedback": [
+            "Benar. Pisahkan restore target, credentials, network, validation, dan cutover approval.",
+            "Belum tepat. Timestamp tidak menghilangkan risiko target salah atau chain tidak lengkap.",
+            "Belum tepat. Menghapus WAL dapat merusak opsi recovery dan retention contract."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l7m02l03-edge-2",
+          "question": "Chain segment lengkap pada timeline 1, tetapi target berada pada branch timeline 2 yang belum memiliki history evidence. Apa kesimpulan?",
+          "options": [
+            "Timeline 1 otomatis dapat dipakai karena segment time sama.",
+            "Target belum terbukti; perlu timeline history dan chain pada branch yang benar sebelum replay.",
+            "Branch tidak memengaruhi PITR selama base backup memiliki checksum."
+          ],
+          "answer": 1,
+          "explanation": "Timeline adalah bagian dari WAL history. Segment yang lengkap di branch lain tidak membuktikan target branch dapat direplay.",
+          "feedback": [
+            "Belum tepat. Timestamp sama tidak menyatukan dua timeline.",
+            "Benar. Minta history, base, WAL, dan target branch evidence.",
+            "Belum tepat. Checksum artifact tidak menggantikan timeline lineage."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Urutkan segment berdasarkan timeline dan boundary waktu, lalu bandingkan start dengan prior end.",
+        "Bedakan event timestamp dari commit timestamp; inclusive mengikutsertakan target, exclusive berhenti sebelum target.",
+        "PITR drill selalu ke target terpisah sampai chain, row checks, roles, extensions, dan cutover evidence disetujui."
+      ],
+      "solutionSql": "WITH ordered_segments AS (\n  SELECT segment_id, timeline_id, segment_start, segment_end,\n         LAG(segment_end) OVER (PARTITION BY timeline_id ORDER BY timeline_id, segment_start) AS prior_end\n  FROM pg_temp.lesson_pitr_segments\n  WHERE archive_state = 'archived' AND timeline_id = 1\n), chain_summary AS (\n  SELECT COUNT(*) FILTER (WHERE prior_end IS NOT NULL AND segment_start > prior_end) AS gap_count,\n         COALESCE(SUM(CASE WHEN prior_end IS NOT NULL AND segment_start > prior_end\n                           THEN EXTRACT(EPOCH FROM (segment_start - prior_end))\n                           ELSE 0 END), 0) AS gap_seconds\n  FROM ordered_segments\n)\nSELECT target_id,\n       to_char(target_time AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS') || 'Z' AS target_time_utc,\n       to_char(commit_time AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS') || 'Z' AS commit_time_utc,\n       inclusive_mode, target_class,\n       gap_count::TEXT,\n       to_char(gap_seconds,'FM999999990') AS gap_seconds,\n       CASE WHEN gap_count = 0 THEN 'chain_complete' ELSE 'chain_gap_detected' END AS chain_state\nFROM pg_temp.lesson_recovery_targets\nCROSS JOIN chain_summary\nORDER BY target_id;",
+      "solutionExplanation": "Reference menghitung gap waktu authored 300 detik pada satu timeline curated, lalu menampilkan tiga target dengan commit_time dan boundary mode; ini bukan validator byte/LSN, base-backup range, file availability, atau timeline history. Ketiga target berada di dalam atau setelah interval 10:10–10:15 yang hilang, sehingga tidak ada yang boleh disebut recoverable; inclusive/exclusive menjelaskan boundary commit, bukan bukti replay. Semua hasil adalah classification dan chain arithmetic authored.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa PITR membutuhkan base backup dan continuous WAL pada timeline yang benar, bagaimana commit timestamp dan inclusive/exclusive memengaruhi target, serta mengapa restore target harus terpisah dari production sampai chain dan verification evidence lengkap."
+  }
+]
