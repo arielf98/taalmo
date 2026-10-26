@@ -323,5 +323,14 @@
   "read-replicas": "replica baca",
   "read-your-writes": "membaca write sendiri",
   "consistency-contract": "kontrak konsistensi",
-  "routing": "routing"
+  "routing": "routing",
+  "least-privilege": "hak akses minimum",
+  "secret-hygiene": "pengelolaan secret",
+  "ownership": "kepemilikan objek",
+  "connection-budget": "budget koneksi",
+  "connection-pooling": "pooling koneksi",
+  "backpressure": "pembatasan beban masuk",
+  "timeouts": "batas waktu",
+  "runbooks": "runbook",
+  "blocked-writes": "write terblokir"
 }

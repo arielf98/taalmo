@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Initial goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L6 and L7M01–L7M03: 96 published / 24 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L7: 99 published / 21 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -306,3 +306,11 @@ Added l7m03l01–l7m03l03 with complete Indonesian/English prose, TEMP worked SQ
 Totals: 32 authored modules, 96 published / 24 draft lessons; 99 combined lessons plus three labs (102 activity milestones). Existing E2E expectations update only the count and first draft route to l7m04l01; no coverage was expanded. Registries include the new JSON for a future authorized run. Blueprint, School Finance seed, previous content versions and progress format stay unchanged; L7 assessment remains unavailable until L7M04 publication.
 
 Reviewed source/diff only. No tests, audits, SQL, runtime, manual/browser checks, lint, typecheck or build were run. Commit and push this module, then continue L7M04.
+
+## L7M04 — Operational Security & Incidents
+
+Added l7m04l01–l7m04l03 with complete Indonesian/English prose, TEMP worked SQL/result tables, two checks, two variants, two edge cases, three hints, reference solutions and reflection per lesson. The effective-permission matrix separates readonly/writer/migrator/admin, ownership and secret containment. Connection budgets include deployment surge, missing queue evidence, backpressure and pooling session-state limits. Incident cards distinguish blocker, archive-gap and replay-lag runbooks with evidence, authorization and stop gates; classification is not an executed game day.
+
+Totals: 33 authored modules, 99 published / 21 draft lessons; 102 combined lessons plus three labs (105 activity milestones). Existing E2E expectations update only the count and first draft route to l8m01l01; no test cases or browser lesson coverage were added. Existing publication/mastery gates now expose the L7 level assessment, without changing previous versions, blueprint, School Finance seed or storage.
+
+Reviewed source/diff only. No tests, audits, SQL, runtime, manual/browser checks, lint, typecheck or build were run. L7M03 commit b595745 was pushed to origin/main after the user explicitly approved that target; the earlier automatic approval rejection was not bypassed. Next canonical authoring milestone: L8M01.

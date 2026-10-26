@@ -1,16 +1,6 @@
 # Remaining curriculum authoring
 
-The following 24 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
-
-## L7 — Production & Reliability
-
-### L7M04 — Operational Security & Incidents
-
-Prerequisite: l7m03. Scenario: Production Simulator.
-
-- [ ] `l7m04l01` — Least privilege dan secret hygiene
-- [ ] `l7m04l02` — Connection limits dan pooling
-- [ ] `l7m04l03` — Incident response game day
+The following 21 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L8 — Database Architecture & Scaling
 

@@ -20,13 +20,13 @@
 - [x] Add `src/content/database/l7-replication.json`: three complete lessons, each with 300+ words of teaching prose, worked SQL/result table, 2 checks, 2 variants, 2 edge cases, 3 hints, solution and reflection.
 - [x] Add `src/content/messages/en-database-replication.json`; register catalog, messages, existing audit/SQL file lists and tag labels.
 - [x] Update current publication counts, draft-route expectations only, remaining checklist and implementation evidence.
-- [ ] Review source/diff; commit `feat: add bilingual replication and failover lessons`; push current branch.
+- [x] Review source/diff and commit L7M03 as b595745. Direct origin/main push initially required explicit target approval; user approved, and the push succeeded.
 
 ## Task 2: L7M04 — Operational Security & Incidents
 
-- [ ] Add `src/content/database/l7-operations.json` and English dictionary: role/secret boundaries, connection budgets and incident decisions with the same full contract.
-- [ ] Register content and tags; update publication counts and first draft route without expanding test coverage.
-- [ ] Document L7 completion, existing assessment availability and next L8M01 milestone.
-- [ ] Review source/diff; commit `feat: add bilingual operational security lessons`; push current branch.
+- [x] Add `src/content/database/l7-operations.json` and English dictionary: role/secret boundaries, connection budgets and incident decisions with the same full contract.
+- [x] Register content and tags; update publication counts and first draft route without expanding test coverage.
+- [x] Document L7 completion, existing assessment availability and next L8M01 milestone.
+- [x] Review source/diff, including independent read-only review; no important findings. Commit and push L7M04 under the explicit origin/main approval.
 
 Continue subsequent canonical work only with enough remaining session capacity to satisfy the complete authoring contract. Do not publish incomplete records.

@@ -13,13 +13,13 @@
 
 ## Database Engineering — database curriculum
 
-The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L6 and L7M01–L7M03 provide 96 published bilingual lessons; 24 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
+The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L7 provide 99 published bilingual lessons; 21 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
 
-## Recommended next milestone: L7M04 authoring
+## Recommended next milestone: L8M01 authoring
 
-L7M03 follows L7M02. L7 remains incomplete and its level assessment stays unavailable. Replication positions, failover-plan flags and routing decisions are authored inputs, not evidence of running replication, fencing, promotion or read routing.
+L7 is fully authored and its existing level assessment is available under the usual mastery requirements. Operational permission, connection and incident examples remain authored decision exercises; no grants, pools, mitigations or production drills were executed.
 
-Continue with L7M04 — Operational Security & Incidents: least privilege and secret hygiene, connection limits and pooling, and incident response decisions for blocked writes, failed backups and replica lag. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Follow AGENTS.md: source/diff review only, no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build; commit, push and continue.
+Continue with L8M01 — Caching & Consistency Trade-offs: cache-aside and TTL, eventually consistent invoice projections/read models, and explicit freshness, ordering and failure contracts for dashboards, ledgers and notifications. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Follow AGENTS.md: source/diff review only, no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build; commit, push and continue.
 
 ## Later learning improvements
 

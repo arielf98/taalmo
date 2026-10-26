@@ -34,6 +34,7 @@ export const authored = [
   "l7-releases",
   "l7-backup-recovery",
   "l7-replication",
+  "l7-operations",
 ].flatMap((file) => read(`src/content/database/${file}.json`));
 const modules = blueprint.levels.flatMap((level) => level.modules);
 const lessons = modules.flatMap((module) => module.lessons);

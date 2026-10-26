@@ -1,0 +1,662 @@
+[
+  {
+    "id": "l7m04l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "least-privilege",
+      "roles",
+      "secret-hygiene",
+      "ownership",
+      "incident-response"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/ddl-priv.html",
+      "https://www.postgresql.org/docs/17/role-membership.html",
+      "https://www.postgresql.org/docs/17/sql-alterdefaultprivileges.html"
+    ],
+    "hook": "Akun aplikasi bernama writer tidak diberi DROP secara eksplisit, tetapi menjadi owner tabel dan connection URL masuk log. Mengapa label role dan daftar GRANT saja belum membatasi blast radius?",
+    "objectives": [
+      "Membuat matriks readonly, writer, migrator, dan admin sesuai scope operasi.",
+      "Membedakan explicit grants dari ownership, membership, PUBLIC, dan hak efektif.",
+      "Menentukan containment dan rotasi secret tanpa menyalin credential ke evidence."
+    ],
+    "sections": [
+      {
+        "title": "Hak akses dimulai dari pekerjaan yang diperlukan",
+        "paragraphs": [
+          "Least privilege berarti setiap identitas hanya memperoleh kemampuan yang diperlukan pada objek dan waktu yang disepakati. Readonly dapat membaca subset data yang dibutuhkan, writer dapat melakukan perubahan bisnis tertentu, migrator menangani perubahan schema melalui jalur deployment, dan admin dipakai untuk operasi terkontrol atau break-glass. Nama role bukan mekanisme keamanan. SELECT pada seluruh tabel juga dapat terlalu luas jika data personal tidak diperlukan; hak per objek, view terkurasi, dan isolasi tenant membutuhkan rancangan domain tersendiri. Matriks lesson hanya menyederhanakan kemampuan untuk membandingkan batas tanggung jawab.",
+          "Akun runtime sebaiknya tidak superuser, tidak menjadi owner objek bisnis, dan tidak dapat melakukan DDL yang tidak diperlukan. Migrator yang memiliki hak owner harus terpisah dari credential request aplikasi dan dibatasi penggunaannya. Admin mungkin mempunyai hak sangat tinggi karena tugas tertentu, tetapi itu bukan alasan membagikan login admin ke seluruh instance. Pada tabel, within_authored_scope untuk admin berarti penggunaan break_glass sesuai skenario, bukan persetujuan akses permanen tanpa audit, approval organisasi, atau pembatasan network."
+        ]
+      },
+      {
+        "title": "Hitung hak efektif, bukan hanya grant langsung",
+        "paragraphs": [
+          "Owner memiliki kemampuan mengubah atau menghapus objek sebagai bagian ownership; mencabut privilege biasa tidak otomatis menghapus kemampuan owner itu. Membership role dapat memberi akses lewat inheritance atau SET ROLE, sementara PUBLIC dapat menambah kemampuan yang tidak terlihat pada daftar grant satu akun. Periksa juga CONNECT database, USAGE schema, privilege tabel, sequence untuk alokasi ID, dan EXECUTE fungsi yang memang dibutuhkan. Hak fungsi SECURITY DEFINER dan search_path yang tidak aman dapat memperluas dampak, sehingga bukan solusi untuk membagikan fungsi privileged tanpa batas.",
+          "Hak untuk objek yang sudah ada berbeda dari default privileges untuk objek yang akan dibuat oleh role pembuat tertentu. Menambahkan tabel baru dapat mengubah akses bila ownership atau default-nya salah. effective_verified pada Dataset P berarti seluruh jalur relevan sudah diasumsikan diperiksa oleh skenario; SQL tidak memanggil catalog atau membuktikan GRANT sungguhan. Unknown harus ditahan. Kebutuhan akses tambahan perlu alasan per operasi, bukan mengatasi setiap permission denied dengan menaikkan akun menjadi superuser."
+        ]
+      },
+      {
+        "title": "Secret bocor membutuhkan containment dan rotasi",
+        "paragraphs": [
+          "Connection URL, password, token, dan payload sensitif tidak boleh dimasukkan ke log atau laporan latihan. Gunakan secret reference dan identitas akun yang cukup untuk investigasi. Bila secret terlanjur tercatat, batasi akses evidence, hentikan sumber logging, rotasi atau revoke credential terkait, dan periksa penyalahgunaan sesuai runbook. Menghapus satu baris log saja tidak membatalkan salinan, sink, atau credential yang masih valid. Rotasi juga perlu memperbarui consumer dan menangani koneksi yang sudah terbuka; perubahan password bukan jaminan semua sesi lama langsung berakhir.",
+          "Dataset P menyimpan boolean secret_in_log, bukan secret asli. Prioritas contain_and_rotate mendahului evaluasi privilege karena credential yang bocor tetap berbahaya walau haknya sempit. Hasil tabel adalah klasifikasi authored untuk diskusi matriks dan runbook; tidak ada CREATE ROLE, GRANT, REVOKE, rotasi, atau perubahan akses production. Pelajar harus menyebut batas evidence ini saat menjelaskan mengapa plan terlihat sesuai."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset P: matriks capability efektif authored untuk tujuh identitas. Tidak ada credential asli atau role cluster yang dibuat.",
+      "setupSql": "CREATE TEMP TABLE lesson_role_matrix (\n  principal TEXT PRIMARY KEY,\n  purpose TEXT NOT NULL,\n  can_select BOOLEAN NOT NULL,\n  can_write BOOLEAN NOT NULL,\n  can_ddl BOOLEAN NOT NULL,\n  is_superuser BOOLEAN NOT NULL,\n  owns_objects BOOLEAN NOT NULL,\n  secret_in_log BOOLEAN,\n  effective_verified BOOLEAN\n);\nINSERT INTO pg_temp.lesson_role_matrix VALUES\n  ('01_readonly','runtime',true,false,false,false,false,false,true),\n  ('02_writer','runtime',true,true,false,false,false,false,true),\n  ('03_migrator','migration',true,true,true,false,true,false,true),\n  ('04_admin','break_glass',true,true,true,true,true,false,true),\n  ('05_app_owner','runtime',true,true,true,false,true,false,true),\n  ('06_leaked_writer','runtime',true,true,false,false,false,true,true),\n  ('07_unverified','runtime',true,false,false,false,false,false,NULL);",
+      "sql": "SELECT principal, purpose, can_select, can_write, can_ddl,\n       CASE\n         WHEN secret_in_log IS TRUE THEN 'contain_and_rotate'\n         WHEN effective_verified IS NOT TRUE OR secret_in_log IS NULL THEN 'hold_evidence'\n         WHEN purpose = 'runtime' AND (is_superuser OR can_ddl OR owns_objects)\n           THEN 'reduce_runtime_privilege'\n         ELSE 'within_authored_scope'\n       END AS decision\nFROM pg_temp.lesson_role_matrix\nORDER BY principal;",
+      "columns": [
+        "principal",
+        "purpose",
+        "can_select",
+        "can_write",
+        "can_ddl",
+        "decision"
+      ],
+      "rows": [
+        [
+          "01_readonly",
+          "runtime",
+          "t",
+          "f",
+          "f",
+          "within_authored_scope"
+        ],
+        [
+          "02_writer",
+          "runtime",
+          "t",
+          "t",
+          "f",
+          "within_authored_scope"
+        ],
+        [
+          "03_migrator",
+          "migration",
+          "t",
+          "t",
+          "t",
+          "within_authored_scope"
+        ],
+        [
+          "04_admin",
+          "break_glass",
+          "t",
+          "t",
+          "t",
+          "within_authored_scope"
+        ],
+        [
+          "05_app_owner",
+          "runtime",
+          "t",
+          "t",
+          "t",
+          "reduce_runtime_privilege"
+        ],
+        [
+          "06_leaked_writer",
+          "runtime",
+          "t",
+          "t",
+          "f",
+          "contain_and_rotate"
+        ],
+        [
+          "07_unverified",
+          "runtime",
+          "t",
+          "f",
+          "f",
+          "hold_evidence"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Matriks menampilkan hak baca/tulis/DDL dan memisahkan penggunaan runtime dari migrator/admin. App owner memiliki kemampuan berlebih, leaked writer perlu containment, dan akun dengan evidence NULL ditahan. within_authored_scope hanya merujuk scope latihan, bukan audit keamanan nyata."
+    },
+    "checks": [
+      {
+        "id": "l7m04l01-check-1",
+        "question": "Writer tidak memiliki GRANT DROP tetapi menjadi owner tabel. Apa yang benar?",
+        "options": [
+          "Owner masih mempunyai kemampuan mengubah atau menghapus objek miliknya.",
+          "Nama writer otomatis menolak DDL.",
+          "REVOKE SELECT menghapus semua kemampuan ownership."
+        ],
+        "answer": 0,
+        "explanation": "Ownership adalah sumber hak tersendiri; least privilege harus memisahkan owner dari runtime.",
+        "feedback": [
+          "Benar. Periksa ownership dan membership, bukan grant langsung saja.",
+          "Belum tepat. Label tidak menegakkan permission.",
+          "Belum tepat. SELECT dan kemampuan owner berbeda."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l7m04l01-check-2",
+        "question": "Apa respons terhadap connection URL dengan password di log?",
+        "options": [
+          "Salin URL ke tiket publik agar mudah diperiksa.",
+          "Batasi evidence, hentikan kebocoran, rotasi/revoke credential, dan tangani consumer serta sesi terkait.",
+          "Cukup ganti nama file log."
+        ],
+        "answer": 1,
+        "explanation": "Secret tetap valid sampai ditangani; salinan log dan sesi terbuka juga harus masuk containment.",
+        "feedback": [
+          "Belum tepat. Ini menyebarkan credential lebih jauh.",
+          "Benar. Menghapus tampilan log saja bukan containment lengkap.",
+          "Belum tepat. Nama file tidak mencabut credential."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Susun matriks hak keempat peran utama dari Dataset P, lalu jelaskan tiga akun yang membutuhkan tindakan.",
+      "setup": "Capability dan evidence hanya input authored. Player tidak membuat role atau membaca secret manager.",
+      "starterSql": "SELECT principal, purpose, can_select, can_write, can_ddl, owns_objects\nFROM pg_temp.lesson_role_matrix ORDER BY principal;",
+      "variants": [
+        {
+          "id": "l7m04l01-variant-1",
+          "question": "Runtime baru memiliki is_superuser=true, ownership=false, dan evidence lengkap tanpa secret bocor. Apa keputusan?",
+          "options": [
+            "within_authored_scope karena ownership false.",
+            "hold_evidence karena semua superuser tidak diketahui.",
+            "reduce_runtime_privilege karena superuser tetap memberi hak berlebih."
+          ],
+          "answer": 2,
+          "explanation": "Satu jalur hak berlebih sudah cukup; ownership false tidak menetralkan superuser.",
+          "feedback": [
+            "Belum tepat. Evaluasi semua sumber capability.",
+            "Belum tepat. Evidence skenario sudah lengkap.",
+            "Benar. Hindari credential superuser untuk runtime."
+          ]
+        },
+        {
+          "id": "l7m04l01-variant-2",
+          "question": "Writer memperoleh membership ke role owner dengan SET yang diizinkan. Apa yang harus diperiksa?",
+          "options": [
+            "Hak efektif melalui SET ROLE dan batas credential runtime.",
+            "Hanya teks GRANT SELECT milik writer langsung.",
+            "Warna nama role pada dashboard."
+          ],
+          "answer": 0,
+          "explanation": "Membership dapat membuka jalur ke capability owner walau direct grants writer sempit.",
+          "feedback": [
+            "Benar. Ikuti seluruh jalur hak yang relevan.",
+            "Belum tepat. Direct grants tidak mencakup seluruh hak efektif.",
+            "Belum tepat. Tampilan tidak menentukan privilege."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l7m04l01-edge-1",
+          "question": "Grant tabel saat ini benar, tetapi migrator membuat tabel baru dengan default privileges berbeda. Apa kesimpulan?",
+          "options": [
+            "Semua tabel masa depan pasti sama.",
+            "Periksa default privileges role pembuat dan grant objek baru.",
+            "Naikkan readonly menjadi superuser."
+          ],
+          "answer": 1,
+          "explanation": "Default privileges bergantung role pembuat dan scope; objek baru perlu hak yang sesuai.",
+          "feedback": [
+            "Belum tepat. Grant objek lama tidak otomatis menentukan objek baru.",
+            "Benar. Review existing dan future-object policy.",
+            "Belum tepat. Ini memperbesar blast radius."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l7m04l01-edge-2",
+          "question": "Password sudah diganti tetapi sesi lama masih aktif. Apa batas klaim rotasi?",
+          "options": [
+            "Seluruh akses lama pasti hilang otomatis.",
+            "Tidak perlu memeriksa consumer karena login baru sudah berbeda.",
+            "Perubahan password saja belum membuktikan sesi lama dan salinan secret telah ditangani."
+          ],
+          "answer": 2,
+          "explanation": "Rotasi credential dan penanganan sesi/evidence adalah tahap berbeda.",
+          "feedback": [
+            "Belum tepat. Sesi terautentikasi dapat tetap hidup.",
+            "Belum tepat. Consumer perlu transisi yang terencana.",
+            "Benar. Nyatakan scope containment yang sudah dibuktikan."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Bedakan purpose runtime, migration, dan break_glass sebelum menilai capability.",
+        "Secret bocor mendapat prioritas; evidence NULL harus ditahan.",
+        "Runtime yang superuser, owner, atau dapat DDL melewati batas matriks latihan."
+      ],
+      "solutionSql": "SELECT principal, purpose, can_select, can_write, can_ddl,\n       CASE\n         WHEN secret_in_log IS TRUE THEN 'contain_and_rotate'\n         WHEN effective_verified IS NOT TRUE OR secret_in_log IS NULL THEN 'hold_evidence'\n         WHEN purpose = 'runtime' AND (is_superuser OR can_ddl OR owns_objects)\n           THEN 'reduce_runtime_privilege'\n         ELSE 'within_authored_scope'\n       END AS decision\nFROM pg_temp.lesson_role_matrix\nORDER BY principal;",
+      "solutionExplanation": "Reference hanya membaca matriks authored dan mempertahankan hold untuk evidence tidak lengkap. Ia tidak membuktikan permission efektif database atau mengeksekusi rotasi. Pemeriksaan nyata harus mencakup membership, ownership, PUBLIC, schema/sequence/function rights dan default privileges sesuai scope.",
+      "critical": true
+    },
+    "reflection": "Jelaskan perbedaan writer dan owner, lalu tulis langkah containment ketika credential runtime bocor tanpa memasukkan secret asli ke laporan."
+  },
+  {
+    "id": "l7m04l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "connection-budget",
+      "connection-pooling",
+      "backpressure",
+      "timeouts",
+      "postgresql-lab"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/runtime-config-connection.html",
+      "https://www.pgbouncer.org/features.html"
+    ],
+    "hook": "Empat instance aplikasi memakai pool 20, lalu rolling deployment menambah dua instance sementara. Mengapa pool yang aman per instance dapat menghabiskan budget database secara keseluruhan?",
+    "objectives": [
+      "Menghitung total koneksi backend, reserve, koneksi lain, dan lonjakan instance.",
+      "Membedakan client connection, backend connection, dan antrean pool.",
+      "Memilih batas tunggu serta pooling mode tanpa mengandalkan state session yang tidak dijamin."
+    ],
+    "sections": [
+      {
+        "title": "Pool lokal harus dijumlahkan secara global",
+        "paragraphs": [
+          "Koneksi PostgreSQL memakai proses backend dan sumber daya, sementara query aktif juga memakai memori, CPU, IO, serta lock. max_connections adalah batas jumlah koneksi, bukan janji semua koneksi dapat bekerja cepat bersamaan. Empat instance dengan pool maksimum dua puluh dapat membuka delapan puluh koneksi backend bila masing-masing pool langsung menuju database. Tambahkan worker, job, monitoring, migrator, dan jalur operasional yang memakai slot relevan. Saat rolling deployment, instance lama dan baru dapat overlap; konfigurasi yang pas pada empat instance dapat melewati budget ketika jumlahnya menjadi enam.",
+          "Dataset B menetapkan max_connections 120, gabungan slot reserved dan allowance admin sepuluh, serta dua puluh backend connection lain. Angka sepuluh sudah mencakup reserve pada model dan tidak boleh dikurangi dua kali. Sisa app_budget adalah sembilan puluh. Empat kali dua puluh menghasilkan headroom sepuluh; enam kali dua puluh menghasilkan minus tiga puluh. Semua angka merupakan maksimum rencana authored, bukan observed connection count. Reserve PostgreSQL untuk superuser dan role dengan hak reserved connection mempunyai aturan berbeda; allowance aplikasi harus disesuaikan dengan role dan konfigurasi server sebenarnya."
+        ]
+      },
+      {
+        "title": "Antrean adalah gejala yang harus dijelaskan",
+        "paragraphs": [
+          "Pool dapat menahan request client sambil menunggu koneksi backend. Jika ada pooler bersama, jumlah client tidak otomatis sama dengan jumlah backend; petakan layer pool, kombinasi database/user, reserve pool, worker, dan bypass langsung sebelum menjumlahkan. Memasang pooler tanpa memeriksa total semua pool dapat tetap melebihi limit. Headroom positif juga tidak menjamin latency baik: dua belas waiter pada Dataset B dapat berasal dari query lambat, transaksi lama, lock wait, atau koneksi yang tidak dikembalikan. Memperbesar pool dapat memperparah contention bila sumber masalah adalah database yang sudah jenuh.",
+          "Tetapkan deadline acquisition pool, durasi statement, dan lock wait sesuai kebutuhan; ketiganya mengukur bagian berbeda dari perjalanan request. Terapkan backpressure dan response error yang jelas ketika antrean penuh, lalu selidiki transaksi yang idle in transaction atau memegang lock terlalu lama. Timeout tidak otomatis berarti operasi tulis belum commit. Untuk payment yang hasilnya unknown, tetap gunakan business key serta rekonsiliasi, bukan retry tanpa batas. Nilai waiting_clients NULL pada latihan berarti telemetri belum tersedia; ia tidak boleh diubah menjadi nol waiter untuk memberi kesan sehat."
+        ]
+      },
+      {
+        "title": "Mode pooling mengubah kontrak session",
+        "paragraphs": [
+          "Session pooling mempertahankan backend untuk satu koneksi client, sedangkan transaction pooling hanya menugaskan backend selama transaksi. Karena transaksi berikutnya dapat memakai backend lain, jangan mengandalkan TEMP table atau SET session yang harus bertahan lintas transaksi tanpa dukungan eksplisit. SQL-level PREPARE berbeda dari protocol-level prepared statements yang dukungannya bergantung versi dan konfigurasi pooler. LISTEN serta session advisory lock juga memerlukan perhatian pada mode transaksi. Pilih fitur berdasarkan contract pooler dan aplikasi, bukan hanya angka koneksi yang turun.",
+          "Fixture ini membutuhkan satu session SQL langsung untuk setup TEMP dan report; ia bukan contoh lintas transaksi melalui transaction pooler. Query hanya menghitung budget dan mengklasifikasi antrean authored. Tidak ada pool yang dibuka, timeout diubah, atau load yang dihasilkan. within_numeric_budget berarti aritmetika rencana lolos, bukan rekomendasi ukuran optimal atau bukti kapasitas, latency, dan penggunaan memori production."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset B: empat profil maksimum koneksi dan waiter authored. Satu session langsung menjalankan setup/report TEMP; tidak ada pool exhaustion nyata.",
+      "setupSql": "CREATE TEMP TABLE lesson_connection_budgets (\n  profile_id TEXT PRIMARY KEY,\n  max_connections INTEGER NOT NULL,\n  reserved_and_admin INTEGER NOT NULL,\n  other_backend_connections INTEGER NOT NULL,\n  app_instances INTEGER NOT NULL,\n  pool_per_instance INTEGER NOT NULL,\n  waiting_clients INTEGER\n);\nINSERT INTO pg_temp.lesson_connection_budgets VALUES\n  ('01_baseline',120,10,20,4,20,0),\n  ('02_queue',120,10,20,4,20,12),\n  ('03_rollout_surge',120,10,20,6,20,0),\n  ('04_unknown_wait',120,10,20,4,20,NULL);",
+      "sql": "WITH budgets AS (\n  SELECT *,\n         max_connections - reserved_and_admin - other_backend_connections AS app_budget,\n         app_instances * pool_per_instance AS planned_app_connections\n  FROM pg_temp.lesson_connection_budgets\n)\nSELECT profile_id, app_budget, planned_app_connections,\n       app_budget - planned_app_connections AS headroom, waiting_clients,\n       CASE\n         WHEN planned_app_connections > app_budget THEN 'over_connection_budget'\n         WHEN waiting_clients IS NULL THEN 'inspect_queue_evidence'\n         WHEN waiting_clients > 0 THEN 'investigate_pool_wait'\n         ELSE 'within_numeric_budget'\n       END AS decision\nFROM budgets\nORDER BY profile_id;",
+      "columns": [
+        "profile_id",
+        "app_budget",
+        "planned_app_connections",
+        "headroom",
+        "waiting_clients",
+        "decision"
+      ],
+      "rows": [
+        [
+          "01_baseline",
+          "90",
+          "80",
+          "10",
+          "0",
+          "within_numeric_budget"
+        ],
+        [
+          "02_queue",
+          "90",
+          "80",
+          "10",
+          "12",
+          "investigate_pool_wait"
+        ],
+        [
+          "03_rollout_surge",
+          "90",
+          "120",
+          "-30",
+          "0",
+          "over_connection_budget"
+        ],
+        [
+          "04_unknown_wait",
+          "90",
+          "80",
+          "10",
+          null,
+          "inspect_queue_evidence"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Budget aplikasi 120 - 10 - 20 = 90. Baseline punya headroom 10, antrean 12 tetap perlu investigasi, rollout melampaui budget 30, dan waiter NULL ditahan sebagai evidence hilang. Angka ini bukan benchmark atau simulasi koneksi yang dijalankan."
+    },
+    "checks": [
+      {
+        "id": "l7m04l02-check-1",
+        "question": "Dengan budget aplikasi 90, berapa maksimum pool per instance untuk enam instance identik tanpa headroom tambahan?",
+        "options": [
+          "20 karena baseline memakai 20.",
+          "15 karena 6 × 15 = 90.",
+          "90 karena setiap instance punya budget sendiri."
+        ],
+        "answer": 1,
+        "explanation": "Budget adalah global; 15 hanya batas aritmetika ini, bukan ukuran optimal yang telah diukur.",
+        "feedback": [
+          "Belum tepat. Enam kali dua puluh melewati budget.",
+          "Benar. Tambahkan headroom bila kontrak operasional memerlukannya.",
+          "Belum tepat. Instance berbagi kapasitas server yang sama."
+        ]
+      },
+      {
+        "id": "l7m04l02-check-2",
+        "question": "Mengapa headroom 10 dan waiter 12 tidak otomatis berarti pool harus diperbesar?",
+        "options": [
+          "Headroom selalu menjamin query cepat.",
+          "Waiter tidak pernah dipengaruhi lock.",
+          "Lock wait, transaksi panjang, atau query jenuh dapat menjadi penyebab dan tambahan koneksi dapat memperburuknya."
+        ],
+        "answer": 2,
+        "explanation": "Slot tersedia berbeda dari kapasitas kerja; diagnosis membutuhkan durasi, transaksi, dan resource evidence.",
+        "feedback": [
+          "Belum tepat. Slot bukan ukuran latency.",
+          "Belum tepat. Lock dapat menahan backend dan memperpanjang antrean.",
+          "Benar. Selidiki penyebab sebelum menaikkan concurrency."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Hitung budget serta headroom keempat profil, lalu jelaskan perbedaan over-budget dan antrean di dalam budget.",
+      "setup": "Angka maksimum dan waiter adalah input latihan. Tidak ada benchmark, pooler, atau sesi production yang dikendalikan.",
+      "starterSql": "SELECT * FROM pg_temp.lesson_connection_budgets ORDER BY profile_id;",
+      "variants": [
+        {
+          "id": "l7m04l02-variant-1",
+          "question": "Empat instance menaikkan pool menjadi 25, sementara app_budget tetap 90. Apa hasilnya?",
+          "options": [
+            "Planned 100, headroom -10, over_connection_budget.",
+            "Planned 25, headroom 65, within_numeric_budget.",
+            "Planned 80, headroom 10 karena pool lama masih berlaku."
+          ],
+          "answer": 0,
+          "explanation": "Jumlahkan maksimum seluruh instance: 4 × 25 = 100, lalu 90 - 100 = -10.",
+          "feedback": [
+            "Benar. Nilai per instance harus dikalikan jumlah instance.",
+            "Belum tepat. Ini hanya menghitung satu instance.",
+            "Belum tepat. Konfigurasi baru mengubah planned maximum."
+          ]
+        },
+        {
+          "id": "l7m04l02-variant-2",
+          "question": "Aplikasi memakai shared transaction pooler. Apa yang harus dipetakan sebelum menjumlahkan backend?",
+          "options": [
+            "Jumlah tab browser saja.",
+            "Semua pool database/user, reserve pool, dan koneksi yang bypass pooler.",
+            "Jumlah SELECT dalam source code saja."
+          ],
+          "answer": 1,
+          "explanation": "Client count dan backend count berbeda pada multiplexing; total bergantung topologi pool nyata.",
+          "feedback": [
+            "Belum tepat. Browser tab bukan koneksi backend langsung.",
+            "Benar. Hitung layer dan jalur koneksi secara lengkap.",
+            "Belum tepat. Query source bukan maksimum koneksi serentak."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l7m04l02-edge-1",
+          "question": "TEMP table dibuat di transaksi pertama melalui transaction pooling lalu dipakai di transaksi kedua. Apa risikonya?",
+          "options": [
+            "Backend pasti sama untuk semua transaksi.",
+            "TEMP table menjadi permanen di semua replica.",
+            "Transaksi kedua dapat memakai backend lain; session state tidak boleh diasumsikan bertahan."
+          ],
+          "answer": 2,
+          "explanation": "Transaction pooling memberi affinity selama transaksi, bukan seluruh sesi client.",
+          "feedback": [
+            "Belum tepat. Itu bukan contract transaction pooling.",
+            "Belum tepat. TEMP tetap terkait session backend.",
+            "Benar. Sesuaikan state dengan pooling mode."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l7m04l02-edge-2",
+          "question": "waiting_clients NULL tetapi headroom positif. Apa yang boleh diklaim?",
+          "options": [
+            "Rencana slot masih muat, tetapi keadaan antrean belum diketahui.",
+            "Antrean pasti kosong karena NULL sama dengan nol.",
+            "Latency P99 sudah memenuhi SLO."
+          ],
+          "answer": 0,
+          "explanation": "Aritmetika budget tidak menggantikan telemetri antrean atau latency.",
+          "feedback": [
+            "Benar. Pertahankan batas evidence masing-masing metrik.",
+            "Belum tepat. Missing tidak sama dengan zero.",
+            "Belum tepat. Tidak ada sampel latency di fixture."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Kurangi reserve/admin dan backend lain sekali saja dari max_connections.",
+        "Kalikan pool per instance dengan semua instance termasuk deployment surge.",
+        "Setelah budget, klasifikasi waiter sebagai unknown, positif, atau nol tanpa mengklaim latency."
+      ],
+      "solutionSql": "WITH budgets AS (\n  SELECT *,\n         max_connections - reserved_and_admin - other_backend_connections AS app_budget,\n         app_instances * pool_per_instance AS planned_app_connections\n  FROM pg_temp.lesson_connection_budgets\n)\nSELECT profile_id, app_budget, planned_app_connections,\n       app_budget - planned_app_connections AS headroom, waiting_clients,\n       CASE\n         WHEN planned_app_connections > app_budget THEN 'over_connection_budget'\n         WHEN waiting_clients IS NULL THEN 'inspect_queue_evidence'\n         WHEN waiting_clients > 0 THEN 'investigate_pool_wait'\n         ELSE 'within_numeric_budget'\n       END AS decision\nFROM budgets\nORDER BY profile_id;",
+      "solutionExplanation": "Reference menghitung planned maximum dan headroom, lalu memisahkan over-budget, queue pressure, dan missing evidence. Ia tidak memilih ukuran pool optimal atau membuktikan throughput. TEMP setup/report mengasumsikan satu session langsung, bukan state lintas transaksi pada transaction pooler.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa pool per instance harus mempertimbangkan rolling deployment, lalu bedakan batas koneksi, antrean, latency, dan session-state compatibility."
+  },
+  {
+    "id": "l7m04l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "incident-response",
+      "runbooks",
+      "blocked-writes",
+      "backup-restore",
+      "replica-lag"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/monitoring-locks.html",
+      "https://www.postgresql.org/docs/17/functions-admin.html",
+      "https://www.postgresql.org/docs/17/continuous-archiving.html",
+      "https://www.postgresql.org/docs/17/warm-standby.html"
+    ],
+    "hook": "Blocked writes, backup gagal, dan replica tertinggal muncul bersamaan. Bagaimana memilih bukti dan mitigasi yang sesuai tanpa langsung restart seluruh komponen atau menghapus WAL untuk mengosongkan disk?",
+    "objectives": [
+      "Menghubungkan gejala dengan evidence, dampak pengguna, owner, dan tindakan terbatas.",
+      "Membedakan mitigasi sementara, pemulihan lengkap, dan verification criteria.",
+      "Menyusun timeline dan postmortem tanpa menjadikan input game day sebagai evidence drill nyata."
+    ],
+    "sections": [
+      {
+        "title": "Mulai dari dampak dan bukti yang dibatasi",
+        "paragraphs": [
+          "Incident commander perlu menyatakan layanan yang terdampak, waktu mulai yang diketahui, batas ketidakpastian, dan owner tindakan. Prioritaskan keselamatan data serta tujuan layanan: payment yang tidak dapat dikonfirmasi berbeda dari dashboard yang tertinggal. Simpan timeline keputusan, gejala, metrik dengan timestamp, dan perubahan konfigurasi relevan tanpa membawa password atau payload sensitif. Jangan menganggap grafik merah pasti mempunyai satu akar masalah. Lock, IO, connection exhaustion, dan replay lag dapat saling memengaruhi; evidence harus menghubungkan dugaan ke session, query, atau komponen yang tepat sebelum tindakan berisiko.",
+          "Untuk blocked writes, periksa wait event dan rantai blocker melalui evidence pg_stat_activity, pg_locks, atau pg_blocking_pids yang scope-nya sesuai. Session paling lama belum tentu blocker yang benar; baca transaction age, query age, owner, dan perubahan yang belum commit. Pembatalan statement berbeda dari terminasi session: transaksi yang masih terbuka atau aborted dapat tetap membutuhkan rollback dan melepas lock. Koordinasikan dengan owner untuk menyelesaikan transaksi yang aman, beri deadline tindakan dan pahami dampak retry sebelum mengirim cancel atau terminate."
+        ]
+      },
+      {
+        "title": "Backup gap dan lag membutuhkan runbook berbeda",
+        "paragraphs": [
+          "Jika backup atau archive gagal, catat artifact terakhir yang benar-benar usable, cakupan WAL/timeline, usia titik recovery, ruang disk, error akses, dan target RPO. File backup yang ada tidak membuktikan restore dapat mencapai target. Jangan menghapus WAL aktif atau yang masih dibutuhkan replication slot/archive demi membuat alarm hilang. Perbaiki penyebab dengan owner storage/backup dan prosedur retention yang benar, lalu verifikasi continuous chain serta restore pada lingkungan terisolasi yang diotorisasi. Replika yang masih hidup tidak menggantikan backup untuk kesalahan data yang ikut direplikasi.",
+          "Untuk replica lag, bedakan receiver tertinggal dari replay tertahan, cek kesehatan endpoint serta lineage, dan gunakan target commit ketika butuh read-your-writes. Mitigasi dapat mengalihkan read kritis ke primary otoritatif yang sudah diverifikasi dengan snapshot baru, sepanjang kapasitas dan kontrak layanan memungkinkan. Ini bukan alasan langsung mempromosikan replica yang tertinggal atau menganggap routing selesai memperbaiki akar penyebab. Dashboard yang menerima bounded staleness dapat memakai kebijakan berbeda; jika sumber otoritatif tidak tersedia, laporkan status belum terkonfirmasi sesuai deadline."
+        ]
+      },
+      {
+        "title": "Tentukan syarat berhenti dan verifikasi pemulihan",
+        "paragraphs": [
+          "Setiap tindakan membutuhkan owner, otorisasi, dampak yang diharapkan, batas waktu, serta kondisi berhenti atau rollback yang masuk akal. Stop rule diperlukan bila error naik, RPO memburuk, invariant payment rusak, atau asumsi evidence ternyata salah. Recovery diterima melalui kriteria domain: write penting kembali bekerja dengan integritas yang benar, backup chain dapat diverifikasi, dan read memenuhi kontrak freshness. Penurunan alarm tunggal atau restart sukses belum cukup. Bila outcome COMMIT tidak diketahui, rekonsiliasi business key tetap diperlukan sebelum retry; rollback database tidak membatalkan efek provider di luar database.",
+          "Game day lesson ini adalah latihan keputusan berbasis tabel authored, bukan drill production atau chaos test yang sudah dijalankan. Flag evidence_confirmed, action_authorized, dan stop_rule_defined merupakan input rubrik. SQL memilih langkah berikutnya tanpa membatalkan query, menghapus file, menjalankan restore, atau mengubah route. Postmortem yang baik memisahkan apa yang diamati dari hipotesis, menjelaskan kontribusi teknis dan proses tanpa menyalahkan individu, lalu memberi tindak lanjut dengan owner serta evidence penyelesaian yang dapat ditinjau."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset I: lima kartu insiden dengan signal dan flag rubrik authored. Tidak ada telemetry live, command operasional, atau game day yang dijalankan.",
+      "setupSql": "CREATE TEMP TABLE lesson_incident_decisions (\n  incident_id TEXT PRIMARY KEY,\n  signal TEXT NOT NULL,\n  evidence_confirmed BOOLEAN,\n  action_authorized BOOLEAN,\n  stop_rule_defined BOOLEAN\n);\nINSERT INTO pg_temp.lesson_incident_decisions VALUES\n  ('01_blocked_writes','confirmed_blocker',true,true,true),\n  ('02_backup_gap','missing_archive',true,true,true),\n  ('03_replica_lag','replay_behind_target',true,true,true),\n  ('04_unknown','unclassified',NULL,true,true),\n  ('05_unapproved','confirmed_blocker',true,false,true);",
+      "sql": "SELECT incident_id, signal,\n       CASE\n         WHEN evidence_confirmed IS NOT TRUE THEN 'collect_scoped_evidence'\n         WHEN action_authorized IS NOT TRUE OR stop_rule_defined IS NOT TRUE\n           THEN 'hold_action_review'\n         WHEN signal = 'confirmed_blocker' THEN 'review_blocker_transaction'\n         WHEN signal = 'missing_archive' THEN 'repair_archive_and_verify_chain'\n         WHEN signal = 'replay_behind_target' THEN 'route_critical_reads_to_authoritative_source'\n         ELSE 'escalate_unclassified_signal'\n       END AS next_decision\nFROM pg_temp.lesson_incident_decisions\nORDER BY incident_id;",
+      "columns": [
+        "incident_id",
+        "signal",
+        "next_decision"
+      ],
+      "rows": [
+        [
+          "01_blocked_writes",
+          "confirmed_blocker",
+          "review_blocker_transaction"
+        ],
+        [
+          "02_backup_gap",
+          "missing_archive",
+          "repair_archive_and_verify_chain"
+        ],
+        [
+          "03_replica_lag",
+          "replay_behind_target",
+          "route_critical_reads_to_authoritative_source"
+        ],
+        [
+          "04_unknown",
+          "unclassified",
+          "collect_scoped_evidence"
+        ],
+        [
+          "05_unapproved",
+          "confirmed_blocker",
+          "hold_action_review"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Tiga kartu dengan evidence dan otorisasi lengkap mendapat rencana spesifik. Unknown mengumpulkan evidence; tindakan tanpa otorisasi ditahan. next_decision adalah rekomendasi rubrik, bukan bukti blocker hilang, archive pulih, atau routing berubah."
+    },
+    "checks": [
+      {
+        "id": "l7m04l03-check-1",
+        "question": "Blocked writes sudah dikaitkan dengan transaksi tertentu. Apa langkah sebelum terminate?",
+        "options": [
+          "Terminate semua session supaya alarm cepat turun.",
+          "Abaikan owner karena query lama selalu aman dibunuh.",
+          "Review owner, dampak transaksi, opsi cancel/rollback, otorisasi, dan stop rule."
+        ],
+        "answer": 2,
+        "explanation": "Bukti blocker membantu memilih tindakan terbatas; terminasi dapat membatalkan kerja dan memicu retry.",
+        "feedback": [
+          "Belum tepat. Tindakan luas menambah dampak tanpa diagnosis.",
+          "Belum tepat. Umur query tidak menentukan keamanan terminasi.",
+          "Benar. Pilih tindakan paling terarah dengan evidence."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l7m04l03-check-2",
+        "question": "Apa syarat menyebut recovery selesai?",
+        "options": [
+          "Kriteria layanan dan integritas yang disepakati terverifikasi, bukan hanya alarm turun.",
+          "Satu restart mengembalikan exit code nol.",
+          "Tabel authored berisi flag true."
+        ],
+        "answer": 0,
+        "explanation": "Recovery membutuhkan evidence domain dan scope yang jelas; script klasifikasi tidak mengukurnya.",
+        "feedback": [
+          "Benar. Nyatakan evidence dan batas klaim recovery.",
+          "Belum tepat. Proses hidup belum membuktikan layanan benar.",
+          "Belum tepat. Input rubrik bukan observasi production."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Pilih next decision untuk setiap kartu, lalu susun timeline insiden, owner mitigasi, stop rule, dan kriteria verifikasi.",
+      "setup": "Latihan berbentuk prediksi dan refleksi. Tidak ada cancel/terminate, failover, restore, cleanup WAL, atau traffic routing yang dijalankan.",
+      "starterSql": "SELECT * FROM pg_temp.lesson_incident_decisions ORDER BY incident_id;",
+      "variants": [
+        {
+          "id": "l7m04l03-variant-1",
+          "question": "Kartu replica lag memiliki evidence=true dan action_authorized=true tetapi stop_rule_defined=false. Apa hasil CASE?",
+          "options": [
+            "Langsung route karena evidence sudah lengkap.",
+            "hold_action_review karena batas tindakan belum ditentukan.",
+            "collect_scoped_evidence karena semua flag dianggap NULL."
+          ],
+          "answer": 1,
+          "explanation": "Otorisasi saja tidak mengganti kondisi berhenti dan batas dampak.",
+          "feedback": [
+            "Belum tepat. Gate stop rule masih gagal.",
+            "Benar. Lengkapi rencana sebelum tindakan.",
+            "Belum tepat. Evidence skenario true, bukan NULL."
+          ]
+        },
+        {
+          "id": "l7m04l03-variant-2",
+          "question": "Archive gagal dan ruang disk menipis. Apa rencana yang sesuai?",
+          "options": [
+            "Hapus WAL aktif tanpa memeriksa consumer agar disk cepat kosong.",
+            "Nyatakan replica sebagai pengganti semua backup.",
+            "Periksa error archive, consumer/retention, dan kapasitas bersama owner; pulihkan chain dengan prosedur yang benar."
+          ],
+          "answer": 2,
+          "explanation": "WAL mungkin masih diperlukan recovery atau replication; cleanup buta dapat merusak recoverability.",
+          "feedback": [
+            "Belum tepat. File yang dibutuhkan tidak boleh dihapus sembarang.",
+            "Belum tepat. Replica juga mereplikasi kesalahan data.",
+            "Benar. Jaga chain dan batas RPO selama mitigasi."
+          ],
+          "critical": true
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l7m04l03-edge-1",
+          "question": "Alarm hilang sesudah cancel query, tetapi transaksi blocker masih terbuka. Apa yang perlu diverifikasi?",
+          "options": [
+            "Transaksi selesai atau rollback dan lock benar-benar terlepas sesuai evidence.",
+            "Tidak ada lagi karena cancel selalu menutup session.",
+            "Payment eksternal pasti ikut dibatalkan."
+          ],
+          "answer": 0,
+          "explanation": "Statement cancellation, transaction completion, session termination, dan efek eksternal adalah hal berbeda.",
+          "feedback": [
+            "Benar. Periksa hasil domain dan lock, bukan alarm saja.",
+            "Belum tepat. Cancel statement tidak sama dengan terminate session.",
+            "Belum tepat. Rollback database tidak membatalkan efek provider."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l7m04l03-edge-2",
+          "question": "Timeline hanya mencatat hipotesis IO lambat tanpa metrik pendukung. Bagaimana menulis postmortem?",
+          "options": [
+            "Tulis sebagai akar masalah yang pasti agar laporan selesai.",
+            "Tandai hipotesis, catat evidence hilang, dan tetapkan tindak lanjut dengan owner.",
+            "Hapus semua ketidakpastian dari laporan."
+          ],
+          "answer": 1,
+          "explanation": "Postmortem perlu membedakan observasi dan dugaan agar tindakan berikutnya dapat ditinjau.",
+          "feedback": [
+            "Belum tepat. Kepastian tanpa evidence menyesatkan perbaikan.",
+            "Benar. Ketidakpastian yang jelas membantu investigasi berikutnya.",
+            "Belum tepat. Menghapus ketidakpastian tidak menghasilkan bukti."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Baca evidence_confirmed dahulu; NULL harus mengarah ke pengumpulan bukti.",
+        "Tahan tindakan yang belum diotorisasi atau belum mempunyai stop rule.",
+        "Setelah gate, petakan blocker, archive gap, dan replay lag ke runbook berbeda; hasil masih sebuah keputusan."
+      ],
+      "solutionSql": "SELECT incident_id, signal,\n       CASE\n         WHEN evidence_confirmed IS NOT TRUE THEN 'collect_scoped_evidence'\n         WHEN action_authorized IS NOT TRUE OR stop_rule_defined IS NOT TRUE\n           THEN 'hold_action_review'\n         WHEN signal = 'confirmed_blocker' THEN 'review_blocker_transaction'\n         WHEN signal = 'missing_archive' THEN 'repair_archive_and_verify_chain'\n         WHEN signal = 'replay_behind_target' THEN 'route_critical_reads_to_authoritative_source'\n         ELSE 'escalate_unclassified_signal'\n       END AS next_decision\nFROM pg_temp.lesson_incident_decisions\nORDER BY incident_id;",
+      "solutionExplanation": "Reference mengklasifikasi kartu authored dengan prioritas evidence, authorization/stop rule, lalu signal. Ia tidak mengeksekusi mitigasi dan tidak membuktikan layanan pulih. Timeline, invariant, backup-chain evidence, kontrak read, serta follow-up ber-owner tetap perlu dinyatakan terpisah.",
+      "critical": true
+    },
+    "reflection": "Pilih salah satu dari blocked writes, backup gagal, atau replica lag; tulis evidence, owner, mitigasi terbatas, stop rule, verification criteria, dan satu hipotesis yang belum terbukti."
+  }
+]
