@@ -349,5 +349,15 @@
   "multi-tenancy": "multi-tenancy",
   "tenant-isolation": "isolasi tenant",
   "composite-keys": "kunci gabungan",
-  "row-security": "keamanan baris"
+  "row-security": "keamanan baris",
+  "distributed-consistency": "konsistensi terdistribusi",
+  "causal-reads": "read kausal",
+  "network-partitions": "partisi jaringan",
+  "distributed-transactions": "transaksi terdistribusi",
+  "saga": "saga",
+  "compensation": "kompensasi",
+  "two-phase-commit": "commit dua fase",
+  "durable-dedup": "deduplikasi durable",
+  "event-ordering": "urutan event",
+  "gap-handling": "penanganan gap"
 }

@@ -330,3 +330,11 @@ Added l8m02l01–l8m02l03 with full bilingual authoring, worked TEMP SQL/results
 Totals: 35 authored modules, 105 published / 15 draft lessons; 108 combined lessons plus three labs (111 activity milestones). Catalog/messages/labels and existing content registries include the new module. Existing E2E count/draft-route expectations only move to l8m03l01, without expanded coverage. Prior IDs/versions, blueprint, seed and storage stay unchanged; L8 assessment remains gated.
 
 Source/diff review only. No tests, audits, SQL, runtime, manual/browser checks, lint, typecheck or build were run. Result rows and flags are authored expectations, not observed pruning, capacity, migration or security evidence. Next milestone: L8M03; commit and push L8M02 before continuing.
+
+## L8M03 — Distributed Data Systems — 27 October 2026
+
+Added l8m03l01–l8m03l03 with the full bilingual contract, independent TEMP SQL/results and graded practice. Read cards distinguish bounded/causal/authority contracts with lineage and availability limits. Order-payment-inventory cards distinguish 2PC decision recovery, saga compensation, unknown charge, refund pending and confirmed final combinations. Delta delivery cards distinguish identical duplicates, identity conflicts, contiguous next versions, gaps, invalid payloads and missing history; all candidates use the same initial snapshot and no apply loop is implied.
+
+Totals: 36 authored modules, 108 published / 12 draft lessons; 111 combined lessons plus three labs (114 activity milestones). Content/messages/labels and existing registries are updated. Existing E2E count/first-draft expectations move to l8m04l01 without expanded coverage. Blueprint, seed, prior versions and learner storage remain unchanged; L8 level assessment stays gated until L8M04.
+
+Source/diff review only. No tests, audits, SQL, runtime, manual/browser checks, lint, typecheck or build were run. Expected decisions are authored rather than executed replication, saga, transport or consumer evidence. Commit and push this module, then continue L8M04.

@@ -1,16 +1,8 @@
 # Remaining curriculum authoring
 
-The following 15 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
+The following 12 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L8 — Database Architecture & Scaling
-
-### L8M03 — Distributed Data Systems
-
-Prerequisite: l8m02. Scenario: Platform-scale.
-
-- [ ] `l8m03l01` — Replication consistency
-- [ ] `l8m03l02` — Distributed transactions & saga
-- [ ] `l8m03l03` — Retries, ordering, dan duplicates
 
 ### L8M04 — Choosing the Right Data Store
 

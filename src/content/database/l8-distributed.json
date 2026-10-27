@@ -1,0 +1,704 @@
+[
+  {
+    "id": "l8m03l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "distributed-consistency",
+      "replication",
+      "causal-reads",
+      "network-partitions"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/runtime-config-wal.html#GUC-SYNCHRONOUS-COMMIT",
+      "https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs"
+    ],
+    "hook": "Payment sudah commit pada sumber, tetapi receipt, analytics dan notification service menunjukkan versi berbeda. Kapan keterlambatan itu dapat diterima dan kapan layanan harus menunggu atau menolak keputusan?",
+    "objectives": [
+      "Membedakan commit durability, replica visibility dan kontrak read antar-service.",
+      "Menentukan causal/bounded/authority read berdasarkan invariant domain.",
+      "Menjelaskan asumsi konvergensi dan respons terhadap partition atau konflik writer."
+    ],
+    "sections": [
+      {
+        "title": "Commit sumber bukan visibility semua service",
+        "paragraphs": [
+          "Sebuah perubahan dapat durable pada sumber sementara salinan di service lain belum menerapkannya. Payment service, dashboard dan notification consumer mungkin mempunyai storage serta jadwal apply berbeda. Strong consistency adalah istilah yang perlu diperjelas dengan model yang dimaksud; linearizability, serializable transaction dan read-your-writes bukan sinonim. Serializable mengatur hasil transaksi yang setara dengan urutan serial, sementara read-your-writes hanya menjamin write terkait terlihat pada read yang memenuhi scope. Jangan menyimpulkan semua service sudah paling baru hanya dari sukses COMMIT satu database.",
+          "Pada PostgreSQL, acknowledgment synchronous_commit mempunyai scope durability atau apply pada standby tertentu sesuai mode serta konfigurasi. Remote flush bukan jaminan read sudah melihat row, dan remote_apply pada standby yang dipilih bukan jaminan seluruh read model lintas service selesai. Bahkan setelah replay, snapshot transaksi lama dapat tetap melihat state lama. Kontrak read perlu menyatakan endpoint, lineage, snapshot, token dan deadline, bukan hanya label sync atau async pada diagram arsitektur."
+        ]
+      },
+      {
+        "title": "Kebutuhan domain memilih jaminan",
+        "paragraphs": [
+          "Dashboard dapat menerima snapshot yang terbukti paling tua lima detik dan diberi label. Receipt sesudah payment terkonfirmasi dapat mensyaratkan minimal versi invoice yang dikembalikan write tersebut. Otorisasi debit harus menuju transaksi yang menegakkan invariant pada sumber sah; read replica yang tampak baru belum menjadi guard saldo. Satu operasi dapat memilih menunggu terbatas, unavailable atau pending sesuai workflow, tetapi tidak boleh diam-diam mengganti jaminan dengan stale read yang terlihat sukses.",
+          "Saat network partition, sebagian jalur tidak dapat saling bertukar informasi. Jika keputusan perlu authority yang tidak dapat dijangkau, menolak atau menunda dapat menjadi konsekuensi correctness yang disepakati. Endpoint lain mungkin tetap melayani data berlabel sesuai kontraknya. Ini bukan perintah menghentikan seluruh platform setiap gangguan jaringan, maupun izin menulis di kedua sisi tanpa protokol. Tentukan operasi, scope failure, deadline serta data yang boleh dibaca sebelum insiden agar availability tidak disamakan dengan selalu mengembalikan angka."
+        ]
+      },
+      {
+        "title": "Eventual memerlukan mekanisme konvergensi",
+        "paragraphs": [
+          "Eventually consistent berarti salinan dapat berbeda sementara dan diharapkan konvergen di bawah asumsi delivery, pemrosesan dan aturan penyelesaian konflik yang ditetapkan. Sistem yang kehilangan event tanpa replay tidak menjadi benar hanya karena menunggu. Outbox, retry terukur, dedup, pemantauan lag, dead-letter handling serta rekonsiliasi membantu menjaga jalur itu. Jika ada multi-writer, aturan identity dan merge harus sesuai invariant; timestamp terbesar tidak otomatis aman untuk uang, stok atau entitlement.",
+          "Dataset R membandingkan read satu aggregate pada lineage yang diasumsikan comparable. Flag lineage_verified dan authority_available adalah input authored; causal-read rows juga mengasumsikan snapshot serta token sudah divalidasi. CASE hanya mengklasifikasi enam kartu. Ia tidak menghubungi replica, menetapkan consistency model platform, menerbitkan token atau menjalankan failover. Hasil mengajarkan kontrak dan failure behavior, bukan evidence distributed guarantee sudah terbukti."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset R: enam keputusan read antar-service pada satu aggregate dengan versi dan provenance authored. Tidak ada replikasi live.",
+      "setupSql": "CREATE TEMP TABLE lesson_service_reads (\n  request_id TEXT PRIMARY KEY, service TEXT NOT NULL, contract TEXT NOT NULL,\n  required_version INTEGER, observed_version INTEGER,\n  source_age_s INTEGER, max_age_s INTEGER NOT NULL,\n  lineage_verified BOOLEAN, authority_available BOOLEAN\n);\nINSERT INTO pg_temp.lesson_service_reads VALUES\n  ('01_dashboard','analytics','bounded',NULL,10,3,5,true,false),\n  ('02_receipt_wait','receipt','read_own_write',12,10,3,0,true,false),\n  ('03_receipt_ready','receipt','read_own_write',12,12,0,0,true,false),\n  ('04_debit_partition','ledger','authority',12,12,0,0,true,false),\n  ('05_unknown_scope','analytics','bounded',NULL,12,NULL,5,NULL,false),\n  ('06_authority_read','ledger','authority',12,12,0,0,true,true);",
+      "sql": "SELECT request_id, service, contract, observed_version, source_age_s,\n       CASE\n         WHEN lineage_verified IS NOT TRUE THEN 'hold_unknown_lineage'\n         WHEN contract = 'authority' THEN\n           CASE WHEN authority_available IS TRUE THEN 'authoritative_transaction_path'\n                ELSE 'unavailable_no_stale_debit' END\n         WHEN contract = 'read_own_write' THEN\n           CASE WHEN required_version IS NOT NULL AND observed_version >= required_version\n                  THEN 'serve_causal_read'\n                ELSE 'wait_bounded_or_unavailable' END\n         WHEN contract = 'bounded' THEN\n           CASE WHEN source_age_s BETWEEN 0 AND max_age_s THEN 'serve_labeled_snapshot'\n                ELSE 'degraded_or_unavailable' END\n         ELSE 'hold_undefined_contract'\n       END AS decision\nFROM pg_temp.lesson_service_reads\nORDER BY request_id;",
+      "columns": [
+        "request_id",
+        "service",
+        "contract",
+        "observed_version",
+        "source_age_s",
+        "decision"
+      ],
+      "rows": [
+        [
+          "01_dashboard",
+          "analytics",
+          "bounded",
+          "10",
+          "3",
+          "serve_labeled_snapshot"
+        ],
+        [
+          "02_receipt_wait",
+          "receipt",
+          "read_own_write",
+          "10",
+          "3",
+          "wait_bounded_or_unavailable"
+        ],
+        [
+          "03_receipt_ready",
+          "receipt",
+          "read_own_write",
+          "12",
+          "0",
+          "serve_causal_read"
+        ],
+        [
+          "04_debit_partition",
+          "ledger",
+          "authority",
+          "12",
+          "0",
+          "unavailable_no_stale_debit"
+        ],
+        [
+          "05_unknown_scope",
+          "analytics",
+          "bounded",
+          "12",
+          null,
+          "hold_unknown_lineage"
+        ],
+        [
+          "06_authority_read",
+          "ledger",
+          "authority",
+          "12",
+          "0",
+          "authoritative_transaction_path"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Versi 10 boleh untuk dashboard dengan bound yang terpenuhi tetapi belum memenuhi receipt versi 12. Debit tetap membutuhkan authority; unknown lineage tidak berubah menjadi lag nol. Keputusan authority adalah rencana jalur transaksi, bukan debit yang dieksekusi."
+    },
+    "checks": [
+      {
+        "id": "l8m03l01-check-1",
+        "question": "Payment service sudah versi 12 tetapi notification service baru versi 10. Apa maknanya?",
+        "options": [
+          "Payment pasti belum commit karena notification tertinggal.",
+          "Salinan service dapat tertinggal; nilai versi comparable hanya pada aggregate dan lineage yang sama.",
+          "Versi 12 invoice lain membuktikan notification ini sudah lengkap."
+        ],
+        "answer": 1,
+        "explanation": "Commit sumber dan visibility salinan adalah hal berbeda; token tidak boleh dibandingkan lintas scope.",
+        "feedback": [
+          "Belum tepat. Lag consumer tidak membatalkan commit sumber.",
+          "Benar. Nyatakan scope dan visibility requirement.",
+          "Belum tepat. Versi aggregate lain tidak relevan."
+        ]
+      },
+      {
+        "id": "l8m03l01-check-2",
+        "question": "Jaringan ke authority terputus dan saldo replica tampak cukup. Apa respons untuk debit?",
+        "options": [
+          "Tetap menjaga invariant; unavailable/pending sesuai protokol, bukan mengizinkan debit dari saldo stale.",
+          "Pakai replica karena semua sistem harus selalu tersedia.",
+          "Naikkan required_version lalu anggap terpenuhi."
+        ],
+        "answer": 0,
+        "explanation": "Saat jalur yang menegakkan invariant tidak tersedia, menebak saldo melanggar kontrak; status pending harus punya workflow yang jelas.",
+        "feedback": [
+          "Benar. Tentukan failure behavior sebelum gangguan.",
+          "Belum tepat. Availability tidak membenarkan debit yang salah.",
+          "Belum tepat. Token bukan bukti yang dapat diciptakan client."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi read decision dan tetapkan kontrak antar-service ketika commit baru terjadi, jaringan terputus atau lineage tidak diketahui.",
+      "setup": "Fixture TEMP R mengasumsikan versi satu aggregate, lineage comparable, serta snapshot causal valid ketika flag lengkap. Bukan consistency checker live.",
+      "starterSql": "SELECT request_id, contract, required_version, observed_version FROM pg_temp.lesson_service_reads ORDER BY request_id;",
+      "variants": [
+        {
+          "id": "l8m03l01-variant-1",
+          "question": "Receipt mensyaratkan versi 12 tetapi membaca versi 10. Apa keputusan CASE?",
+          "options": [
+            "serve_causal_read karena row tidak NULL.",
+            "unavailable_no_stale_debit karena receipt adalah debit.",
+            "wait_bounded_or_unavailable sampai read memenuhi causal requirement."
+          ],
+          "answer": 2,
+          "explanation": "Read-your-writes membutuhkan observed_version minimal required_version pada scope yang sudah diverifikasi.",
+          "feedback": [
+            "Belum tepat. Ada row belum berarti melihat write terkait.",
+            "Belum tepat. Kebutuhan receipt read berbeda dari transaksi debit.",
+            "Benar. Penantian harus dibatasi deadline."
+          ]
+        },
+        {
+          "id": "l8m03l01-variant-2",
+          "question": "Dashboard menerima umur maksimal 5 detik, source age=3, lineage terverifikasi. Apa hasil?",
+          "options": [
+            "serve_labeled_snapshot; ini belum menjanjikan semua write terakhir terlihat.",
+            "Tolak karena semua eventual read salah.",
+            "Anggap linearizable untuk semua invoice."
+          ],
+          "answer": 0,
+          "explanation": "Snapshot memenuhi batas staleness authored, berbeda dari causal visibility atau linearizability seluruh sistem.",
+          "feedback": [
+            "Benar. Kontrak domain menentukan kecocokan read.",
+            "Belum tepat. Bounded stale dapat tepat untuk dashboard.",
+            "Belum tepat. Umur snapshot tidak membuktikan global ordering."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l8m03l01-edge-1",
+          "question": "Replikasi berhenti selamanya. Apakah kata eventual menjanjikan salinan pasti menyusul tanpa perbaikan?",
+          "options": [
+            "Ya, waktu saja menyinkronkan seluruh sistem.",
+            "Tidak; konvergensi membutuhkan delivery/proses yang kembali berjalan, retry, dan rekonsiliasi konflik.",
+            "Ya, selama cache TTL tidak terbatas."
+          ],
+          "answer": 1,
+          "explanation": "Eventually consistent bergantung asumsi liveness dan mekanisme konvergensi; partition permanen tidak hilang dengan label.",
+          "feedback": [
+            "Belum tepat. Perubahan harus benar-benar dikirim dan diterapkan.",
+            "Benar. Dokumentasikan kondisi dan alert ketika konvergensi berhenti.",
+            "Belum tepat. TTL tidak memperbaiki delivery sumber."
+          ]
+        },
+        {
+          "id": "l8m03l01-edge-2",
+          "question": "Dua writer independen memberi versi 12 untuk invoice yang sama dengan paid berbeda. Apa kesimpulan?",
+          "options": [
+            "Pilih timestamp client terbesar untuk debit finansial.",
+            "Jumlahkan keduanya karena versinya sama.",
+            "Otoritas versi/konflik belum terdefinisi; hold dan rekonsiliasi sesuai invariant, bukan last-write-wins sembarang."
+          ],
+          "answer": 2,
+          "explanation": "Satu counter bukan solusi konflik multi-writer; identity, lineage dan aturan merge harus ditetapkan.",
+          "feedback": [
+            "Belum tepat. Clock client bukan otoritas finansial.",
+            "Belum tepat. Versi sama tidak berarti dua efek sah.",
+            "Benar. Hindari menyembunyikan split authority."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Pastikan versi hanya dibandingkan pada aggregate dan lineage yang sama.",
+        "Bedakan bounded snapshot, causal read dan transaksi authority.",
+        "Gangguan authority tidak mengizinkan stale debit; eventual memerlukan delivery dan rekonsiliasi yang hidup."
+      ],
+      "solutionSql": "SELECT request_id, service, contract, observed_version, source_age_s,\n       CASE\n         WHEN lineage_verified IS NOT TRUE THEN 'hold_unknown_lineage'\n         WHEN contract = 'authority' THEN\n           CASE WHEN authority_available IS TRUE THEN 'authoritative_transaction_path'\n                ELSE 'unavailable_no_stale_debit' END\n         WHEN contract = 'read_own_write' THEN\n           CASE WHEN required_version IS NOT NULL AND observed_version >= required_version\n                  THEN 'serve_causal_read'\n                ELSE 'wait_bounded_or_unavailable' END\n         WHEN contract = 'bounded' THEN\n           CASE WHEN source_age_s BETWEEN 0 AND max_age_s THEN 'serve_labeled_snapshot'\n                ELSE 'degraded_or_unavailable' END\n         ELSE 'hold_undefined_contract'\n       END AS decision\nFROM pg_temp.lesson_service_reads\nORDER BY request_id;",
+      "solutionExplanation": "Reference mempertahankan hold untuk lineage unknown dan membedakan tiga kontrak. Flag serta versi tidak diukur. Jaminan platform tetap memerlukan protokol source authority, snapshot, token, liveness, conflict handling dan observability yang sesuai domain.",
+      "critical": true
+    },
+    "reflection": "Bandingkan dashboard, receipt dan debit ketika source commit sudah terjadi tetapi salinan tertinggal atau jaringan terputus; sebutkan scope token, deadline dan asumsi konvergensi."
+  },
+  {
+    "id": "l8m03l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "distributed-transactions",
+      "saga",
+      "compensation",
+      "two-phase-commit"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/sql-prepare-transaction.html",
+      "https://learn.microsoft.com/en-us/azure/architecture/patterns/saga",
+      "https://learn.microsoft.com/en-us/azure/architecture/patterns/compensating-transaction"
+    ],
+    "hook": "Order berhasil reserve stok dan charge payment, tetapi pengiriman gagal. Apakah seluruh langkah bisa di-ROLLBACK dengan satu query, dan apa yang terjadi bila refund juga belum diketahui hasilnya?",
+    "objectives": [
+      "Membedakan transaksi lokal, atomic commit terkoordinasi dan saga.",
+      "Menentukan next step order-payment-inventory tanpa menyamakan kompensasi dengan rollback.",
+      "Menangani prepared/unknown/pending dengan identity, evidence dan recovery owner."
+    ],
+    "sections": [
+      {
+        "title": "Tentukan resource yang benar-benar ikut transaksi",
+        "paragraphs": [
+          "BEGIN dan COMMIT PostgreSQL menjaga perubahan pada resource transaksi lokal yang sama. Memanggil payment provider atau service inventory melalui HTTP tidak otomatis memasukkannya ke transaksi itu. Dua database terpisah juga tidak berbagi atomic commit hanya karena aplikasi membuka dua koneksi. Pilihan paling sederhana dapat mempertahankan invariant dalam satu database bila domain dan workload mengizinkan. Jika batas service memang diperlukan, tulis failure window di antara setiap commit, publish, ack dan efek eksternal sebelum memilih protokol.",
+          "Two-phase commit meminta participant prepare, lalu coordinator menetapkan keputusan commit atau abort yang dipulihkan secara durable. Participant prepared dapat menahan lock serta resource sampai keputusan diselesaikan. Coordinator failure atau network partition dapat menunda hasil; timeout participant saja tidak mengizinkan menebak keputusan global. PostgreSQL PREPARE TRANSACTION dirancang untuk transaction manager, bukan shortcut interaktif, dan transaksi yang memakai temporary table tidak bisa diprepare. Lesson ini tidak menjalankan PREPARE, membuka participant, atau mengubah konfigurasi prepared transaction."
+        ]
+      },
+      {
+        "title": "Saga menyimpan kemajuan dan efek bisnis baru",
+        "paragraphs": [
+          "Saga adalah rangkaian transaksi lokal dengan kemajuan durable serta langkah kompensasi yang sesuai domain. Contoh order reserve stok, capture payment, lalu fulfillment. Jika fulfillment gagal sebelum barang terkirim, skenario meminta refund lalu release reservation. Itu kebijakan contoh, bukan urutan universal; inventory yang cepat kedaluwarsa atau barang yang sudah terkirim membutuhkan aturan lain. Kompensasi refund bukan menghapus charge dari sejarah. Ia menciptakan record dan kemungkinan settlement baru, mungkin dengan biaya atau waktu tunggu yang tidak mengembalikan dunia ke state awal persis.",
+          "Orchestration memusatkan keputusan workflow, sedangkan choreography menyebarkan reaksi lewat event. Keduanya tetap memerlukan identity, dedup, state transition yang valid, outbox dan recovery. Jangan menandai order completed hanya karena payment captured ketika stok atau fulfillment belum selesai. Status pending, refund_pending dan manual_review adalah bagian kontrak pengguna. Pilih owner yang menangani kompensasi gagal, batas retry, alert, deadline dan evidence final agar workflow tidak menggantung tanpa tanggung jawab."
+        ]
+      },
+      {
+        "title": "Unknown bukan izin mengulang efek baru",
+        "paragraphs": [
+          "Payment timeout dapat terjadi sesudah provider berhasil tetapi respons hilang. Pertahankan business key yang sama untuk rekonsiliasi; jangan membuat charge baru atau menganggap rejected. Refund juga perlu idempotency key stabil dan state hasil sendiri. Jika kompensasi timeout, status tetap pending sampai evidence cukup. Satu database rollback tidak membatalkan email yang terkirim, paket yang dikirim atau settlement provider. Invariant akhir saga perlu menjelaskan state intermediate mana yang boleh terlihat dan bagaimana reconcile menyelesaikan ketidakpastian.",
+          "Dataset W menyediakan tujuh kartu state order, termasuk prepared dengan keputusan coordinator unknown. CASE menghasilkan next_step, bukan menjalankan charge, refund, release atau distributed commit. completed dan compensated_with_history hanya cocok untuk kombinasi state authored yang sudah diasumsikan terkonfirmasi; history tidak dihapus. Semua tabel TEMP independen dan tidak menjadi engine saga. Pelajar menilai urutan tindakan dan evidence yang masih diperlukan sebelum operasi nyata."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset W: tujuh snapshot workflow authored, termasuk payment unknown, refund pending, kompensasi selesai dan prepared 2PC. Tidak ada efek eksternal.",
+      "setupSql": "CREATE TEMP TABLE lesson_workflows (\n  order_id TEXT PRIMARY KEY, protocol TEXT NOT NULL,\n  inventory TEXT NOT NULL, payment TEXT NOT NULL,\n  fulfillment TEXT NOT NULL, coordinator_decision TEXT\n);\nINSERT INTO pg_temp.lesson_workflows VALUES\n  ('01_unknown_charge','saga','reserved','unknown','not_started',NULL),\n  ('02_failed_shipping','saga','reserved','captured','failed',NULL),\n  ('03_refund_pending','saga','reserved','refund_pending','failed',NULL),\n  ('04_release_stock','saga','reserved','rejected','not_started',NULL),\n  ('05_complete','saga','consumed','captured','shipped',NULL),\n  ('06_compensated','saga','released','refunded','failed',NULL),\n  ('07_prepared_unknown','two_phase','prepared','prepared','not_started',NULL);",
+      "sql": "SELECT order_id, protocol, inventory, payment, fulfillment,\n       CASE\n         WHEN protocol = 'two_phase' AND coordinator_decision IS NULL\n           THEN 'recover_durable_coordinator_decision'\n         WHEN payment = 'unknown' THEN 'reconcile_same_payment_key'\n         WHEN payment = 'refund_pending' THEN 'track_idempotent_refund'\n         WHEN inventory = 'reserved' AND payment = 'captured' AND fulfillment = 'failed'\n           THEN 'request_refund_then_release'\n         WHEN inventory = 'reserved' AND payment IN ('rejected','refunded')\n           THEN 'release_reservation_idempotently'\n         WHEN inventory = 'consumed' AND payment = 'captured' AND fulfillment = 'shipped'\n           THEN 'completed'\n         WHEN inventory = 'released' AND payment = 'refunded' AND fulfillment = 'failed'\n           THEN 'compensated_with_history'\n         ELSE 'hold_undefined_transition'\n       END AS next_step\nFROM pg_temp.lesson_workflows ORDER BY order_id;",
+      "columns": [
+        "order_id",
+        "protocol",
+        "inventory",
+        "payment",
+        "fulfillment",
+        "next_step"
+      ],
+      "rows": [
+        [
+          "01_unknown_charge",
+          "saga",
+          "reserved",
+          "unknown",
+          "not_started",
+          "reconcile_same_payment_key"
+        ],
+        [
+          "02_failed_shipping",
+          "saga",
+          "reserved",
+          "captured",
+          "failed",
+          "request_refund_then_release"
+        ],
+        [
+          "03_refund_pending",
+          "saga",
+          "reserved",
+          "refund_pending",
+          "failed",
+          "track_idempotent_refund"
+        ],
+        [
+          "04_release_stock",
+          "saga",
+          "reserved",
+          "rejected",
+          "not_started",
+          "release_reservation_idempotently"
+        ],
+        [
+          "05_complete",
+          "saga",
+          "consumed",
+          "captured",
+          "shipped",
+          "completed"
+        ],
+        [
+          "06_compensated",
+          "saga",
+          "released",
+          "refunded",
+          "failed",
+          "compensated_with_history"
+        ],
+        [
+          "07_prepared_unknown",
+          "two_phase",
+          "prepared",
+          "prepared",
+          "not_started",
+          "recover_durable_coordinator_decision"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Unknown charge direkonsiliasi sebelum tindakan lain. Failed shipping meminta kompensasi, refund pending tetap dilacak, dan 2PC prepared menunggu keputusan durable. Label akhir hanya mengklasifikasi evidence authored; tidak ada workflow dijalankan."
+    },
+    "checks": [
+      {
+        "id": "l8m03l02-check-1",
+        "question": "Saga gagal sesudah charge provider sudah commit. Apakah ROLLBACK lokal menghapus charge itu?",
+        "options": [
+          "Ya, seluruh internet ikut transaksi lokal.",
+          "Tidak; refund/void yang sesuai adalah transaksi bisnis baru dengan status dan audit sendiri.",
+          "Ya, asal semua service memakai SQL."
+        ],
+        "answer": 1,
+        "explanation": "Saga mengoordinasikan transaksi lokal dan kompensasi; ia tidak memberikan rollback ACID global.",
+        "feedback": [
+          "Belum tepat. Transaksi lokal hanya mencakup resource yang bergabung.",
+          "Benar. Efek eksternal membutuhkan workflow kompensasi yang benar.",
+          "Belum tepat. Bahasa query sama tidak menyatukan commit."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l8m03l02-check-2",
+        "question": "Apa risiko 2PC ketika participant sudah prepared tetapi coordinator tidak dapat dijangkau?",
+        "options": [
+          "Prepared transaction otomatis hilang saat session ditutup.",
+          "Participant boleh menebak rollback walau keputusan global sudah commit.",
+          "Resource/lock dapat tertahan sambil keputusan durable coordinator dipulihkan."
+        ],
+        "answer": 2,
+        "explanation": "Prepared state bertahan terpisah dari session; keputusan akhir perlu protokol coordinator, bukan timeout acak.",
+        "feedback": [
+          "Belum tepat. Prepared state dapat bertahan melewati session/crash.",
+          "Belum tepat. Menebak dapat memecah keputusan atomik.",
+          "Benar. Monitoring dan recovery coordinator adalah bagian biaya 2PC."
+        ]
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi next step setiap order, lalu susun urutan saga dan failure window tanpa mengklaim atomic rollback lintas service.",
+      "setup": "Fixture TEMP W memakai state terkonfirmasi yang disederhanakan. Query tidak mengeksekusi PREPARE TRANSACTION, payment, refund atau inventory service.",
+      "starterSql": "SELECT order_id, protocol, payment, fulfillment FROM pg_temp.lesson_workflows ORDER BY order_id;",
+      "variants": [
+        {
+          "id": "l8m03l02-variant-1",
+          "question": "Order reserved, captured, shipping failed. Apa next_step sesuai aturan fixture?",
+          "options": [
+            "request_refund_then_release; refund belum dianggap selesai.",
+            "completed karena payment captured.",
+            "Hapus payment dan order agar terlihat rollback."
+          ],
+          "answer": 0,
+          "explanation": "Aturan skenario meminta refund lalu release; kedua efek perlu status/retry sendiri dan urutannya adalah kebijakan domain fixture.",
+          "feedback": [
+            "Benar. Request kompensasi bukan bukti kompensasi sukses.",
+            "Belum tepat. Fulfillment gagal dan invariant akhir belum dipenuhi.",
+            "Belum tepat. Menghapus history menghilangkan evidence."
+          ]
+        },
+        {
+          "id": "l8m03l02-variant-2",
+          "question": "Order punya payment=refund_pending. Apa status yang jujur?",
+          "options": [
+            "Refunded karena request sudah dikirim.",
+            "track_idempotent_refund; tetap pending sampai hasil terkonfirmasi.",
+            "Buat refund baru dengan key berbeda setiap retry."
+          ],
+          "answer": 1,
+          "explanation": "Ack permintaan belum berarti settlement; business key refund harus stabil dan hasil direkonsiliasi.",
+          "feedback": [
+            "Belum tepat. Status request dan hasil final berbeda.",
+            "Benar. Retry harus menjaga identitas kompensasi.",
+            "Belum tepat. Key baru dapat menggandakan refund."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l8m03l02-edge-1",
+          "question": "Provider timeout setelah menerima charge. Bolehkah saga langsung charge ulang atau refund tanpa mengetahui hasil?",
+          "options": [
+            "Ya, timeout berarti charge belum ada.",
+            "Ya, refund tidak pernah mempunyai failure window.",
+            "Tidak; rekonsiliasi business key yang sama, tahan dependent steps dan gunakan workflow unknown yang eksplisit."
+          ],
+          "answer": 2,
+          "explanation": "Unknown berbeda dari rejected; asumsi salah dapat menghasilkan charge ganda atau refund yang tidak sesuai.",
+          "feedback": [
+            "Belum tepat. Respons dapat hilang setelah efek commit.",
+            "Belum tepat. Refund juga bisa pending atau unknown.",
+            "Benar. Outcome evidence mendahului kompensasi."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l8m03l02-edge-2",
+          "question": "Kompensasi berulang kali gagal dan melewati deadline bisnis. Apa rencana?",
+          "options": [
+            "Simpan pending/manual-review, owner, alert, retry terukur dan audit; jangan mengklaim rollback selesai.",
+            "Hapus job supaya antrean tampak kosong.",
+            "Retry tanpa batas secepat mungkin."
+          ],
+          "answer": 0,
+          "explanation": "Kompensasi dapat gagal dan memerlukan eskalasi operasional; state terminal harus ditentukan dari evidence bisnis.",
+          "feedback": [
+            "Benar. Kegagalan kompensasi adalah state yang harus dikelola.",
+            "Belum tepat. Hilangnya job tidak menyelesaikan efek.",
+            "Belum tepat. Retry tanpa budget dapat memperluas gangguan."
+          ]
+        }
+      ],
+      "hints": [
+        "Bedakan unknown, rejected dan captured sebelum memilih kompensasi.",
+        "Refund pending belum refunded; release dan refund memakai identity stabil serta audit.",
+        "Prepared 2PC membutuhkan keputusan coordinator; saga memakai transaksi lokal dan kompensasi, bukan rollback global."
+      ],
+      "solutionSql": "SELECT order_id, protocol, inventory, payment, fulfillment,\n       CASE\n         WHEN protocol = 'two_phase' AND coordinator_decision IS NULL\n           THEN 'recover_durable_coordinator_decision'\n         WHEN payment = 'unknown' THEN 'reconcile_same_payment_key'\n         WHEN payment = 'refund_pending' THEN 'track_idempotent_refund'\n         WHEN inventory = 'reserved' AND payment = 'captured' AND fulfillment = 'failed'\n           THEN 'request_refund_then_release'\n         WHEN inventory = 'reserved' AND payment IN ('rejected','refunded')\n           THEN 'release_reservation_idempotently'\n         WHEN inventory = 'consumed' AND payment = 'captured' AND fulfillment = 'shipped'\n           THEN 'completed'\n         WHEN inventory = 'released' AND payment = 'refunded' AND fulfillment = 'failed'\n           THEN 'compensated_with_history'\n         ELSE 'hold_undefined_transition'\n       END AS next_step\nFROM pg_temp.lesson_workflows ORDER BY order_id;",
+      "solutionExplanation": "Reference memetakan snapshot ke next step berdasarkan kebijakan fixture. Ia tidak mengoordinasikan participant, menyelesaikan unknown atau mengeksekusi kompensasi. Recovery nyata memerlukan state durable, business identity, outbox/dedup, deadline, owner dan evidence hasil eksternal.",
+      "critical": true
+    },
+    "reflection": "Rancang saga order-payment-inventory dengan state pending dan kompensasi; jelaskan satu unknown outcome, key retry, owner recovery, dan mengapa dua COMMIT lokal bukan atomic commit global."
+  },
+  {
+    "id": "l8m03l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "durable-dedup",
+      "event-ordering",
+      "gap-handling",
+      "idempotency"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/sql-insert.html",
+      "https://learn.microsoft.com/en-us/azure/architecture/patterns/compensating-transaction"
+    ],
+    "hook": "Consumer menerima versi 7 sebelum versi 5, lalu crash setelah commit tetapi sebelum ack. Mengapa menolak semua event di bawah versi terbesar atau menyimpan dedup hanya di memory dapat merusak total payment?",
+    "objectives": [
+      "Membedakan business event identity, transport delivery dan contiguous checkpoint.",
+      "Menentukan duplicate, konflik identity, delta siap apply dan gap yang perlu recovery.",
+      "Menjelaskan transaksi inbox/efek/checkpoint dan batas ack/efek eksternal."
+    ],
+    "sections": [
+      {
+        "title": "Delivery berulang adalah kondisi normal",
+        "paragraphs": [
+          "At-least-once delivery dapat mengirim business event yang sama berkali-kali karena ack hilang, timeout atau consumer restart. Transport delivery_id yang baru tidak boleh menjadi alasan mengulang payment. Event harus mempunyai identitas bisnis stabil pada scope sumber, tenant dan aggregate; payload dengan identity sama harus mempunyai arti yang sama. Inbox durable mencatat identity dan informasi yang cukup untuk memverifikasi redelivery. Dedup di memory hilang saat restart, sedangkan unique constraint yang tidak ikut transaksi efek masih dapat meninggalkan state setengah jadi.",
+          "Consumer lokal perlu memverifikasi payload, mengunci atau mengoordinasikan aggregate/checkpoint, lalu menyimpan inbox, efek bisnis dan checkpoint dalam satu transaksi. Ack mengikuti commit yang terkonfirmasi. Crash sebelum commit memungkinkan retry tanpa efek tersisa; crash setelah commit sebelum ack membuat redelivery yang harus menjadi no-op terverifikasi. Jika dua worker berlomba, keduanya harus mengecek ulang setelah lock/conflict dan tidak membaca ready sekali lalu menganggap izin itu tetap berlaku selamanya."
+        ]
+      },
+      {
+        "title": "Delta membutuhkan urutan contiguous",
+        "paragraphs": [
+          "Full-state replacement dari L8M01 dapat melewati versi bila payload terbaru sudah lengkap dan otoritatif. Lesson ini berbeda: delta adalah tambahan payment positif untuk satu invoice, sehingga versi lima dan enam tidak boleh dibuang hanya karena tujuh datang dulu. last_version harus berarti seluruh versi yang diwajibkan sampai batas itu sudah diterapkan, bukan nilai maksimum yang pernah dilihat. Event tepat last_version ditambah satu dapat dipertimbangkan untuk apply atomik; event lebih jauh perlu buffer, replay atau resync dengan snapshot/boundary yang konsisten.",
+          "Urutan versi mempunyai scope aggregate, bukan global semua invoice. Jika sumber hanya menerbitkan sebagian versi domain ke stream ini, angka contiguous harus didefinisikan untuk stream tersebut atau aturan skip eksplisit, bukan menunggu nomor yang tidak pernah dikirim. Retensi inbox dan checkpoint harus sesuai replay window, kebijakan archive dan umur retry provider. Event lama yang history-nya hilang tidak otomatis aman diapply ulang maupun didiscard; periksa bukti coverage atau lakukan rekonsiliasi. Konflik identity dengan delta berbeda harus dikarantina."
+        ]
+      },
+      {
+        "title": "Ready bukan efek yang sudah diterapkan",
+        "paragraphs": [
+          "Dataset D memuat checkpoint invoice 101 pada versi empat dan paid empat puluh, satu inbox event4, serta tujuh kandidat delivery. Setiap baris diklasifikasi terhadap snapshot awal yang sama; query tidak memproses batch secara berurutan. event5 mendapat ready_atomic_apply, event7 menunggu gap, duplicate identik tidak menambah efek, payload bertentangan dikarantina, dan aggregate tidak dikenal ditahan. NULL delta tidak diganti nol. Reference hanya SELECT; ia tidak memasang consumer, lock, inbox writer atau broker ack.",
+          "Jika consumer juga mengirim email atau memanggil provider, transaksi inbox lokal belum membuat efek itu exactly-once. Simpan intent pada outbox lalu gunakan identity dan recovery sesuai kapabilitas provider. Bounded retry dengan backoff/jitter, batas attempt dan owner untuk dead letter membantu liveness tanpa retry storm. Pelajar memprediksi keputusan serta state setelah apply hipotetis; tidak ada crash, concurrency, transport delivery atau efek eksternal yang dieksekusi pada lesson."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset D: tujuh kandidat delta terhadap checkpoint/inbox awal yang sama. Ini tabel keputusan, bukan loop consumer yang menerapkan delivery.",
+      "setupSql": "CREATE TEMP TABLE lesson_consumer_checkpoint (\n  invoice_id INTEGER PRIMARY KEY, last_version INTEGER NOT NULL,\n  paid INTEGER NOT NULL\n);\nCREATE TEMP TABLE lesson_consumer_inbox (\n  event_id TEXT PRIMARY KEY, invoice_id INTEGER NOT NULL,\n  event_version INTEGER NOT NULL, delta INTEGER NOT NULL\n);\nCREATE TEMP TABLE lesson_incoming_events (\n  delivery_id INTEGER PRIMARY KEY, event_id TEXT NOT NULL,\n  invoice_id INTEGER NOT NULL, event_version INTEGER NOT NULL, delta INTEGER\n);\nINSERT INTO pg_temp.lesson_consumer_checkpoint VALUES (101,4,40);\nINSERT INTO pg_temp.lesson_consumer_inbox VALUES ('event4',101,4,10);\nINSERT INTO pg_temp.lesson_incoming_events VALUES\n  (1,'event4',101,4,10), (2,'event4',101,4,99),\n  (3,'event5',101,5,10), (4,'event7',101,7,20),\n  (5,'event3',101,3,5), (6,'invalid',101,6,NULL),\n  (7,'other_invoice',404,1,10);",
+      "sql": "SELECT r.delivery_id, r.event_id, r.event_version,\n       c.last_version, r.delta,\n       CASE\n         WHEN c.invoice_id IS NULL THEN 'hold_unknown_aggregate'\n         WHEN r.event_version <= 0 OR r.delta IS NULL OR r.delta <= 0\n           THEN 'quarantine_invalid_payload'\n         WHEN i.event_id IS NOT NULL AND\n           (i.invoice_id IS DISTINCT FROM r.invoice_id OR\n            i.event_version IS DISTINCT FROM r.event_version OR\n            i.delta IS DISTINCT FROM r.delta) THEN 'quarantine_identity_conflict'\n         WHEN i.event_id IS NOT NULL THEN 'duplicate_no_effect'\n         WHEN r.event_version = c.last_version + 1 THEN 'ready_atomic_apply'\n         WHEN r.event_version > c.last_version + 1 THEN 'buffer_gap_or_resync'\n         ELSE 'reconcile_missing_history'\n       END AS decision\nFROM pg_temp.lesson_incoming_events r\nLEFT JOIN pg_temp.lesson_consumer_checkpoint c USING (invoice_id)\nLEFT JOIN pg_temp.lesson_consumer_inbox i USING (event_id)\nORDER BY r.delivery_id;",
+      "columns": [
+        "delivery_id",
+        "event_id",
+        "event_version",
+        "last_version",
+        "delta",
+        "decision"
+      ],
+      "rows": [
+        [
+          "1",
+          "event4",
+          "4",
+          "4",
+          "10",
+          "duplicate_no_effect"
+        ],
+        [
+          "2",
+          "event4",
+          "4",
+          "4",
+          "99",
+          "quarantine_identity_conflict"
+        ],
+        [
+          "3",
+          "event5",
+          "5",
+          "4",
+          "10",
+          "ready_atomic_apply"
+        ],
+        [
+          "4",
+          "event7",
+          "7",
+          "4",
+          "20",
+          "buffer_gap_or_resync"
+        ],
+        [
+          "5",
+          "event3",
+          "3",
+          "4",
+          "5",
+          "reconcile_missing_history"
+        ],
+        [
+          "6",
+          "invalid",
+          "6",
+          "4",
+          null,
+          "quarantine_invalid_payload"
+        ],
+        [
+          "7",
+          "other_invoice",
+          "1",
+          null,
+          "10",
+          "hold_unknown_aggregate"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Hanya event5 menjadi kandidat apply berikutnya; efek/checkpoint belum berubah. Duplicate identik berbeda dari identity conflict, dan event lama tanpa history diarahkan ke rekonsiliasi. Semua row menggunakan snapshot awal versi 4."
+    },
+    "checks": [
+      {
+        "id": "l8m03l03-check-1",
+        "question": "Consumer commit efek lokal, lalu crash sebelum ack broker. Apa yang harus tahan redelivery?",
+        "options": [
+          "Sleep selama satu detik sudah mencegah duplicate.",
+          "Ack dahulu, baru tulis efek tanpa inbox.",
+          "Inbox durable dan efek/checkpoint commit atomik; duplicate diverifikasi tanpa mengulang efek."
+        ],
+        "answer": 2,
+        "explanation": "Ack dapat hilang setelah commit sehingga redelivery normal; state dedup harus ikut transaksi efek lokal.",
+        "feedback": [
+          "Belum tepat. Waktu tunggu bukan identitas durable.",
+          "Belum tepat. Crash setelah ack dapat menghilangkan efek.",
+          "Benar. Ack mengikuti commit, retry tetap memakai identity yang sama."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l8m03l03-check-2",
+        "question": "Checkpoint delta invoice ada di versi 4 tetapi event berikutnya versi 7. Apa tindakan?",
+        "options": [
+          "Buffer/replay/resync gap versi 5–6; jangan memajukan checkpoint seolah semua delta sudah diterapkan.",
+          "Terapkan 7 lalu buang 5 dan 6 saat tiba.",
+          "Anggap event 7 selalu full state walau kontrak delta."
+        ],
+        "answer": 0,
+        "explanation": "Untuk delta, setiap efek yang diwajibkan harus masuk sekali pada urutan yang disepakati; max version saja bukan completeness.",
+        "feedback": [
+          "Benar. Full-state skipping mempunyai asumsi berbeda.",
+          "Belum tepat. Ini menghilangkan efek 5 dan 6.",
+          "Belum tepat. Semantik payload tidak boleh ditebak."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Klasifikasikan delivery, lalu jelaskan transaksi atomik inbox/efek/checkpoint dan gap recovery untuk consumer delta.",
+      "setup": "Fixture TEMP D tidak mengubah checkpoint atau inbox saat SELECT. Varian state setelah apply adalah hipotetis dan mengasumsikan consumer transaction berhasil.",
+      "starterSql": "SELECT delivery_id, event_id, event_version, delta FROM pg_temp.lesson_incoming_events ORDER BY delivery_id;",
+      "variants": [
+        {
+          "id": "l8m03l03-variant-1",
+          "question": "Checkpoint 4, paid 40, event5 delta 10 valid. Jika consumer atomik berhasil sekali, state menjadi apa?",
+          "options": [
+            "Versi 7, paid 70 karena future event ikut.",
+            "Versi 5, paid 50 dengan inbox event5 pada commit yang sama.",
+            "Versi 4, paid 50 tanpa perubahan checkpoint."
+          ],
+          "answer": 1,
+          "explanation": "Efek, identity dan contiguous checkpoint harus berubah bersama; query worked hanya memberi ready, bukan menjalankan apply.",
+          "feedback": [
+            "Belum tepat. Gap 6 belum diselesaikan.",
+            "Benar. Ini state yang diharapkan setelah transaksi consumer terkonfirmasi.",
+            "Belum tepat. Checkpoint terpisah dapat menyebabkan replay salah."
+          ]
+        },
+        {
+          "id": "l8m03l03-variant-2",
+          "question": "Setelah event5 dan checkpoint 5 commit, event5 payload sama dikirim ulang. Apa hasil?",
+          "options": [
+            "Paid menjadi 60 karena delivery baru.",
+            "Tolak seluruh invoice selamanya.",
+            "Duplicate terverifikasi, paid tetap 50 dan tidak ada efek kedua."
+          ],
+          "answer": 2,
+          "explanation": "Delivery identity transport baru tidak membuat business event baru; inbox durable mempertahankan efek tunggal lokal.",
+          "feedback": [
+            "Belum tepat. Redelivery bukan payment baru.",
+            "Belum tepat. Duplicate yang valid dapat diack tanpa efek ulang.",
+            "Benar. Bandingkan juga payload identity sebelum menganggap duplicate aman."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l8m03l03-edge-1",
+          "question": "event4 sudah tercatat delta 10 tetapi delivery baru memakai event_id sama dengan delta 99. Apa hasil?",
+          "options": [
+            "quarantine_identity_conflict; jangan diam-diam menganggap duplicate biasa.",
+            "Tambah 99 karena payload terakhir selalu benar.",
+            "Abaikan konflik tanpa audit karena event_id sama."
+          ],
+          "answer": 0,
+          "explanation": "Identity yang sama harus mempunyai semantik payload yang sama; konflik membutuhkan evidence dan rekonsiliasi sumber.",
+          "feedback": [
+            "Benar. Dedup tidak boleh menyembunyikan data yang bertentangan.",
+            "Belum tepat. Arrival order tidak menetapkan kebenaran bisnis.",
+            "Belum tepat. Konflik berbeda dari redelivery identik."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l8m03l03-edge-2",
+          "question": "Event versi 3 datang saat checkpoint 4, tetapi inbox history untuk event itu tidak tersedia. Apa keputusan konservatif?",
+          "options": [
+            "Apply ulang karena history hilang.",
+            "reconcile_missing_history; butuh bukti contiguous coverage atau replay/retention contract sebelum discard.",
+            "Naikkan checkpoint menjadi 100 agar duplicate berhenti."
+          ],
+          "answer": 1,
+          "explanation": "Versi lama dapat aman diabaikan hanya jika coverage dan identity terbukti; fixture tidak memberi bukti history tersebut.",
+          "feedback": [
+            "Belum tepat. Apply buta dapat menggandakan efek.",
+            "Benar. Retensi dedup harus sesuai replay dan retry window.",
+            "Belum tepat. Checkpoint palsu menyembunyikan gap."
+          ]
+        }
+      ],
+      "hints": [
+        "Cari identity yang sudah durable dan bandingkan payload sebelum dedup.",
+        "Delta siap hanya pada last_version+1; versi lebih jauh berarti gap.",
+        "Ready perlu recheck atomik pada worker nyata; efek, inbox dan checkpoint commit bersama sebelum ack."
+      ],
+      "solutionSql": "SELECT r.delivery_id, r.event_id, r.event_version,\n       c.last_version, r.delta,\n       CASE\n         WHEN c.invoice_id IS NULL THEN 'hold_unknown_aggregate'\n         WHEN r.event_version <= 0 OR r.delta IS NULL OR r.delta <= 0\n           THEN 'quarantine_invalid_payload'\n         WHEN i.event_id IS NOT NULL AND\n           (i.invoice_id IS DISTINCT FROM r.invoice_id OR\n            i.event_version IS DISTINCT FROM r.event_version OR\n            i.delta IS DISTINCT FROM r.delta) THEN 'quarantine_identity_conflict'\n         WHEN i.event_id IS NOT NULL THEN 'duplicate_no_effect'\n         WHEN r.event_version = c.last_version + 1 THEN 'ready_atomic_apply'\n         WHEN r.event_version > c.last_version + 1 THEN 'buffer_gap_or_resync'\n         ELSE 'reconcile_missing_history'\n       END AS decision\nFROM pg_temp.lesson_incoming_events r\nLEFT JOIN pg_temp.lesson_consumer_checkpoint c USING (invoice_id)\nLEFT JOIN pg_temp.lesson_consumer_inbox i USING (event_id)\nORDER BY r.delivery_id;",
+      "solutionExplanation": "Reference hanya membandingkan setiap delivery dengan snapshot awal. Ini bukan implementasi durable consumer atau jaminan exactly-once. Worker nyata perlu validasi identity, serialisasi aggregate, atomic commit, ack sesudah commit, gap/retention policy serta outbox/idempotency untuk efek eksternal.",
+      "critical": true
+    },
+    "reflection": "Uraikan crash sebelum commit dan sesudah commit sebelum ack, lalu jelaskan mengapa delta versi 7 perlu menunggu 5–6 dan bagaimana dedup retention serta efek eksternal memengaruhi recovery."
+  }
+]

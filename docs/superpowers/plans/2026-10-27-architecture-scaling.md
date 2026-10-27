@@ -24,10 +24,10 @@
 
 ## Task 2: L8M03 — Distributed Data Systems
 
-- [ ] Add `src/content/database/l8-distributed.json` and matching English dictionary with the full contract.
-- [ ] Teach explicit replication contracts, 2PC/saga failure and compensation boundaries, and durable dedup/order/gap handling without exactly-once claims.
-- [ ] Register content and update counts to 36 modules / 108 published / 12 draft, next draft l8m04l01.
-- [ ] Review source/diff and independent read-only review; commit and push current origin/main.
+- [x] Add `src/content/database/l8-distributed.json` and matching English dictionary with the full contract.
+- [x] Teach explicit replication contracts, 2PC/saga failure and compensation boundaries, and durable dedup/order/gap handling without exactly-once claims.
+- [x] Register content and update counts to 36 modules / 108 published / 12 draft, next draft l8m04l01.
+- [x] Review source/diff and independent read-only review; no important findings. Commit and push current origin/main; Git history records the outcome.
 
 ## Task 3: L8M04 — Choosing the Right Data Store
 
