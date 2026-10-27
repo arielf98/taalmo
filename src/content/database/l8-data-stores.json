@@ -1,0 +1,605 @@
+[
+  {
+    "id": "l8m04l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "oltp",
+      "olap",
+      "data-pipelines",
+      "reconciliation"
+    ],
+    "officialRefs": [
+      "https://learn.microsoft.com/en-us/azure/architecture/data-guide/relational-data/online-analytical-processing",
+      "https://www.postgresql.org/docs/17/logical-replication.html"
+    ],
+    "hook": "Dashboard bulanan memindai jutaan receipt di database payment, lalu dipindah ke warehouse yang belum menerima batch terbaru. Bagaimana menjaga transaksi tetap terarah sambil menjelaskan freshness dan kelengkapan laporan?",
+    "objectives": [
+      "Membedakan pola akses dan grain OLTP/OLAP tanpa mengasumsikan mesin tertentu wajib.",
+      "Merancang snapshot/CDC dan batas beban sumber dengan identity serta delete handling.",
+      "Membaca rekonsiliasi bulan/currency tanpa mengubah missing menjadi nol."
+    ],
+    "sections": [
+      {
+        "title": "Pisahkan workload sebelum memilih mesin",
+        "paragraphs": [
+          "OLTP melayani transaksi operasional seperti mencatat payment, menjaga business key dan memeriksa invariant dalam batas transaksi yang jelas. Query biasanya menarget subset kecil dengan latency yang perlu stabil, walaupun pola nyata tetap harus diukur. OLAP melayani analisis historis, scan banyak row, join dimensi serta aggregate pada grain yang disepakati. Columnar storage dan pemrosesan paralel dapat cocok untuk sebagian workload analitik, tetapi nama warehouse tidak otomatis menjamin cepat atau benar. Database PostgreSQL tunggal juga dapat melayani laporan sederhana selama biaya dan kebutuhan layanan masih sesuai.",
+          "Sebelum memindahkan laporan, tentukan satu row fakta berarti apa: receipt sukses, attempt, invoice atau event settlement. Jangan menjumlahkan amount lintas currency tanpa aturan konversi serta tanggal rate yang jelas. Status refund, pembatalan dan koreksi historis membutuhkan definisi metrik, bukan sekadar copy kolom bernama amount. Sumber otoritatif untuk keputusan debit tetap transaksi ledger; salinan analitik mempunyai kontrak freshness dan completeness sendiri. Pemisahan ini juga perlu owner ketika angka dashboard berbeda dari operasi."
+        ]
+      },
+      {
+        "title": "Transfer data mempunyai boundary dan biaya",
+        "paragraphs": [
+          "Pipeline dapat memakai batch, CDC atau kombinasi snapshot awal dengan perubahan berikutnya. Snapshot dan continuation position harus konsisten agar perubahan selama copy tidak hilang atau terhitung dua kali. Upsert memakai identity/version yang sah, delete atau tombstone harus ikut, dan schema evolution harus mempertahankan makna field. Watermark terbesar satu row tidak membuktikan seluruh tabel atau tenant sudah lengkap. Label extracted_at juga belum membuktikan semua perubahan hingga waktu itu tercakup.",
+          "Analitik terpisah mengurangi sebagian kompetisi query, tetapi capture sumber, snapshot panjang, network, retained WAL dan lag consumer tetap memakan resource. Tentukan budget scan/batch, deadline, backpressure serta alert backlog. Replication slot yang tidak bergerak dapat menahan WAL dan menekan disk. Jangan mengatasi itu dengan menghapus file aktif tanpa runbook. Recovery membutuhkan posisi replay yang dapat dipertanggungjawabkan dan rekonsiliasi, bukan hanya menjalankan ulang job sampai status hijau."
+        ]
+      },
+      {
+        "title": "Tabel hasil memperlihatkan scope evidence",
+        "paragraphs": [
+          "Dataset A membandingkan receipt source dan salinan warehouse pada bulan/currency yang sama. September IDR cocok pada count dan SUM, Oktober IDR tertinggal satu receipt, dan Oktober USD belum mempunyai group warehouse. FULL JOIN mempertahankan missing group sebagai NULL; nol hanya boleh menjadi fakta setelah scope coverage diketahui. aggregate_matches_only sengaja tidak dinamai synchronized karena dua kesalahan dapat menghasilkan count dan total sama. Kesetaraan row, version, delete serta batas snapshot masih perlu diperiksa pada rancangan pipeline nyata.",
+          "Dua tabel TEMP adalah snapshot authored yang independen dari School Finance. Query tidak melakukan extraction, mengaktifkan CDC, mengukur latency OLTP atau membangun warehouse. Aktivitas meminta prediksi serta rancangan kontrak transfer. Keputusan menambah mesin analitik harus mempertimbangkan biaya operasi, keamanan data, freshness yang dibutuhkan dan evidence workload, bukan menyimpulkan kapasitas platform dari empat receipt latihan."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset A: empat receipt source dan dua receipt salinan analitik. Semua nominal memakai unit latihan terpisah per currency, tanpa konversi.",
+      "setupSql": "CREATE TEMP TABLE lesson_oltp_receipts (\n  receipt_id INTEGER PRIMARY KEY, received_on DATE NOT NULL,\n  currency TEXT NOT NULL, amount INTEGER NOT NULL CHECK (amount > 0)\n);\nCREATE TEMP TABLE lesson_warehouse_receipts (\n  receipt_id INTEGER PRIMARY KEY, received_on DATE NOT NULL,\n  currency TEXT NOT NULL, amount INTEGER NOT NULL CHECK (amount > 0)\n);\nINSERT INTO pg_temp.lesson_oltp_receipts VALUES\n  (1,DATE '2026-09-30','IDR',40),\n  (2,DATE '2026-10-01','IDR',100),\n  (3,DATE '2026-10-02','IDR',50),\n  (4,DATE '2026-10-03','USD',10);\nINSERT INTO pg_temp.lesson_warehouse_receipts VALUES\n  (1,DATE '2026-09-30','IDR',40),\n  (2,DATE '2026-10-01','IDR',100);",
+      "sql": "WITH source_totals AS (\n  SELECT date_trunc('month', received_on::timestamp)::date AS month,\n         currency, COUNT(*) AS receipt_count, SUM(amount) AS total\n  FROM pg_temp.lesson_oltp_receipts GROUP BY 1,2\n), warehouse_totals AS (\n  SELECT date_trunc('month', received_on::timestamp)::date AS month,\n         currency, COUNT(*) AS receipt_count, SUM(amount) AS total\n  FROM pg_temp.lesson_warehouse_receipts GROUP BY 1,2\n)\nSELECT COALESCE(s.month,w.month) AS month,\n       COALESCE(s.currency,w.currency) AS currency,\n       s.receipt_count AS source_count, w.receipt_count AS warehouse_count,\n       s.total AS source_total, w.total AS warehouse_total,\n       CASE WHEN s.month IS NULL OR w.month IS NULL THEN 'missing_group_reconcile'\n            WHEN s.receipt_count = w.receipt_count AND s.total = w.total\n              THEN 'aggregate_matches_only'\n            ELSE 'mismatch_reconcile' END AS decision\nFROM source_totals s\nFULL JOIN warehouse_totals w USING (month,currency)\nORDER BY month,currency;",
+      "columns": [
+        "month",
+        "currency",
+        "source_count",
+        "warehouse_count",
+        "source_total",
+        "warehouse_total",
+        "decision"
+      ],
+      "rows": [
+        [
+          "2026-09-01",
+          "IDR",
+          "1",
+          "1",
+          "40",
+          "40",
+          "aggregate_matches_only"
+        ],
+        [
+          "2026-10-01",
+          "IDR",
+          "2",
+          "1",
+          "150",
+          "100",
+          "mismatch_reconcile"
+        ],
+        [
+          "2026-10-01",
+          "USD",
+          "1",
+          null,
+          "10",
+          null,
+          "missing_group_reconcile"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "September cocok hanya secara aggregate. Oktober IDR tertinggal dan USD missing; NULL tidak berarti bisnis nol. Urutan bulan/currency deterministik dan tidak menggabungkan mata uang."
+    },
+    "checks": [
+      {
+        "id": "l8m04l01-check-1",
+        "question": "Apa perbedaan workload utama OLTP dan OLAP?",
+        "options": [
+          "OLTP menjaga transaksi operasional terarah; OLAP mendukung scan/agregasi analitik dengan kontrak data sendiri.",
+          "OLAP otomatis lebih benar untuk memutuskan debit.",
+          "SQL tidak boleh dipakai untuk analitik."
+        ],
+        "answer": 0,
+        "explanation": "Pola akses dan invariant menentukan penempatan; istilah OLAP tidak memindahkan otoritas ledger secara otomatis.",
+        "feedback": [
+          "Benar. Pisahkan kebutuhan transaksi dan laporan.",
+          "Belum tepat. Salinan analitik dapat lag atau berbeda grain.",
+          "Belum tepat. Banyak sistem analitik memakai SQL."
+        ]
+      },
+      {
+        "id": "l8m04l01-check-2",
+        "question": "Bagaimana memulai snapshot awal lalu CDC tanpa kehilangan perubahan di antaranya?",
+        "options": [
+          "Copy tabel satu per satu tanpa posisi kelanjutan.",
+          "Mulai CDC besok dan anggap semua update hari ini tercakup.",
+          "Gunakan protokol snapshot/continuation yang konsisten, identity/version, replay/delete handling dan rekonsiliasi."
+        ],
+        "answer": 2,
+        "explanation": "Snapshot dan stream harus menyepakati boundary; timestamp extraction saja tidak cukup membuktikan coverage.",
+        "feedback": [
+          "Belum tepat. Perubahan selama copy dapat hilang atau terhitung dua kali.",
+          "Belum tepat. Ada gap perubahan yang tidak diamati.",
+          "Benar. Completeness memerlukan boundary dan evidence, bukan jadwal saja."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi rekonsiliasi bulan/currency dan rancang jalur dari OLTP ke analitik beserta boundary, freshness dan failure recovery.",
+      "setup": "Gunakan TEMP A terpisah untuk worked/reference. Tabel warehouse hanyalah copy authored, bukan sistem OLAP yang terpasang.",
+      "starterSql": "SELECT receipt_id, received_on, currency, amount FROM pg_temp.lesson_oltp_receipts ORDER BY receipt_id;",
+      "variants": [
+        {
+          "id": "l8m04l01-variant-1",
+          "question": "Oktober IDR pada source memiliki receipt 100 dan 50, warehouse baru 100. Apa hasil?",
+          "options": [
+            "aggregate_matches_only karena keduanya punya Oktober.",
+            "Source count 2/total 150, warehouse count 1/total 100: mismatch_reconcile.",
+            "Source total 160 karena USD ikut IDR."
+          ],
+          "answer": 1,
+          "explanation": "Rekonsiliasi mempertahankan grain bulan dan currency; receipt yang belum masuk membuat count serta total berbeda.",
+          "feedback": [
+            "Belum tepat. Ada group belum berarti nilainya cocok.",
+            "Benar. Jangan menyebut warehouse lengkap dari batch sukses saja.",
+            "Belum tepat. Currency berbeda tidak boleh dijumlah tanpa aturan konversi."
+          ]
+        },
+        {
+          "id": "l8m04l01-variant-2",
+          "question": "Oktober USD ada di source tetapi belum di warehouse. Mengapa warehouse_count/total tetap NULL?",
+          "options": [
+            "Missing group adalah evidence hilang, bukan nol bisnis yang terkonfirmasi.",
+            "NULL membuktikan USD tidak pernah dipakai.",
+            "NULL selalu sama dengan 0 receipt."
+          ],
+          "answer": 0,
+          "explanation": "FULL JOIN memperlihatkan group yang hilang tanpa menyamarkannya melalui COALESCE ke nol.",
+          "feedback": [
+            "Benar. Report harus membedakan missing dan known zero.",
+            "Belum tepat. Source justru mempunyai USD.",
+            "Belum tepat. Missing coverage berbeda dari fakta nol."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l8m04l01-edge-1",
+          "question": "Count dan total September cocok. Apakah seluruh receipt pasti setara?",
+          "options": [
+            "Ya, aggregate cocok membuktikan semua row.",
+            "Ya, selama count lebih dari nol.",
+            "Belum; bandingkan identity/version/field pada scope snapshot sama karena error dapat saling meniadakan."
+          ],
+          "answer": 2,
+          "explanation": "Count dan SUM adalah indikator rekonsiliasi, bukan pembuktian kesetaraan multiset atau freshness.",
+          "feedback": [
+            "Belum tepat. Nilai berbeda dapat menghasilkan total sama.",
+            "Belum tepat. Nonzero tidak menjamin completeness.",
+            "Benar. Nyatakan tingkat evidence yang benar-benar diperiksa."
+          ]
+        },
+        {
+          "id": "l8m04l01-edge-2",
+          "question": "CDC consumer berhenti dan replication slot menahan WAL. Apa yang perlu dipantau?",
+          "options": [
+            "Tidak ada karena CDC tidak pernah membebani source.",
+            "Lag, retained WAL/disk, backpressure dan recovery consumer; jangan cleanup chain secara buta.",
+            "Hapus WAL aktif agar pipeline dianggap sehat."
+          ],
+          "answer": 1,
+          "explanation": "Isolasi analitik tetap mempunyai biaya ingestion/source; backlog dapat menekan disk dan recoverability.",
+          "feedback": [
+            "Belum tepat. Capture dan retention menggunakan resource.",
+            "Benar. Pipeline perlu budget dan owner failure recovery.",
+            "Belum tepat. Cleanup buta dapat merusak recovery."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Tetapkan grain bulan dan currency sebelum SUM.",
+        "Gunakan kedua arah perbandingan agar missing group tetap terlihat.",
+        "Count/SUM cocok belum membuktikan row setara; snapshot/CDC membutuhkan boundary dan replay yang benar."
+      ],
+      "solutionSql": "WITH source_totals AS (\n  SELECT date_trunc('month', received_on::timestamp)::date AS month,\n         currency, COUNT(*) AS receipt_count, SUM(amount) AS total\n  FROM pg_temp.lesson_oltp_receipts GROUP BY 1,2\n), warehouse_totals AS (\n  SELECT date_trunc('month', received_on::timestamp)::date AS month,\n         currency, COUNT(*) AS receipt_count, SUM(amount) AS total\n  FROM pg_temp.lesson_warehouse_receipts GROUP BY 1,2\n)\nSELECT COALESCE(s.month,w.month) AS month,\n       COALESCE(s.currency,w.currency) AS currency,\n       s.receipt_count AS source_count, w.receipt_count AS warehouse_count,\n       s.total AS source_total, w.total AS warehouse_total,\n       CASE WHEN s.month IS NULL OR w.month IS NULL THEN 'missing_group_reconcile'\n            WHEN s.receipt_count = w.receipt_count AND s.total = w.total\n              THEN 'aggregate_matches_only'\n            ELSE 'mismatch_reconcile' END AS decision\nFROM source_totals s\nFULL JOIN warehouse_totals w USING (month,currency)\nORDER BY month,currency;",
+      "solutionExplanation": "Reference membandingkan aggregate snapshot authored memakai FULL JOIN dan mempertahankan missing. Ia bukan pipeline, CDC checker atau benchmark. Rancangan transfer nyata tetap perlu source-load budget, identity/version/delete semantics, boundary, freshness dan rekonsiliasi row pada scope yang sama.",
+      "critical": true
+    },
+    "reflection": "Rancang pipeline PostgreSQL OLTP ke analitik dengan grain, currency, snapshot/continuation, delete handling, budget source, freshness label dan bukti rekonsiliasi yang tidak berhenti pada count/SUM."
+  },
+  {
+    "id": "l8m04l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "data-models",
+      "jsonb",
+      "full-text-search",
+      "workload-design"
+    ],
+    "officialRefs": [
+      "https://learn.microsoft.com/en-us/azure/architecture/data-guide/technology-choices/understand-data-store-models",
+      "https://www.postgresql.org/docs/17/datatype-json.html",
+      "https://www.postgresql.org/docs/17/textsearch.html"
+    ],
+    "hook": "Katalog punya atribut berbeda, session dibaca lewat key, relasi sekolah ditelusuri, dan pengguna mencari teks. Apakah empat kebutuhan itu selalu membutuhkan empat database baru?",
+    "objectives": [
+      "Memetakan pola akses ke model document, key-value, graph dan search.",
+      "Membedakan kemampuan multi-model yang sudah ada dari alasan menambah mesin.",
+      "Menjelaskan validasi, akses, delete propagation dan biaya salinan turunan."
+    ],
+    "sections": [
+      {
+        "title": "Model data dimulai dari pertanyaan",
+        "paragraphs": [
+          "Document model cocok dipertimbangkan ketika satu aggregate dibaca sebagai dokumen dengan atribut bervariasi, tetapi kebutuhan transaksi lintas aggregate dan validasi tetap perlu diperiksa. Key-value cocok untuk lookup berdasarkan key yang diketahui, misalnya state session dengan kontrak expiry, revocation dan durability yang jelas. Tidak semua pertanyaan dapat dijawab efisien hanya dari key; pencarian atribut dan join mungkin membutuhkan indeks atau model tambahan. Nama NoSQL tidak menyatakan satu consistency model yang seragam, sehingga periksa kemampuan mesin dan konfigurasi yang benar-benar dipilih.",
+          "Graph model memusatkan vertex, edge dan traversal, misalnya jalur relasi multi-hop yang menjadi query dominan. Relasi sederhana atau hierarki terbatas masih dapat memakai relational join dan recursive CTE; pilih graph engine setelah kebutuhan serta biaya diukur. Search model memusatkan pencocokan teks, relevance, language analysis atau faceting. Search index biasanya salinan turunan dari sumber bisnis sehingga perubahan, delete dan permission harus ikut tersinkron. Hasil ranking bagus belum membuktikan saldo, hak akses atau state payment benar."
+        ]
+      },
+      {
+        "title": "Mulai dari kemampuan yang sudah tersedia",
+        "paragraphs": [
+          "PostgreSQL menyediakan JSONB dan full-text search sehingga kebutuhan awal tertentu dapat dilayani tanpa mesin baru. Worked example menyimpan atribut produk sebagai JSONB, mencari color blue melalui containment, lalu mencocokkan school dengan konfigurasi teks simple. Ini bukan search relevance benchmark, typo tolerance, stemming multibahasa atau bukti indeks sudah optimal. B-tree, GIN atau desain generated expression perlu dipilih berdasarkan query serta biaya write; fixture kecil tanpa indeks tidak menjadi dasar mengklaim performa pada katalog besar.",
+          "JSONB tetap membutuhkan schema contract yang bermakna. Field hilang berbeda dari string kosong, JSON null atau default bisnis. Valid JSON belum menjamin amount positif, currency benar atau referensi entity ada. Perubahan atribut besar juga dapat meningkatkan biaya update serta kontensi pada satu aggregate. Pertahankan identitas dan constraint pada fakta yang memerlukan integritas, sambil memakai fleksibilitas dokumen untuk bagian yang memang sesuai. Relational dan document bukan pilihan yang selalu saling meniadakan."
+        ]
+      },
+      {
+        "title": "Mesin tambahan membawa salinan dan operasi",
+        "paragraphs": [
+          "Jika kebutuhan search atau graph memang melampaui solusi yang ada, tentukan source of truth, transfer boundary, tenant scope, freshness, rebuild dan recovery sebelum menambah mesin. Setiap copy menambah backup, monitoring, permission, schema evolution dan failure mode. Session token membutuhkan secret hygiene dan revocation semantics; search produk sensitif membutuhkan delete propagation serta access checks yang tidak dilewati stale index. Jangan menambahkan storage hanya untuk mengganti beberapa baris query tanpa kebutuhan yang terbukti.",
+          "Dataset J menggunakan empat dokumen TEMP dan query PostgreSQL deterministik. BAG1 memenuhi color blue serta lexeme school; BAG3 mempunyai school tetapi color tidak diketahui. Query hanya mengajarkan dua pola akses dalam mesin yang sama, bukan menyimpulkan PostgreSQL terbaik untuk semua workload. Aktivitas membandingkan model dan kondisi untuk mengevaluasi alternatif. Tidak ada document service, key-value cluster, graph engine atau search cluster yang dipasang maupun dihubungi."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset J: empat dokumen produk TEMP dengan atribut JSONB dan deskripsi English sederhana. Query memakai text configuration simple yang eksplisit.",
+      "setupSql": "CREATE TEMP TABLE lesson_product_documents (\n  sku TEXT PRIMARY KEY, attributes JSONB NOT NULL,\n  description TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_product_documents VALUES\n  ('BAG1','{\"brand\":\"Luma\",\"color\":\"blue\"}','blue school bag'),\n  ('BAG2','{\"brand\":\"Luma\",\"color\":\"red\"}','red school bag'),\n  ('PEN1','{\"brand\":\"Nova\",\"color\":\"blue\"}','blue office pen'),\n  ('BAG3','{\"brand\":\"Nova\"}','school bag without color');",
+      "sql": "SELECT sku, attributes ->> 'brand' AS brand,\n       attributes ->> 'color' AS color\nFROM pg_temp.lesson_product_documents\nWHERE attributes @> '{\"color\":\"blue\"}'::jsonb\n  AND to_tsvector('simple', description) @@ plainto_tsquery('simple','school')\nORDER BY sku;",
+      "columns": [
+        "sku",
+        "brand",
+        "color"
+      ],
+      "rows": [
+        [
+          "BAG1",
+          "Luma",
+          "blue"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "BAG1 memenuhi containment color blue dan lexeme school sekaligus. BAG2 salah warna, PEN1 tidak mengandung school, dan BAG3 tidak mempunyai color. Tidak ada ranking atau pengukuran performance."
+    },
+    "checks": [
+      {
+        "id": "l8m04l02-check-1",
+        "question": "Apa dasar memilih document, key-value, graph atau search?",
+        "options": [
+          "Nama yang paling populer saja.",
+          "Pola akses, model data, transaksi/consistency, ukuran dan kemampuan operasi.",
+          "Satu mesin baru untuk setiap endpoint tanpa menilai biaya."
+        ],
+        "answer": 1,
+        "explanation": "Model dipilih dari pertanyaan dan invariant; beberapa model dapat dilayani satu mesin jika memadai.",
+        "feedback": [
+          "Belum tepat. Popularitas tidak menyatakan kebutuhan workload.",
+          "Benar. Shortlist dimulai dari requirement yang dapat ditinjau.",
+          "Belum tepat. Tiap mesin menambah sinkronisasi dan operasi."
+        ]
+      },
+      {
+        "id": "l8m04l02-check-2",
+        "question": "Apakah PostgreSQL JSONB membuat semua struktur dokumen otomatis valid secara bisnis?",
+        "options": [
+          "Ya, JSON valid berarti seluruh invariant dipenuhi.",
+          "Ya, field yang hilang selalu menjadi nilai default benar.",
+          "Tidak; validasi field, tipe, constraint, identity dan query shape tetap perlu dirancang."
+        ],
+        "answer": 2,
+        "explanation": "JSONB menjamin representasi JSON yang didukung, bukan seluruh aturan domain atau indeks yang optimal.",
+        "feedback": [
+          "Belum tepat. Sintaks JSON berbeda dari aturan bisnis.",
+          "Belum tepat. Missing field membutuhkan semantik eksplisit.",
+          "Benar. Fleksibilitas schema tidak menghapus validasi."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi filter produk, lalu pilih model untuk katalog dokumen, session, relasi multi-hop dan pencarian beserta alasan serta batasnya.",
+      "setup": "Gunakan TEMP J pada session segar. JSONB dan text search di sini adalah contoh SQL, bukan pemasangan database khusus atau benchmark.",
+      "starterSql": "SELECT sku, attributes ->> 'color' AS color FROM pg_temp.lesson_product_documents ORDER BY sku;",
+      "variants": [
+        {
+          "id": "l8m04l02-variant-1",
+          "question": "Filter color=blue dan full-text school dengan konfigurasi simple menghasilkan SKU apa?",
+          "options": [
+            "Hanya BAG1.",
+            "BAG1 dan BAG2 karena keduanya school.",
+            "BAG1 dan PEN1 karena keduanya blue."
+          ],
+          "answer": 0,
+          "explanation": "BAG1 memenuhi kedua predicate; BAG2 salah warna dan PEN1 tidak mempunyai lexeme school.",
+          "feedback": [
+            "Benar. Kedua syarat harus terpenuhi.",
+            "Belum tepat. AND tetap memerlukan color blue.",
+            "Belum tepat. AND tetap memerlukan school."
+          ]
+        },
+        {
+          "id": "l8m04l02-variant-2",
+          "question": "Jika hanya predicate full-text school dipakai, SKU mana yang sesuai fixture?",
+          "options": [
+            "Hanya PEN1.",
+            "BAG1, BAG2 dan BAG3; color BAG3 tidak diketahui.",
+            "Semua row pasti match karena TEXT bebas."
+          ],
+          "answer": 1,
+          "explanation": "Ketiga bag mengandung school; hilangnya atribut color tidak menghilangkan lexeme deskripsi.",
+          "feedback": [
+            "Belum tepat. PEN1 hanya menyebut office pen.",
+            "Benar. Atribut terstruktur dan teks mempunyai predicate berbeda.",
+            "Belum tepat. Full-text match masih mempunyai kondisi."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l8m04l02-edge-1",
+          "question": "Session token disimpan di key-value dengan TTL. Apakah TTL saja cukup untuk revocation dan otorisasi?",
+          "options": [
+            "Ya, token yang belum expired selalu boleh semua akses.",
+            "Ya, TTL membuat secret aman dimasukkan log.",
+            "Tidak; identity, scope akses, expiry/revocation, cache semantics dan secret hygiene tetap perlu."
+          ],
+          "answer": 2,
+          "explanation": "Key-value lookup dan TTL adalah kemampuan storage; kebijakan keamanan session tetap berada pada kontrak aplikasi.",
+          "feedback": [
+            "Belum tepat. Masa berlaku bukan izin seluruh operasi.",
+            "Belum tepat. Credential tetap tidak boleh tersebar.",
+            "Benar. Jangan menyamakan expire dengan kontrol akses lengkap."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l8m04l02-edge-2",
+          "question": "Search index belum menerima delete produk sensitif dari sumber. Apa batas hasil pencarian?",
+          "options": [
+            "Search tetap turunan; tegakkan akses, delete propagation dan authoritative recheck sesuai risiko, serta lag/error contract.",
+            "Index menjadi otoritas karena hasilnya lebih cepat.",
+            "Eventual berarti penghapusan sensitif boleh diabaikan selamanya."
+          ],
+          "answer": 0,
+          "explanation": "Storage tambahan membawa konsistensi dan akses tambahan; stale index tidak boleh melewati batas data sensitif.",
+          "feedback": [
+            "Benar. Ketepatan search mencakup visibility dan permission.",
+            "Belum tepat. Latency tidak memindahkan otoritas domain.",
+            "Belum tepat. Konvergensi dan deletion deadline perlu mekanisme."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Tentukan point lookup, aggregate document, traversal atau text search sebagai pola dominan.",
+        "Containment JSONB dan text matching adalah dua syarat yang digabung AND.",
+        "Evaluasi kemampuan existing dahulu; mesin tambahan memerlukan source, sync, access dan recovery contract."
+      ],
+      "solutionSql": "SELECT sku, attributes ->> 'brand' AS brand,\n       attributes ->> 'color' AS color\nFROM pg_temp.lesson_product_documents\nWHERE attributes @> '{\"color\":\"blue\"}'::jsonb\n  AND to_tsvector('simple', description) @@ plainto_tsquery('simple','school')\nORDER BY sku;",
+      "solutionExplanation": "Reference memakai JSONB containment dan full-text simple pada satu fixture PostgreSQL. Ia tidak memilih engine universal atau membuktikan indeks/performance. Pemilihan mesin tetap mengikuti transaksi, pola query, scale, language/relevance, security, biaya operasi dan reversibility.",
+      "critical": true
+    },
+    "reflection": "Pilih model untuk empat kebutuhan: katalog fleksibel, session lookup, relasi multi-hop dan search; jelaskan kemampuan PostgreSQL yang dapat dicoba dahulu serta syarat evidence sebelum menambah mesin."
+  },
+  {
+    "id": "l8m04l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "architecture-decisions",
+      "trade-offs",
+      "operability",
+      "reversibility"
+    ],
+    "officialRefs": [
+      "https://www.cognitect.com/blog/2011/11/15/documenting-architecture-decisions",
+      "https://learn.microsoft.com/en-us/azure/architecture/data-guide/technology-choices/understand-data-store-models"
+    ],
+    "hook": "Tim ingin memecah PostgreSQL menjadi microservice shards karena dianggap lebih scalable, tetapi belum ada baseline query, owner recovery atau rencana exit. Bagaimana mempertahankan keputusan arsitektur dengan alasan yang dapat ditinjau?",
+    "objectives": [
+      "Menulis ADR yang menghubungkan requirement, alternatif, keputusan dan konsekuensi.",
+      "Memisahkan hard invariant dari preferensi cost/performance dan evidence unknown.",
+      "Menetapkan owner operasi, migration/exit plan serta trigger revisit."
+    ],
+    "sections": [
+      {
+        "title": "Keputusan menyimpan alasan, bukan hanya nama mesin",
+        "paragraphs": [
+          "Architecture decision record atau ADR mencatat satu keputusan penting beserta konteks yang membuatnya masuk akal. Tuliskan workload, invariant, target layanan, batas biaya, kapasitas tim dan asumsi yang masih terbuka. Bedakan kebutuhan yang dikonfirmasi dari angka perkiraan serta hasil pengukuran yang benar-benar tersedia. Alternatif harus nyata: misalnya tetap satu PostgreSQL dengan query/index yang sesuai, menambah read model analitik, atau memecah data ketika batas yang relevan memang tercapai. Jangan membuat pilihan baseline sengaja tampak buruk agar teknologi favorit menang.",
+          "Record yang berguna menyatakan status proposed atau accepted, keputusan, alasan dan konsekuensi positif maupun negatif. Menambah shard mungkin mengurangi batas kapasitas satu node tetapi memperumit transaksi, routing, recovery serta observability. Mempertahankan satu database mungkin lebih sederhana tetapi membutuhkan budget dan trigger kapan keputusan harus ditinjau ulang. Tidak ada pilihan yang mendapat label terbaik tanpa scope. Pelajar perlu mampu menjelaskan satu workload yang cocok dan satu perubahan requirement yang membuat pilihan itu tidak lagi memadai."
+        ]
+      },
+      {
+        "title": "Hard requirement mendahului skor preferensi",
+        "paragraphs": [
+          "Invariant seperti satu efek payment per business key atau data tenant tidak bocor adalah gate wajib, bukan sekadar satu angka yang dapat ditutupi skor latency tinggi. Jika opsi melanggar requirement yang disepakati, tolak atau ubah requirement melalui keputusan domain yang eksplisit. Setelah gate terpenuhi, bandingkan trade-off biaya, latency, throughput, storage, beban operasi serta reversibility dengan satuan dan kondisi yang sama. Angka benchmark vendor dapat menjadi referensi capability, tetapi belum membuktikan workload sendiri mempunyai distribusi, concurrency dan failure behavior yang sama.",
+          "Unknown harus tetap terlihat sebagai pekerjaan evidence: query mana, cardinality berapa, baseline kapan, dan kriteria penerimaan apa yang belum tersedia. Jangan menulis true pada spreadsheet hanya supaya keputusan selesai. Operability mencakup owner on-call, upgrade, secret/access, backup, restore, disaster recovery dan monitoring. Biaya total mencakup salinan data, network, sinkronisasi, on-call serta waktu migrasi, bukan harga node saja. Sebuah mesin yang cocok secara fitur dapat tidak cocok jika tim belum mampu memulihkannya."
+        ]
+      },
+      {
+        "title": "Rencana keluar membuat keputusan dapat berubah",
+        "paragraphs": [
+          "Migration plan perlu menjelaskan source of truth selama transisi, snapshot/catch-up, kompatibilitas aplikasi, rekonsiliasi, cutover dan stop rule. Exit plan menyatakan bagaimana mengembalikan atau mengganti pilihan tanpa kehilangan data atau mempunyai dua writer tak terkendali. Rollback kode saja belum membatalkan perubahan schema atau efek eksternal. Tetapkan trigger revisit berdasarkan evidence yang relevan, misalnya query latency terukur pada workload tertentu atau kebutuhan isolasi baru, beserta owner dan waktu review.",
+          "Dataset ADR berisi tujuh proposal dengan flag rubrik authored. CASE mendahulukan invariant, evidence, biaya operasi, exit plan dan trigger revisit. candidate_for_adr_review hanya berarti kartu siap dibahas dalam latihan, bukan approval deployment atau bukti kapasitas. Ketika keputusan berubah, pertahankan record lama sebagai superseded dan tautkan penggantinya agar alasan historis tetap dapat dibaca. Fixture TEMP tidak menjalankan benchmark, migrasi, pengadaan mesin atau approval organisasi."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset ADR: tujuh proposal dan flag rubrik authored. Flag true adalah asumsi kartu, bukan evidence workload production.",
+      "setupSql": "CREATE TEMP TABLE lesson_architecture_options (\n  option_id TEXT PRIMARY KEY, choice TEXT NOT NULL,\n  invariants_met BOOLEAN, workload_evidence BOOLEAN,\n  cost_ops_reviewed BOOLEAN, migration_exit_plan BOOLEAN,\n  revisit_trigger_defined BOOLEAN\n);\nINSERT INTO pg_temp.lesson_architecture_options VALUES\n  ('01_single_postgres','retain_postgres',true,true,true,true,true),\n  ('02_shards_no_guard','shard_now',false,true,true,true,true),\n  ('03_unmeasured_search','add_search',true,NULL,true,true,true),\n  ('04_no_operator','new_graph_store',true,true,false,true,true),\n  ('05_no_exit','microservice_shards',true,true,true,false,true),\n  ('06_unknown_integrity','new_store',NULL,true,true,true,true),\n  ('07_no_trigger','retain_postgres',true,true,true,true,false);",
+      "sql": "SELECT option_id, choice,\n       CASE\n         WHEN invariants_met IS FALSE THEN 'reject_invariant_violation'\n         WHEN invariants_met IS NULL OR workload_evidence IS NOT TRUE\n           THEN 'collect_requirement_evidence'\n         WHEN cost_ops_reviewed IS NOT TRUE THEN 'review_cost_and_ownership'\n         WHEN migration_exit_plan IS NOT TRUE THEN 'define_migration_and_exit'\n         WHEN revisit_trigger_defined IS NOT TRUE THEN 'define_revisit_trigger'\n         ELSE 'candidate_for_adr_review'\n       END AS decision\nFROM pg_temp.lesson_architecture_options ORDER BY option_id;",
+      "columns": [
+        "option_id",
+        "choice",
+        "decision"
+      ],
+      "rows": [
+        [
+          "01_single_postgres",
+          "retain_postgres",
+          "candidate_for_adr_review"
+        ],
+        [
+          "02_shards_no_guard",
+          "shard_now",
+          "reject_invariant_violation"
+        ],
+        [
+          "03_unmeasured_search",
+          "add_search",
+          "collect_requirement_evidence"
+        ],
+        [
+          "04_no_operator",
+          "new_graph_store",
+          "review_cost_and_ownership"
+        ],
+        [
+          "05_no_exit",
+          "microservice_shards",
+          "define_migration_and_exit"
+        ],
+        [
+          "06_unknown_integrity",
+          "new_store",
+          "collect_requirement_evidence"
+        ],
+        [
+          "07_no_trigger",
+          "retain_postgres",
+          "define_revisit_trigger"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Hanya proposal pertama melewati rubrik authored, tanpa memilih mesin secara universal. Invariant false ditolak; unknown evidence, biaya operasi, exit dan revisit yang hilang menjadi pekerjaan berikutnya yang berbeda."
+    },
+    "checks": [
+      {
+        "id": "l8m04l03-check-1",
+        "question": "Apa yang membuat ADR berguna bagi engineer yang datang enam bulan kemudian?",
+        "options": [
+          "Nama teknologi tanpa konteks atau konsekuensi.",
+          "Context, requirement, alternatif, keputusan/status, alasan, konsekuensi dan kondisi revisit.",
+          "Janji arsitektur tidak akan pernah berubah."
+        ],
+        "answer": 1,
+        "explanation": "ADR menyimpan alasan dan trade-off sehingga keputusan dapat dipertahankan atau diganti dengan evidence baru.",
+        "feedback": [
+          "Belum tepat. Nama saja tidak menjelaskan mengapa pilihan cocok.",
+          "Benar. Sertakan konsekuensi negatif dan asumsi juga.",
+          "Belum tepat. Context dapat berubah dan ADR dapat disupersede."
+        ]
+      },
+      {
+        "id": "l8m04l03-check-2",
+        "question": "Opsi mempunyai skor performance tinggi tetapi melanggar invariant debit tunggal. Bolehkah skor total memenangkan opsi itu?",
+        "options": [
+          "Tidak; invariant wajib adalah gate sebelum membandingkan trade-off lain.",
+          "Ya, correctness boleh ditukar tanpa persetujuan domain.",
+          "Ya, selama nama teknologinya distributed."
+        ],
+        "answer": 0,
+        "explanation": "Hard requirement tidak boleh disembunyikan dalam weighted score; perubahan requirement perlu keputusan domain yang eksplisit.",
+        "feedback": [
+          "Benar. Gate correctness berbeda dari preferensi biaya.",
+          "Belum tepat. Invariant melindungi efek bisnis yang diwajibkan.",
+          "Belum tepat. Label arsitektur tidak membuktikan integritas."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi gate proposal, lalu tulis ADR untuk PostgreSQL tunggal versus microservice shards dengan requirement, alternatif, konsekuensi dan exit.",
+      "setup": "Gunakan TEMP ADR terpisah. Aktivitas berupa prediksi/refleksi; kualitas ADR tidak dinilai otomatis dan tidak menghasilkan izin deploy.",
+      "starterSql": "SELECT option_id, choice, invariants_met, workload_evidence FROM pg_temp.lesson_architecture_options ORDER BY option_id;",
+      "variants": [
+        {
+          "id": "l8m04l03-variant-1",
+          "question": "Opsi retain_postgres mempunyai seluruh evidence/rencana authored true. Apa keputusan CASE?",
+          "options": [
+            "Deploy otomatis ke production.",
+            "Bukti kapasitas real sudah lulus.",
+            "candidate_for_adr_review; keputusan tetap proposal yang ditinjau pada scope requirement."
+          ],
+          "answer": 2,
+          "explanation": "Flag fixture hanya mengizinkan pembahasan ADR; tidak ada benchmark, approval deployment atau migrasi yang dihasilkan SQL.",
+          "feedback": [
+            "Belum tepat. Review record bukan izin operasi.",
+            "Belum tepat. Flag authored bukan pengukuran.",
+            "Benar. Jaga batas antara proposal dan evidence operasional."
+          ]
+        },
+        {
+          "id": "l8m04l03-variant-2",
+          "question": "Opsi graph punya workload evidence tetapi cost_ops_reviewed=false. Apa pekerjaan berikutnya?",
+          "options": [
+            "Langsung adopsi karena workload saja cukup.",
+            "review_cost_and_ownership: on-call, backup, recovery, upgrade, security dan biaya total.",
+            "Hapus kebutuhan graph tanpa meninjau query."
+          ],
+          "answer": 1,
+          "explanation": "Keputusan mencakup kemampuan tim mengoperasikan pilihan, bukan hanya feature match.",
+          "feedback": [
+            "Belum tepat. Beban operasi belum dinilai.",
+            "Benar. Miliki owner serta biaya lifecycle yang eksplisit.",
+            "Belum tepat. Requirement perlu dipertahankan atau direvisi dengan alasan."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l8m04l03-edge-1",
+          "question": "Workload evidence NULL tetapi vendor menjanjikan scale. Apa keputusan?",
+          "options": [
+            "collect_requirement_evidence; klaim vendor tidak mengganti baseline workload sendiri.",
+            "Ubah NULL ke true agar proposal lengkap.",
+            "Anggap semua mesin pasti sama performanya."
+          ],
+          "answer": 0,
+          "explanation": "Unknown harus menjadi kebutuhan evidence yang spesifik, misalnya query shape, cardinality, latency, invariant dan recovery target.",
+          "feedback": [
+            "Benar. Bedakan assumption, published capability dan hasil workload sendiri.",
+            "Belum tepat. Flag palsu menyembunyikan gap.",
+            "Belum tepat. Perbedaan perlu dinilai, bukan ditebak."
+          ]
+        },
+        {
+          "id": "l8m04l03-edge-2",
+          "question": "ADR lama sudah tidak cocok karena workload berubah. Bagaimana memperbaruinya?",
+          "options": [
+            "Hapus alasan lama agar pilihan sekarang tampak selalu benar.",
+            "Ubah keputusan diam-diam tanpa mencatat migrasi.",
+            "Buat keputusan pengganti, tandai lama superseded, tautkan evidence dan rencana migrasi/exit."
+          ],
+          "answer": 2,
+          "explanation": "History alasan membantu menilai perubahan context dan konsekuensi; penggantian tidak menghapus kewajiban transisi data.",
+          "feedback": [
+            "Belum tepat. Menghapus history merusak pemahaman masa depan.",
+            "Belum tepat. Transisi perlu dapat ditinjau.",
+            "Benar. Keputusan dapat berubah sambil menjaga audit alasan."
+          ]
+        }
+      ],
+      "hints": [
+        "Tolak pelanggaran invariant sebelum menimbang preferensi lain.",
+        "Unknown evidence berbeda dari evidence lengkap yang mendukung pilihan.",
+        "Lengkapi biaya/owner, migration/exit dan revisit; siap review belum berarti sudah dioperasikan."
+      ],
+      "solutionSql": "SELECT option_id, choice,\n       CASE\n         WHEN invariants_met IS FALSE THEN 'reject_invariant_violation'\n         WHEN invariants_met IS NULL OR workload_evidence IS NOT TRUE\n           THEN 'collect_requirement_evidence'\n         WHEN cost_ops_reviewed IS NOT TRUE THEN 'review_cost_and_ownership'\n         WHEN migration_exit_plan IS NOT TRUE THEN 'define_migration_and_exit'\n         WHEN revisit_trigger_defined IS NOT TRUE THEN 'define_revisit_trigger'\n         ELSE 'candidate_for_adr_review'\n       END AS decision\nFROM pg_temp.lesson_architecture_options ORDER BY option_id;",
+      "solutionExplanation": "Reference memeriksa kelengkapan rubrik authored dengan gate correctness terlebih dahulu. Ia tidak menilai mutu ADR tertulis, mengukur workload, mengalokasikan biaya atau menyetujui deployment. Keputusan nyata harus menyertakan evidence scope, konsekuensi, owner serta rencana transisi yang dapat ditinjau.",
+      "critical": true
+    },
+    "reflection": "Tulis ADR singkat: context, hard requirements, dua alternatif, keputusan proposed, alasan, konsekuensi, evidence yang belum ada, owner operasi, migration/exit dan trigger revisit."
+  }
+]

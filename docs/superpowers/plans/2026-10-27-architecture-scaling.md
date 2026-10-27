@@ -31,9 +31,11 @@
 
 ## Task 3: L8M04 — Choosing the Right Data Store
 
-- [ ] Add `src/content/database/l8-data-stores.json` and matching English dictionary with the full contract.
-- [ ] Teach OLTP/OLAP transfer contracts, workload-led store selection and reversible evidence-based architecture decisions.
-- [ ] Register content and update counts to 37 modules / 111 published / 9 draft, next draft l9m01l01; document existing L8 assessment availability.
-- [ ] Review source/diff and independent read-only review; commit and push current origin/main.
+- [x] Add `src/content/database/l8-data-stores.json` and matching English dictionary with the full contract.
+- [x] Teach OLTP/OLAP transfer contracts, workload-led store selection and reversible evidence-based architecture decisions.
+- [x] Register content and update counts to 37 modules / 111 published / 9 draft, next draft l9m01l01; document existing L8 assessment availability.
+- [x] Review source/diff and independent read-only review; no important findings. Commit and push current origin/main; Git history records the outcome.
 
 Continue L9 only with sufficient capacity for a complete module. Do not publish partial lessons or label prediction exercises as executed capstone drills.
+
+Session handoff: all four L8 modules are complete by source/diff review. All nine L9 lessons remain draft; next is L9M01 with a complete requirements/invariants, schema/migration and transaction-boundary contract. No partial L9 authored record was started in this session.

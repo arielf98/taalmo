@@ -1,16 +1,6 @@
 # Remaining curriculum authoring
 
-The following 12 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
-
-## L8 — Database Architecture & Scaling
-
-### L8M04 — Choosing the Right Data Store
-
-Prerequisite: l8m03. Scenario: Platform-scale.
-
-- [ ] `l8m04l01` — OLTP vs OLAP
-- [ ] `l8m04l02` — Document, key-value, graph, search
-- [ ] `l8m04l03` — Architecture decision record
+The following 9 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L9 — Master Capstone
 

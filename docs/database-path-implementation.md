@@ -338,3 +338,11 @@ Added l8m03l01–l8m03l03 with the full bilingual contract, independent TEMP SQL
 Totals: 36 authored modules, 108 published / 12 draft lessons; 111 combined lessons plus three labs (114 activity milestones). Content/messages/labels and existing registries are updated. Existing E2E count/first-draft expectations move to l8m04l01 without expanded coverage. Blueprint, seed, prior versions and learner storage remain unchanged; L8 level assessment stays gated until L8M04.
 
 Source/diff review only. No tests, audits, SQL, runtime, manual/browser checks, lint, typecheck or build were run. Expected decisions are authored rather than executed replication, saga, transport or consumer evidence. Commit and push this module, then continue L8M04.
+
+## L8M04 — Choosing the Right Data Store — 27 October 2026
+
+Added l8m04l01–l8m04l03 with complete bilingual prose, independent TEMP SQL/results, checks, practice variants/edge cases, hints, reference solutions and reflections. OLTP/OLAP reconciliation preserves month/currency grain and unknown warehouse coverage while explaining consistent snapshot/CDC boundaries. Data-model choices compare document/key-value/graph/search; JSONB plus explicit simple full-text matching demonstrates existing PostgreSQL capabilities without new dependencies. ADR cards apply hard-invariant gates before evidence, cost/operations, migration/exit and revisit readiness.
+
+Totals: 37 authored modules, 111 published / 9 draft lessons; 114 combined lessons plus three labs (117 activity milestones). Existing publication/mastery gates now expose the L8 level assessment. Registries, locale labels and existing E2E count/first-draft expectations move to l9m01l01 without expanded coverage. Blueprint, School Finance seed, prior lesson versions and progress storage stay unchanged.
+
+Source/diff review only. No tests, audits, SQL, runtime, manual/browser checks, lint, typecheck or build were run. No warehouse pipeline, new store, benchmark, migration or deployment was performed. Next canonical milestone: L9M01 — Capstone: Design the Ledger; all nine L9 lessons remain draft, and executed capstone/drill evidence must not be inferred from prediction exercises.

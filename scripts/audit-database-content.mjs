@@ -38,6 +38,7 @@ export const authored = [
   "l8-caching",
   "l8-partitioning-tenancy",
   "l8-distributed",
+  "l8-data-stores",
 ].flatMap((file) => read(`src/content/database/${file}.json`));
 const modules = blueprint.levels.flatMap((level) => level.modules);
 const lessons = modules.flatMap((module) => module.lessons);

@@ -359,5 +359,16 @@
   "two-phase-commit": "commit dua fase",
   "durable-dedup": "deduplikasi durable",
   "event-ordering": "urutan event",
-  "gap-handling": "penanganan gap"
+  "gap-handling": "penanganan gap",
+  "oltp": "OLTP",
+  "olap": "OLAP",
+  "data-pipelines": "pipeline data",
+  "data-models": "model data",
+  "jsonb": "JSONB",
+  "full-text-search": "pencarian teks lengkap",
+  "workload-design": "rancangan workload",
+  "architecture-decisions": "keputusan arsitektur",
+  "trade-offs": "trade-off",
+  "operability": "kemudahan operasi",
+  "reversibility": "kemampuan mengubah keputusan"
 }
