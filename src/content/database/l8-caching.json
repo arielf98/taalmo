@@ -1,0 +1,658 @@
+[
+  {
+    "id": "l8m01l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "cache-aside",
+      "ttl",
+      "freshness",
+      "consistency-contract"
+    ],
+    "officialRefs": [
+      "https://learn.microsoft.com/en-us/azure/architecture/patterns/cache-aside"
+    ],
+    "hook": "Jumlah produk boleh tertunda tiga puluh detik, tetapi saldo dipakai untuk mengizinkan debit. Mengapa memakai cache dan TTL yang sama untuk kedua read dapat melanggar kontrak bisnis?",
+    "objectives": [
+      "Membedakan umur entry cache dari umur snapshot sumber.",
+      "Menjelaskan urutan cache-aside dan race invalidation/refill.",
+      "Memilih freshness dan failure behavior sesuai domain count atau saldo."
+    ],
+    "sections": [
+      {
+        "title": "Mulai dari nilai yang boleh tertunda",
+        "paragraphs": [
+          "Cache menyimpan salinan agar pembacaan berulang tidak selalu menghitung ulang dari database. Pada cache-aside, aplikasi membaca cache lebih dahulu; miss menuju sumber, lalu hasilnya dapat diisi ke cache dan dikembalikan. Pada write, sumber otoritatif harus diubah terlebih dahulu dan invalidation mengikuti commit yang berhasil. Menulis cache lebih dahulu dapat memperlihatkan perubahan yang belum commit atau akhirnya rollback. Cache tetap salinan turunan; menghapusnya seharusnya tidak menghapus satu-satunya catatan bisnis. Jumlah produk untuk halaman katalog mungkin menerima delay tiga puluh detik, tetapi angka stok untuk menjanjikan pesanan perlu guard transaksi sendiri.",
+          "TTL membatasi masa pakai entry sejak diisi, bukan umur informasi sejak sumbernya diketahui benar. Jika replica sudah tertinggal atau reader lama baru selesai, entry baru dapat berisi snapshot lama. Latihan memakai detik logis pada satu clock yang diasumsikan sebanding: source_snapshot_s adalah waktu snapshot otoritatif, filled_s waktu refill, dan observed_s waktu read. Di sistem nyata timestamp antar host memerlukan batas clock skew serta definisi provenance yang dapat dipertanggungjawabkan; label generated_at saja tidak membuktikan seluruh perubahan sumber sudah tercakup."
+        ]
+      },
+      {
+        "title": "Invalidation masih mempunyai interleaving",
+        "paragraphs": [
+          "Bayangkan reader mengambil versi lama, writer commit versi baru lalu menghapus cache, kemudian reader menyimpan kembali hasil lamanya. TTL entry dimulai ulang walaupun isi stale. Menghapus sebelum commit mempunyai race lain karena reader dapat mengisi cache dari data yang belum berubah. Versioned keys atau compare-and-set dengan watermark yang tidak hilang ketika entry dihapus dapat menjadi bagian protokol refill; memilih nama teknik saja belum membuktikan race selesai. Semua writer dan reader harus mengikuti aturan yang sama, termasuk cache miss, retry, eviction, dan kegagalan invalidation.",
+          "Banyak miss bersamaan dapat membanjiri sumber saat expiry atau cache outage. Request coalescing per key, jitter expiry, deadline, dan backpressure membantu membatasi beban, tetapi tidak membuat snapshot lebih baru. Jangan menjadikan fallback ke database sebagai izin membuka koneksi tanpa batas. Cache key juga harus memasukkan tenant dan parameter yang mengubah hasil; otorisasi tidak boleh dilewati karena hit. Cache bukan tempat aman untuk membagikan hasil yang semula hanya boleh dibaca satu pengguna."
+        ]
+      },
+      {
+        "title": "Baca tabel keputusan dengan batas klaimnya",
+        "paragraphs": [
+          "Dataset C memperlihatkan request, umur sumber, expiry, dan keputusan. CASE menolak unknown, clock tidak berurutan, entry expired, atau umur sumber yang melewati kontrak. Pada batas tepat expiry entry sudah miss; umur sumber tepat tiga puluh masih diperbolehkan untuk count. Balance selalu diarahkan ke authoritative_transaction, yang berarti validasi dan perubahan atomik sesuai invariant, bukan sekadar SELECT segar lalu debit terpisah. Bila sumber tidak tersedia, count hanya boleh memakai degraded response jika kontrak mengizinkan dan memberi label; ledger harus memberi unavailable atau pending yang jujur.",
+          "Query ini membaca fixture TEMP yang independen dari School Finance. Angka waktu serta hasil adalah authored untuk penalaran, bukan telemetry cache. Tidak ada Redis, invalidation worker, pengukuran latency, atau pembuktian bounded staleness live. Pelajar perlu menyebut asumsi sumber dan clock sebelum menyatakan sebuah hit memenuhi kebutuhan bisnis."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset C: enam read cache dengan detik logis authored pada satu clock. Cache dan database live tidak dihubungi.",
+      "setupSql": "CREATE TEMP TABLE lesson_cache_reads (\n  request_id TEXT PRIMARY KEY, domain TEXT NOT NULL,\n  observed_s INTEGER NOT NULL, source_snapshot_s INTEGER,\n  filled_s INTEGER, ttl_s INTEGER NOT NULL, max_source_age_s INTEGER NOT NULL\n);\nINSERT INTO pg_temp.lesson_cache_reads VALUES\n  ('01_catalog','catalog_count',40,20,25,30,30),\n  ('02_old_source','catalog_count',100,20,95,30,30),\n  ('03_expiry','catalog_count',40,10,10,30,30),\n  ('04_balance','ledger_balance',40,39,39,30,0),\n  ('05_unknown','catalog_count',40,NULL,30,30,30),\n  ('06_late_refill','catalog_count',35,0,29,30,30);",
+      "sql": "SELECT request_id, domain,\n       observed_s - source_snapshot_s AS source_age_s,\n       filled_s + ttl_s AS expires_s,\n       CASE\n         WHEN domain = 'ledger_balance' THEN 'authoritative_transaction'\n         WHEN source_snapshot_s IS NULL OR filled_s IS NULL THEN 'fetch_source'\n         WHEN source_snapshot_s > filled_s OR filled_s > observed_s THEN 'hold_invalid_clock'\n         WHEN observed_s >= filled_s + ttl_s THEN 'fetch_source'\n         WHEN observed_s - source_snapshot_s > max_source_age_s THEN 'fetch_source'\n         ELSE 'serve_labeled_cache'\n       END AS decision\nFROM pg_temp.lesson_cache_reads\nORDER BY request_id;",
+      "columns": [
+        "request_id",
+        "domain",
+        "source_age_s",
+        "expires_s",
+        "decision"
+      ],
+      "rows": [
+        [
+          "01_catalog",
+          "catalog_count",
+          "20",
+          "55",
+          "serve_labeled_cache"
+        ],
+        [
+          "02_old_source",
+          "catalog_count",
+          "80",
+          "125",
+          "fetch_source"
+        ],
+        [
+          "03_expiry",
+          "catalog_count",
+          "30",
+          "40",
+          "fetch_source"
+        ],
+        [
+          "04_balance",
+          "ledger_balance",
+          "1",
+          "69",
+          "authoritative_transaction"
+        ],
+        [
+          "05_unknown",
+          "catalog_count",
+          null,
+          "60",
+          "fetch_source"
+        ],
+        [
+          "06_late_refill",
+          "catalog_count",
+          "35",
+          "59",
+          "fetch_source"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Catalog pertama memenuhi dua batas. Old source dan late refill belum expired tetapi terlalu tua; expiry tepat batas adalah miss. Saldo memerlukan transaksi otoritatif, dan source age NULL tetap unknown."
+    },
+    "checks": [
+      {
+        "id": "l8m01l01-check-1",
+        "question": "Cache diisi pada detik 95 dari snapshot detik 20. Pada detik 100, berapa umur sumbernya?",
+        "options": [
+          "5 detik karena baru diisi.",
+          "80 detik; umur entry dan umur sumber berbeda.",
+          "0 detik selama TTL belum habis."
+        ],
+        "answer": 1,
+        "explanation": "Umur sumber adalah 100 dikurangi 20, sedangkan umur entry adalah 5 detik.",
+        "feedback": [
+          "Belum tepat. Lima hanya umur entry sejak refill.",
+          "Benar. Freshness harus memakai asal snapshot, bukan jam refill saja.",
+          "Belum tepat. TTL tidak memperbarui data sumber."
+        ]
+      },
+      {
+        "id": "l8m01l01-check-2",
+        "question": "Saldo cache terlihat cukup untuk debit. Apa batas transaksi yang diperlukan?",
+        "options": [
+          "Validasi invariant dan debit atomik di sumber otoritatif.",
+          "Percaya cache karena TTL masih satu detik.",
+          "Baca database lalu debit terpisah tanpa guard."
+        ],
+        "answer": 0,
+        "explanation": "Bahkan read database yang segar dapat berubah sebelum write; invariant harus dijaga pada transaksi write.",
+        "feedback": [
+          "Benar. Cache bukan otoritas untuk keputusan saldo.",
+          "Belum tepat. TTL pendek tetap memungkinkan stale read.",
+          "Belum tepat. Ada race antara pemeriksaan dan debit."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi keputusan read, lalu jelaskan TTL, provenance, serta respons ketika cache atau sumber gagal.",
+      "setup": "Gunakan fixture TEMP C secara terpisah untuk worked example dan reference. Ini prediksi keputusan tanpa menjalankan cache, race, atau benchmark.",
+      "starterSql": "SELECT request_id, observed_s, source_snapshot_s, filled_s, ttl_s FROM pg_temp.lesson_cache_reads ORDER BY request_id;",
+      "variants": [
+        {
+          "id": "l8m01l01-variant-1",
+          "question": "Entry catalog pada detik 40 memiliki filled_s=10 dan ttl_s=30. Apa hasil pada batas tepat TTL?",
+          "options": [
+            "serve_labeled_cache karena selisih sama.",
+            "authoritative_transaction untuk semua count.",
+            "fetch_source karena observed_s >= expires_s."
+          ],
+          "answer": 2,
+          "explanation": "Interval valid entry berakhir sebelum expires_s; batas tepat expiry termasuk miss.",
+          "feedback": [
+            "Belum tepat. Batas kanan expiry tidak termasuk valid.",
+            "Belum tepat. Count tidak otomatis menjadi transaksi ledger.",
+            "Benar. Pada detik 40 entry sudah expired."
+          ]
+        },
+        {
+          "id": "l8m01l01-variant-2",
+          "question": "Catalog diamati pada 50, snapshot=25, refill=30, TTL=40, batas umur sumber=30. Apa keputusan?",
+          "options": [
+            "serve_labeled_cache dengan umur sumber 25 detik.",
+            "fetch_source karena semua cache dilarang.",
+            "serve tanpa label dan klaim selalu terbaru."
+          ],
+          "answer": 0,
+          "explanation": "Entry belum expired dan umur sumber 25 memenuhi batas 30; label tetap menjelaskan batas kontrak.",
+          "feedback": [
+            "Benar. Kedua batas diperiksa terpisah.",
+            "Belum tepat. Domain ini mengizinkan staleness terbatas.",
+            "Belum tepat. Lolos batas bukan berarti selalu terbaru."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l8m01l01-edge-1",
+          "question": "Reader mengambil snapshot 0, writer commit dan invalidate pada 20, reader refill pada 29. Mengapa delete setelah write belum cukup?",
+          "options": [
+            "Delete membuat snapshot lama otomatis terbaru.",
+            "Reader dapat memasukkan kembali versi lama; perlu protokol versi/refill dan batas freshness.",
+            "Gunakan TTL tak terbatas agar race hilang."
+          ],
+          "answer": 1,
+          "explanation": "Invalidation tidak mengunci reader yang sudah berjalan; late refill dapat menghidupkan kembali data stale.",
+          "feedback": [
+            "Belum tepat. Snapshot lama tidak berubah akibat delete.",
+            "Benar. Tangani interleaving, termasuk cache kosong setelah invalidation.",
+            "Belum tepat. TTL panjang memperpanjang stale exposure."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l8m01l01-edge-2",
+          "question": "Entry belum expired tetapi source_snapshot_s=NULL. Apa keputusan latihan?",
+          "options": [
+            "Anggap sumber diambil sekarang.",
+            "Ubah NULL menjadi nol umur.",
+            "fetch_source; bila sumber gagal, ikuti error/degraded contract tanpa mengklaim freshness."
+          ],
+          "answer": 2,
+          "explanation": "Freshness tidak dapat dibuktikan tanpa provenance; unknown tidak sama dengan baru.",
+          "feedback": [
+            "Belum tepat. Waktu sumber belum diketahui.",
+            "Belum tepat. Nol menyembunyikan evidence yang hilang.",
+            "Benar. Kontrak kegagalan perlu eksplisit."
+          ]
+        }
+      ],
+      "hints": [
+        "Hitung umur sumber dari observed_s dikurangi source_snapshot_s.",
+        "Bandingkan expiry dan batas umur sumber secara terpisah; NULL bukan nol.",
+        "Domain saldo melewati cache untuk validasi/write atomik; count hanya dilayani bila kedua batas terpenuhi."
+      ],
+      "solutionSql": "SELECT request_id, domain,\n       observed_s - source_snapshot_s AS source_age_s,\n       filled_s + ttl_s AS expires_s,\n       CASE\n         WHEN domain = 'ledger_balance' THEN 'authoritative_transaction'\n         WHEN source_snapshot_s IS NULL OR filled_s IS NULL THEN 'fetch_source'\n         WHEN source_snapshot_s > filled_s OR filled_s > observed_s THEN 'hold_invalid_clock'\n         WHEN observed_s >= filled_s + ttl_s THEN 'fetch_source'\n         WHEN observed_s - source_snapshot_s > max_source_age_s THEN 'fetch_source'\n         ELSE 'serve_labeled_cache'\n       END AS decision\nFROM pg_temp.lesson_cache_reads\nORDER BY request_id;",
+      "solutionExplanation": "Reference memprioritaskan ledger, memeriksa provenance/clock, lalu expiry dan freshness. Keputusan fetch_source belum membuktikan sumber tersedia atau segar; production memerlukan kontrak fallback, budget beban, otorisasi dan protokol refill yang benar.",
+      "critical": true
+    },
+    "reflection": "Tulis kontrak cache untuk jumlah produk dan saldo: batas freshness, provenance, urutan commit/invalidation, satu race refill, dan respons ketika sumber tidak tersedia."
+  },
+  {
+    "id": "l8m01l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "cqrs",
+      "read-models",
+      "projection",
+      "event-versioning"
+    ],
+    "officialRefs": [
+      "https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs",
+      "https://www.postgresql.org/docs/17/sql-insert.html"
+    ],
+    "hook": "Dashboard outstanding menambahkan setiap callback yang diterima. Setelah duplicate dan event terlambat, angka berbeda dari ledger. Bagaimana read model mengikuti sumber tanpa menghitung efek yang sama dua kali?",
+    "objectives": [
+      "Memisahkan command model otoritatif dari query projection turunan.",
+      "Menerapkan full-state replacement dengan versi per invoice dan guard konflik.",
+      "Menjelaskan lag, replay, tombstone, dan rekonsiliasi tanpa klaim exactly-once."
+    ],
+    "sections": [
+      {
+        "title": "Model baca melayani pertanyaan tertentu",
+        "paragraphs": [
+          "Command model menjaga perubahan bisnis dan invariant, misalnya payment sukses tidak boleh didebit dua kali. Query model menyiapkan bentuk yang mudah dibaca, misalnya outstanding setiap invoice untuk dashboard. Pemisahan ini disebut CQRS; keduanya dapat dimulai dalam satu database dengan batas tanggung jawab jelas. Tidak wajib memasang broker, membagi microservice, atau memakai event sourcing. Tambahkan salinan asinkron hanya bila kebutuhan baca dan biaya sinkronisasi membenarkannya. Read model tidak mengambil alih otoritas ledger dan tidak boleh digunakan untuk memutuskan debit hanya karena query-nya cepat.",
+          "Fixture P memakai satu tenant tetap; invoice_id unik dalam scope latihan. Projection menyimpan student_id, source_version, amount, paid kumulatif, dan state lengkap. Outstanding open adalah amount dikurangi paid; cancelled menyumbang nol sebagai aturan domain yang disederhanakan. Refund, credit note, mata uang, serta pembatalan invoice yang sudah dibayar memerlukan aturan tambahan dan tidak diciptakan diam-diam di sini. Pada multi-tenant, identitas event dan primary key projection harus menyertakan tenant agar invoice bernomor sama tidak bertabrakan."
+        ]
+      },
+      {
+        "title": "Versi mengurutkan state sebuah invoice",
+        "paragraphs": [
+          "Setiap perubahan sumber menghasilkan versi invoice yang meningkat secara otoritatif dan payload lengkap. Versi tidak boleh dibentuk dari waktu delivery atau angka lokal masing-masing consumer. Contoh menerima invoice 101 versi tiga, lalu versi dua, lalu duplikat versi tiga. DISTINCT ON memilih satu kandidat terbaru per invoice sebelum UPSERT sehingga satu statement tidak mencoba mengubah row target yang sama berkali-kali. Predicate konflik hanya mengganti target bila versi masuk lebih besar. Versi sama dianggap redelivery dengan payload sama; fixture menjamin kesamaan itu, sementara ingestion nyata harus mendeteksi dan mengarantina payload berbeda pada identitas versi yang sama.",
+          "Karena event berisi state lengkap, versi enam dapat mengganti versi empat tanpa menjumlahkan delta lima. Event delta tidak boleh diperlakukan sama: melewatkan payment delta atau menolak semua versi di bawah maksimum dapat menghilangkan efek yang belum diterapkan. Bahkan dengan guard versi, pengiriman event harus tahan kegagalan commit dan publish, misalnya memakai outbox pada transaksi sumber. Apply projection dan checkpoint/ack perlu protokol pemulihan yang jelas; retry harus tidak menggandakan efek. SQL ini tidak memasang consumer atau menjanjikan exactly-once transport."
+        ]
+      },
+      {
+        "title": "Lag dan rekonsiliasi tetap bagian desain",
+        "paragraphs": [
+          "Read model dapat benar untuk versi yang sudah diterima tetapi tertinggal dari sumber. Versi terbesar satu invoice tidak membuktikan semua invoice sudah tercakup; ketiadaan row bisa berarti belum sampai, bukan outstanding nol. Tombstone atau state cancelled mempertahankan versi agar event lama tidak menghidupkan kembali invoice yang dihapus dari tampilan. Jika student pemilik invoice berubah, full state mengganti student_id; aggregate per student perlu menghitung ulang kontribusi lama dan baru, bukan hanya menambah pemilik baru. Reference menampilkan per invoice supaya perpindahan itu tidak tersembunyi oleh aggregate.",
+          "Rebuild memerlukan snapshot dan posisi kelanjutan yang konsisten, penanganan event selama backfill, serta cutover setelah rekonsiliasi. Bandingkan invoice, versi, owner, state dan nilai pada scope yang sama; total cocok saja dapat menyembunyikan dua error yang saling meniadakan. Latihan mengajarkan prediksi tiga row authored pada fixture TEMP mandiri. Tidak ada stream live, watermark global, benchmark, atau bukti sinkronisasi production."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset P: projection invoice satu tenant dan lima delivery full-state authored, termasuk versi lama, duplikat, invoice baru dan cancellation.",
+      "setupSql": "CREATE TEMP TABLE lesson_invoice_projection (\n  invoice_id INTEGER PRIMARY KEY, student_id INTEGER NOT NULL,\n  source_version INTEGER NOT NULL CHECK (source_version > 0),\n  amount INTEGER NOT NULL CHECK (amount >= 0),\n  paid INTEGER NOT NULL CHECK (paid >= 0 AND paid <= amount),\n  state TEXT NOT NULL CHECK (state IN ('open','cancelled'))\n);\nCREATE TEMP TABLE lesson_invoice_events (\n  delivery_id INTEGER PRIMARY KEY, invoice_id INTEGER NOT NULL,\n  student_id INTEGER NOT NULL, source_version INTEGER NOT NULL,\n  amount INTEGER NOT NULL, paid INTEGER NOT NULL, state TEXT NOT NULL\n);\nINSERT INTO pg_temp.lesson_invoice_projection VALUES\n  (101,1,2,100,20,'open'), (103,2,1,200,0,'open');\nINSERT INTO pg_temp.lesson_invoice_events VALUES\n  (1,101,1,3,100,100,'open'),\n  (2,101,1,2,100,20,'open'),\n  (3,101,1,3,100,100,'open'),\n  (4,102,1,1,80,10,'open'),\n  (5,103,2,2,200,0,'cancelled');",
+      "sql": "WITH latest AS (\n  SELECT DISTINCT ON (invoice_id)\n         invoice_id, student_id, source_version, amount, paid, state\n  FROM pg_temp.lesson_invoice_events\n  ORDER BY invoice_id, source_version DESC, delivery_id DESC\n)\nINSERT INTO pg_temp.lesson_invoice_projection AS current\n       (invoice_id, student_id, source_version, amount, paid, state)\nSELECT invoice_id, student_id, source_version, amount, paid, state FROM latest WHERE true\nON CONFLICT (invoice_id) DO UPDATE\nSET student_id = EXCLUDED.student_id,\n    source_version = EXCLUDED.source_version,\n    amount = EXCLUDED.amount, paid = EXCLUDED.paid, state = EXCLUDED.state\nWHERE EXCLUDED.source_version > current.source_version;\nSELECT invoice_id, student_id, source_version, state,\n       CASE WHEN state = 'cancelled' THEN 0 ELSE amount - paid END AS outstanding\nFROM pg_temp.lesson_invoice_projection\nORDER BY invoice_id;",
+      "columns": [
+        "invoice_id",
+        "student_id",
+        "source_version",
+        "state",
+        "outstanding"
+      ],
+      "rows": [
+        [
+          "101",
+          "1",
+          "3",
+          "open",
+          "0"
+        ],
+        [
+          "102",
+          "1",
+          "1",
+          "open",
+          "70"
+        ],
+        [
+          "103",
+          "2",
+          "2",
+          "cancelled",
+          "0"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "State terbaru mengganti paid secara kumulatif. Versi dua dan duplicate invoice 101 tidak menambah efek. Invoice 103 tetap memiliki versi cancellation dan outstanding nol; total tiga invoice adalah 70. Ini hasil yang diharapkan, bukan stream yang dijalankan."
+    },
+    "checks": [
+      {
+        "id": "l8m01l02-check-1",
+        "question": "CQRS mewajibkan database terpisah, event sourcing, dan broker sejak awal?",
+        "options": [
+          "Ya, tanpa tiga komponen itu belum CQRS.",
+          "Ya, read model harus mengganti ledger.",
+          "Tidak; pemisahan model command/query dapat dimulai dalam satu database."
+        ],
+        "answer": 2,
+        "explanation": "CQRS memisahkan tanggung jawab baca/tulis; event sourcing dan deployment terpisah adalah keputusan tambahan.",
+        "feedback": [
+          "Belum tepat. Jangan menambah infrastruktur sebagai syarat palsu.",
+          "Belum tepat. Projection tetap turunan dari sumber otoritatif.",
+          "Benar. Pilih kompleksitas sesuai kebutuhan workload."
+        ]
+      },
+      {
+        "id": "l8m01l02-check-2",
+        "question": "Mengapa fixture mengirim paid kumulatif dan state lengkap, bukan hanya delta payment?",
+        "options": [
+          "State lengkap membuat semua event antar invoice punya urutan global.",
+          "Versi terbaru dapat mengganti state lama tanpa menambahkan duplikat delta.",
+          "Dengan full state tidak mungkin ada payload rusak."
+        ],
+        "answer": 1,
+        "explanation": "Replacement ber-versi menangani redelivery dan versi lama pada invoice yang sama; payload tetap perlu divalidasi.",
+        "feedback": [
+          "Belum tepat. Versi hanya mempunyai scope per invoice.",
+          "Benar. Jangan menjumlahkan kembali delta duplikat.",
+          "Belum tepat. Bentuk lengkap bukan validasi isi."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi projection setelah batch dan redelivery, lalu jelaskan asumsi full-state, konflik versi sama, serta batas freshness dashboard.",
+      "setup": "Setup TEMP P dipakai pada session segar untuk masing-masing contoh/reference. Semua delivery berasal dari satu tenant dan versi sama memiliki payload identik.",
+      "starterSql": "SELECT invoice_id, source_version, paid, state FROM pg_temp.lesson_invoice_events ORDER BY delivery_id;",
+      "variants": [
+        {
+          "id": "l8m01l02-variant-1",
+          "question": "Setelah batch contoh, berapa outstanding invoice 101, 102, 103 dan totalnya?",
+          "options": [
+            "0, 70, 0; total 70.",
+            "80, 70, 200; total 350.",
+            "-100, 70, 0; total -30 karena duplicate."
+          ],
+          "answer": 0,
+          "explanation": "Versi 3 melunasi 101, 102 tersisa 80-10, dan cancellation 103 menyumbang nol.",
+          "feedback": [
+            "Benar. Duplikat tidak menambah paid lagi.",
+            "Belum tepat. Ini mempertahankan state lama 101 dan 103.",
+            "Belum tepat. Reference mengganti state, bukan menambah delta."
+          ]
+        },
+        {
+          "id": "l8m01l02-variant-2",
+          "question": "Batch yang sama dikirim ulang pada projection yang sudah diperbarui. Apa hasilnya?",
+          "options": [
+            "Outstanding 102 turun menjadi 60 karena paid ditambah lagi.",
+            "Semua row dihapus karena konflik primary key.",
+            "Hasil tetap sama karena hanya versi lebih besar yang mengganti state."
+          ],
+          "answer": 2,
+          "explanation": "Predicate EXCLUDED.source_version > current.source_version menolak update versi sama atau lebih lama.",
+          "feedback": [
+            "Belum tepat. paid disimpan sebagai nilai kumulatif.",
+            "Belum tepat. ON CONFLICT tidak menghapus row.",
+            "Benar. Repeatability berlaku pada payload lengkap yang konsisten."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l8m01l02-edge-1",
+          "question": "Dua event memiliki invoice dan versi sama tetapi paid berbeda. Apa tindakan ingestion?",
+          "options": [
+            "Pilih delivery_id terbesar sebagai kebenaran bisnis.",
+            "Karantina konflik dan rekonsiliasi sumber; tie-breaker SQL bukan penyelesaian konflik bisnis.",
+            "Jumlahkan kedua paid agar tidak kehilangan data."
+          ],
+          "answer": 1,
+          "explanation": "Fixture menjamin payload sama untuk versi sama; production harus mendeteksi pelanggaran asumsi ini sebelum apply.",
+          "feedback": [
+            "Belum tepat. Urutan delivery tidak menetapkan versi yang benar.",
+            "Benar. Konflik tidak boleh disembunyikan oleh DISTINCT ON.",
+            "Belum tepat. Ini menciptakan paid yang tidak pernah terjadi."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l8m01l02-edge-2",
+          "question": "Projection menyimpan versi 4 dan menerima versi 6. Kapan boleh langsung apply?",
+          "options": [
+            "Bila versi 6 membawa state lengkap otoritatif untuk invoice itu; delta perlu urutan/gap handling lain.",
+            "Selalu aman, termasuk delta yang melewatkan versi 5.",
+            "Tidak boleh walau versi 6 lengkap dan valid."
+          ],
+          "answer": 0,
+          "explanation": "Full-state replacement tidak membutuhkan delta versi 5 untuk merekonstruksi state 6; asumsi itu tidak berlaku untuk penjumlahan delta.",
+          "feedback": [
+            "Benar. Nyatakan semantik event sebelum memilih guard.",
+            "Belum tepat. Delta yang hilang mengubah hasil kumulatif.",
+            "Belum tepat. State lengkap mengizinkan lompatan dengan validasi yang sesuai."
+          ]
+        }
+      ],
+      "hints": [
+        "Pilih versi terbesar per invoice sebelum satu UPSERT batch.",
+        "Ganti full state hanya bila incoming version lebih besar; jangan tambahkan paid dari duplikat.",
+        "Outstanding open adalah amount-paid, cancelled nol; missing invoice belum berarti nol."
+      ],
+      "solutionSql": "WITH latest AS (\n  SELECT DISTINCT ON (invoice_id)\n         invoice_id, student_id, source_version, amount, paid, state\n  FROM pg_temp.lesson_invoice_events\n  ORDER BY invoice_id, source_version DESC, delivery_id DESC\n)\nINSERT INTO pg_temp.lesson_invoice_projection AS current\n       (invoice_id, student_id, source_version, amount, paid, state)\nSELECT invoice_id, student_id, source_version, amount, paid, state FROM latest WHERE true\nON CONFLICT (invoice_id) DO UPDATE\nSET student_id = EXCLUDED.student_id,\n    source_version = EXCLUDED.source_version,\n    amount = EXCLUDED.amount, paid = EXCLUDED.paid, state = EXCLUDED.state\nWHERE EXCLUDED.source_version > current.source_version;\nSELECT invoice_id, student_id, source_version, state,\n       CASE WHEN state = 'cancelled' THEN 0 ELSE amount - paid END AS outstanding\nFROM pg_temp.lesson_invoice_projection\nORDER BY invoice_id;",
+      "solutionExplanation": "Reference memilih kandidat terbaru lalu UPSERT dengan guard versi. Ia mengasumsikan payload sama untuk versi sama dan full state otoritatif, menyimpan cancellation, dan tidak membuktikan completeness atau freshness. Consumer nyata perlu validasi, outbox, checkpoint/ack, dead-letter handling, replay dan rekonsiliasi.",
+      "critical": true
+    },
+    "reflection": "Jelaskan mengapa guard versi aman untuk full-state replacement tetapi belum aman untuk delta, lalu rancang rekonsiliasi invoice yang hilang, cancelled, atau berpindah student."
+  },
+  {
+    "id": "l8m01l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "consistency-contract",
+      "read-your-writes",
+      "freshness",
+      "failure-semantics"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/transaction-iso.html",
+      "https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs"
+    ],
+    "hook": "Dashboard berkata data terbaru, ledger memakai replica, dan notifikasi kadang datang dua kali. Jaminan apa yang sebenarnya diterima pengguna ketika pembayaran baru saja commit atau responsnya hilang?",
+    "objectives": [
+      "Menulis kontrak freshness, ordering, causal visibility, dan respons gagal per endpoint.",
+      "Membedakan read-your-writes dari invariant transaksi serta urutan global.",
+      "Menentukan respons degraded, unavailable, atau reconciliation dengan evidence yang jujur."
+    ],
+    "sections": [
+      {
+        "title": "Kontrak harus dapat diamati pengguna",
+        "paragraphs": [
+          "Kata real-time belum menjelaskan seberapa lama data boleh tertunda, perubahan mana yang harus terlihat, atau apa yang terjadi ketika sumber gagal. Kontrak dashboard dapat mengizinkan snapshot paling tua tiga puluh detik dengan source watermark dan label as_of. Kontrak ledger dapat mensyaratkan pembacaan otoritatif yang melihat write pengguna yang sudah dikonfirmasi. Kontrak notifikasi dapat menyatakan delivery at-least-once, urutan per invoice, dan kemungkinan delay. Tulis batas ini per operasi karena satu service dapat melayani tampilan toleran stale sekaligus keputusan finansial yang harus menjaga invariant.",
+          "Freshness perlu provenance yang sesuai scope data. Waktu request atau waktu projection selesai bukan otomatis waktu sumber lengkap. Latihan memakai source_age_s authored pada satu clock, sementara flag authority dan snapshot adalah asumsi evidence, bukan hasil pemeriksaan server. Jika evidence NULL, jangan menggantinya dengan nol lag atau true. Definisikan apakah mode degraded masih dapat dipakai untuk tampilan, bagaimana UI memberi label, dan kapan harus unavailable. Error yang jujur lebih berguna daripada respons sukses yang diam-diam melanggar jaminan."
+        ]
+      },
+      {
+        "title": "Read-your-writes mempunyai scope dan deadline",
+        "paragraphs": [
+          "Setelah write terkonfirmasi, client dapat membawa token minimal versi invoice yang harus terlihat pada read berikutnya. Token harus terikat tenant, aggregate dan lineage sumber yang sama, serta tidak boleh dipercaya sebagai pengganti otorisasi. Versi tujuh invoice A tidak dapat dibandingkan dengan versi enam invoice B untuk menyimpulkan urutan global. Routing ke primary membantu, tetapi snapshot transaksi lama tetap dapat melewatkan commit baru. Gunakan snapshot yang memenuhi causal requirement dan cek versi; jika belum terpenuhi, bounded retry atau unavailable harus mengikuti deadline yang disepakati.",
+          "Read-your-writes hanya menjanjikan visibility write terkait, bukan seluruh dunia selalu paling baru atau multi-object update otomatis atomik. Keputusan debit tetap memerlukan invariant dalam transaksi write, termasuk pencegahan duplicate business effect. Jika respons write hilang, COMMIT dapat sudah berhasil; jangan membuat key payment baru untuk mengulang. Rekonsiliasi dengan business key yang sama dan laporkan pending atau unknown sampai evidence cukup. Cache fresh maupun versi read besar tidak membuktikan payment lain yang tidak memiliki identitas sama boleh diulang."
+        ]
+      },
+      {
+        "title": "Notifikasi dan tabel keputusan bukan bukti delivery",
+        "paragraphs": [
+          "Notifikasi dapat dikirim ulang setelah timeout atau restart sehingga consumer perlu dedup durable dan semantik versi per aggregate. Jika aksi eksternal seperti email sudah terjadi tetapi checkpoint belum commit, retry masih dapat mengirim lagi. Idempotency key pada provider atau workflow recovery diperlukan sesuai kapabilitas efek tersebut; transaction database lokal tidak menjadikan efek eksternal atomik. Untuk notifikasi delta, mempertahankan urutan dan menangani gap berbeda dari full-state replacement. Nyatakan apakah klien boleh melewati versi atau perlu menerima seluruh kejadian bisnis.",
+          "Dataset K mengklasifikasi tujuh request menjadi labeled dashboard, degraded/unavailable, route authority, bounded retry, consume dengan dedup, atau rekonsiliasi. serve_authoritative_read berarti gate latihan untuk read terpenuhi, bukan izin debit atau bukti linearizability seluruh platform. Fixture TEMP tidak menghubungi endpoint, mengukur lag, mengirim notifikasi, atau memastikan deadline terpenuhi. Pelajar menulis kontrak dan memprediksi keputusan; validasi layanan nyata memerlukan evidence terpisah yang tidak dijalankan di lesson ini."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset K: tujuh request dengan evidence kontrak authored untuk dashboard, ledger dan notifikasi. Tidak ada request jaringan atau pemeriksaan cluster.",
+      "setupSql": "CREATE TEMP TABLE lesson_read_contracts (\n  request_id TEXT PRIMARY KEY, endpoint TEXT NOT NULL,\n  source_age_s INTEGER, max_age_s INTEGER NOT NULL,\n  required_version INTEGER, observed_version INTEGER,\n  authoritative BOOLEAN, snapshot_after_commit BOOLEAN, commit_known BOOLEAN\n);\nINSERT INTO pg_temp.lesson_read_contracts VALUES\n  ('01_dashboard','dashboard',20,30,NULL,NULL,false,true,true),\n  ('02_stale_dashboard','dashboard',45,30,NULL,NULL,false,true,true),\n  ('03_replica_ledger','ledger',0,0,6,6,false,true,true),\n  ('04_authority','ledger',0,0,6,6,true,true,true),\n  ('05_older_version','ledger',0,0,6,5,true,true,true),\n  ('06_notification','notification',NULL,0,6,6,false,NULL,true),\n  ('07_unknown_commit','ledger',0,0,6,6,true,true,NULL);",
+      "sql": "SELECT request_id, endpoint, source_age_s, required_version, observed_version,\n       CASE\n         WHEN commit_known IS NOT TRUE THEN 'reconcile_business_key'\n         WHEN endpoint = 'notification' THEN 'consume_versioned_dedup'\n         WHEN endpoint = 'dashboard' THEN\n           CASE WHEN source_age_s BETWEEN 0 AND max_age_s THEN 'serve_labeled_dashboard'\n                ELSE 'degraded_or_unavailable' END\n         WHEN endpoint = 'ledger' THEN\n           CASE WHEN authoritative IS NOT TRUE OR snapshot_after_commit IS NOT TRUE\n                  THEN 'route_fresh_authority'\n                WHEN required_version IS NULL OR observed_version IS NULL\n                  OR observed_version < required_version THEN 'bounded_retry_or_unavailable'\n                ELSE 'serve_authoritative_read' END\n         ELSE 'hold_undefined_contract'\n       END AS decision\nFROM pg_temp.lesson_read_contracts\nORDER BY request_id;",
+      "columns": [
+        "request_id",
+        "endpoint",
+        "source_age_s",
+        "required_version",
+        "observed_version",
+        "decision"
+      ],
+      "rows": [
+        [
+          "01_dashboard",
+          "dashboard",
+          "20",
+          null,
+          null,
+          "serve_labeled_dashboard"
+        ],
+        [
+          "02_stale_dashboard",
+          "dashboard",
+          "45",
+          null,
+          null,
+          "degraded_or_unavailable"
+        ],
+        [
+          "03_replica_ledger",
+          "ledger",
+          "0",
+          "6",
+          "6",
+          "route_fresh_authority"
+        ],
+        [
+          "04_authority",
+          "ledger",
+          "0",
+          "6",
+          "6",
+          "serve_authoritative_read"
+        ],
+        [
+          "05_older_version",
+          "ledger",
+          "0",
+          "6",
+          "5",
+          "bounded_retry_or_unavailable"
+        ],
+        [
+          "06_notification",
+          "notification",
+          null,
+          "6",
+          "6",
+          "consume_versioned_dedup"
+        ],
+        [
+          "07_unknown_commit",
+          "ledger",
+          "0",
+          "6",
+          "6",
+          "reconcile_business_key"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Dashboard memenuhi bound hanya pada request pertama. Authority, snapshot dan versi adalah gate ledger yang berbeda; hasil COMMIT unknown mendahului read. Notification mendapat rencana consumer, bukan klaim delivery sudah berhasil."
+    },
+    "checks": [
+      {
+        "id": "l8m01l03-check-1",
+        "question": "Apa isi minimum kontrak konsistensi API selain angka latency?",
+        "options": [
+          "Hanya kata real-time pada dokumentasi.",
+          "Freshness/provenance, scope ordering, read-your-writes, dan failure behavior.",
+          "Janji semua service selalu tersedia tanpa batas."
+        ],
+        "answer": 1,
+        "explanation": "Kontrak harus bisa dinilai dari respons dan evidence, termasuk apa yang terjadi ketika syarat tidak terpenuhi.",
+        "feedback": [
+          "Belum tepat. Real-time tanpa definisi tidak dapat diverifikasi.",
+          "Benar. Tetapkan jaminan dan batas kegagalan secara konkret.",
+          "Belum tepat. Kegagalan perlu respons yang jujur."
+        ]
+      },
+      {
+        "id": "l8m01l03-check-2",
+        "question": "Write timeout dan hasil COMMIT unknown. Apa yang dijanjikan API payment?",
+        "options": [
+          "Rekonsiliasi memakai business key yang sama dan status pending/unknown sampai ada evidence.",
+          "Retry sebagai payment baru pasti tidak menggandakan debit.",
+          "Timeout membuktikan transaksi sudah rollback."
+        ],
+        "answer": 0,
+        "explanation": "Ketidakpastian transport tidak menentukan hasil commit; business identity harus tetap sama selama rekonsiliasi.",
+        "feedback": [
+          "Benar. Pisahkan hasil unknown dari kegagalan yang terkonfirmasi.",
+          "Belum tepat. Identitas baru dapat menghasilkan efek kedua.",
+          "Belum tepat. Respons dapat hilang setelah commit."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi keputusan setiap request, lalu tulis kontrak dashboard, ledger dan notifikasi beserta deadline dan respons kegagalannya.",
+      "setup": "Gunakan fixture TEMP K secara independen. Semua flag dan umur adalah input authored, bukan evidence bahwa routing atau konsistensi production benar.",
+      "starterSql": "SELECT request_id, endpoint, commit_known, authoritative, snapshot_after_commit FROM pg_temp.lesson_read_contracts ORDER BY request_id;",
+      "variants": [
+        {
+          "id": "l8m01l03-variant-1",
+          "question": "Dashboard mengizinkan umur 30 detik tetapi evidence menunjukkan 45. Apa keputusan?",
+          "options": [
+            "Kembalikan sukses dengan klaim memenuhi batas 30.",
+            "Ubah timestamp agar tampak baru.",
+            "degraded_or_unavailable sesuai kontrak; jangan mengklaim memenuhi bound."
+          ],
+          "answer": 2,
+          "explanation": "Respons stale dapat ditawarkan hanya sebagai mode degraded yang disepakati dan diberi label, bukan keberhasilan bound yang sama.",
+          "feedback": [
+            "Belum tepat. Evidence melampaui kontrak.",
+            "Belum tepat. Timestamp palsu merusak provenance.",
+            "Benar. UI harus dapat membedakan degraded dan fresh."
+          ]
+        },
+        {
+          "id": "l8m01l03-variant-2",
+          "question": "Ledger membaca authority pada snapshot baru, required_version=6 tetapi observed_version=5. Apa hasil?",
+          "options": [
+            "serve_authoritative_read karena endpoint authority saja cukup.",
+            "bounded_retry_or_unavailable; cek token dan lineage, jangan fallback diam-diam.",
+            "Anggap observed_version NULL sebagai 6."
+          ],
+          "answer": 1,
+          "explanation": "Routing dan snapshot adalah gate berbeda dari bukti versi yang diwajibkan; token harus comparable pada lineage yang sama.",
+          "feedback": [
+            "Belum tepat. Evidence versi masih gagal.",
+            "Benar. Deadline harus membatasi penantian dan klaim.",
+            "Belum tepat. Jangan menciptakan versi yang belum terlihat."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l8m01l03-edge-1",
+          "question": "Notifikasi invoice versi 7 datang sebelum versi 6 dan versi 7 dikirim dua kali. Apa kontrak yang tepat?",
+          "options": [
+            "Dedup durable dan kebijakan gap per invoice: buffer/resync untuk delta, skip hanya bila full state mengizinkan; efek eksternal perlu idempotency.",
+            "Urutan delivery menjamin urutan global semua invoice.",
+            "Dedup memory cukup walau consumer restart setelah mengirim email."
+          ],
+          "answer": 0,
+          "explanation": "Delta versi 6 tidak boleh hilang hanya karena versi 7 tiba lebih dahulu: buffer atau resync gap. Skip versi hanya sah untuk full state yang kontraknya mengizinkan; dedup lokal belum membuat efek eksternal atomik.",
+          "feedback": [
+            "Benar. Pisahkan apply state dari efek eksternal.",
+            "Belum tepat. Versi antar invoice tidak membentuk global order.",
+            "Belum tepat. Restart menghilangkan dedup memory."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l8m01l03-edge-2",
+          "question": "Request ke primary memakai transaksi Repeatable Read yang snapshot-nya dibuat sebelum write commit. Apakah endpoint primary menjamin read-your-writes?",
+          "options": [
+            "Ya, primary selalu mengabaikan snapshot.",
+            "Ya, asal TTL cache nol.",
+            "Belum; gunakan snapshot yang memenuhi causal token dan batas transaksi yang sesuai."
+          ],
+          "answer": 2,
+          "explanation": "Endpoint identity tidak mengganti aturan snapshot; read-your-writes perlu jalur yang dapat melihat commit terkait.",
+          "feedback": [
+            "Belum tepat. Snapshot tetap membatasi visibility.",
+            "Belum tepat. TTL tidak mengubah snapshot transaksi.",
+            "Benar. Tetapkan routing, snapshot, token dan failure deadline bersama."
+          ]
+        }
+      ],
+      "hints": [
+        "Periksa hasil COMMIT sebelum menyimpulkan read sukses atau retry write aman.",
+        "Dashboard memakai bound umur, ledger memerlukan authority, snapshot dan minimal versi.",
+        "Notification adalah rencana consumer ber-versi/dedup; unknown dan kegagalan harus mempunyai respons eksplisit."
+      ],
+      "solutionSql": "SELECT request_id, endpoint, source_age_s, required_version, observed_version,\n       CASE\n         WHEN commit_known IS NOT TRUE THEN 'reconcile_business_key'\n         WHEN endpoint = 'notification' THEN 'consume_versioned_dedup'\n         WHEN endpoint = 'dashboard' THEN\n           CASE WHEN source_age_s BETWEEN 0 AND max_age_s THEN 'serve_labeled_dashboard'\n                ELSE 'degraded_or_unavailable' END\n         WHEN endpoint = 'ledger' THEN\n           CASE WHEN authoritative IS NOT TRUE OR snapshot_after_commit IS NOT TRUE\n                  THEN 'route_fresh_authority'\n                WHEN required_version IS NULL OR observed_version IS NULL\n                  OR observed_version < required_version THEN 'bounded_retry_or_unavailable'\n                ELSE 'serve_authoritative_read' END\n         ELSE 'hold_undefined_contract'\n       END AS decision\nFROM pg_temp.lesson_read_contracts\nORDER BY request_id;",
+      "solutionExplanation": "Reference mengevaluasi kontrak per endpoint dan mempertahankan unknown. Ia tidak membuktikan authority, lineage, causal token atau freshness; semuanya diasumsikan pada fixture. Kontrak produksi masih harus menyatakan bound waktu, observability, dedup durable dan perlindungan transaksi write.",
+      "critical": true
+    },
+    "reflection": "Tulis satu kontrak untuk dashboard, ledger dan notifikasi: jaminan freshness, scope ordering, read-your-writes bila perlu, serta respons ketika deadline, provenance atau hasil COMMIT tidak diketahui."
+  }
+]

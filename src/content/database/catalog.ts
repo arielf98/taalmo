@@ -28,6 +28,7 @@ import releases from "./l7-releases.json";
 import backupRecovery from "./l7-backup-recovery.json";
 import replication from "./l7-replication.json";
 import operations from "./l7-operations.json";
+import caching from "./l8-caching.json";
 import type { AuthoredLesson, ConceptCheck } from "./types";
 import { pathHref } from "../lessons";
 export const databasePathHref = pathHref;
@@ -62,6 +63,7 @@ const authored = [
   ...backupRecovery,
   ...replication,
   ...operations,
+  ...caching,
 ] as AuthoredLesson[];
 const byId = new Map(authored.map((lesson) => [lesson.id, lesson]));
 export const databaseLevels = blueprint.levels.map((level) => ({

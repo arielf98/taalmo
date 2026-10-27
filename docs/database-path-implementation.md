@@ -314,3 +314,11 @@ Added l7m04l01–l7m04l03 with complete Indonesian/English prose, TEMP worked SQ
 Totals: 33 authored modules, 99 published / 21 draft lessons; 102 combined lessons plus three labs (105 activity milestones). Existing E2E expectations update only the count and first draft route to l8m01l01; no test cases or browser lesson coverage were added. Existing publication/mastery gates now expose the L7 level assessment, without changing previous versions, blueprint, School Finance seed or storage.
 
 Reviewed source/diff only. No tests, audits, SQL, runtime, manual/browser checks, lint, typecheck or build were run. L7M03 commit b595745 was pushed to origin/main after the user explicitly approved that target; the earlier automatic approval rejection was not bypassed. Next canonical authoring milestone: L8M01.
+
+## L8M01 — Caching & Consistency Trade-offs — 27 October 2026
+
+Added l8m01l01–l8m01l03 with complete Indonesian/English prose, independent TEMP SQL and expected result tables, two checks, two variants, two edge cases, progressive hints, reference solutions and reflections per lesson. Cache decisions distinguish TTL from source age and explain post-invalidation late refills. Invoice projections use full-state replacement with per-invoice versions, deterministic per-batch candidates and cancellation state, with explicit identical-version payload assumptions. API contracts distinguish dashboard freshness, ledger causal read gates, unknown COMMIT reconciliation, and notification dedup/ordering boundaries.
+
+Totals: 34 authored modules, 102 published / 18 draft lessons; 105 combined lessons plus three labs (108 activity milestones). Registries include the new content; existing E2E count and first-draft expectations move to l8m02l01 without extending coverage. Blueprint, prior content versions, School Finance seed, player and progress storage stay unchanged. L8 assessment remains gated on completing all L8 modules.
+
+Review is source/diff only. No tests, audits, SQL, runtime, manual/browser checks, lint, typecheck or build were run. Expected rows are authored, not observed. No cache, broker, consumer or endpoint was installed or contacted. Next canonical milestone: L8M02; commit and push L8M01 before continuing.

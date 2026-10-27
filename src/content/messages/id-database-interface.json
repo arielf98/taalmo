@@ -332,5 +332,13 @@
   "backpressure": "pembatasan beban masuk",
   "timeouts": "batas waktu",
   "runbooks": "runbook",
-  "blocked-writes": "write terblokir"
+  "blocked-writes": "write terblokir",
+  "cache-aside": "cache-aside",
+  "ttl": "TTL",
+  "freshness": "kesegaran data",
+  "cqrs": "CQRS",
+  "read-models": "model baca",
+  "projection": "proyeksi",
+  "event-versioning": "versi event",
+  "failure-semantics": "semantik kegagalan"
 }

@@ -33,6 +33,7 @@ import englishReleases from "./messages/en-database-releases.json" with { type: 
 import englishBackupRecovery from "./messages/en-database-backup-recovery.json" with { type: "json" };
 import englishReplication from "./messages/en-database-replication.json" with { type: "json" };
 import englishOperations from "./messages/en-database-operations.json" with { type: "json" };
+import englishCaching from "./messages/en-database-caching.json" with { type: "json" };
 export type Locale = "en" | "id";
 const indonesian: Record<string, string> = {
   ...interfaceMessages,
@@ -72,6 +73,7 @@ const english: Record<string, string> = {
   ...englishBackupRecovery,
   ...englishReplication,
   ...englishOperations,
+  ...englishCaching,
 };
 const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

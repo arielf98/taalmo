@@ -13,13 +13,13 @@
 
 ## Database Engineering — database curriculum
 
-The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L7 provide 99 published bilingual lessons; 21 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
+The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L7 and L8M01 provide 102 published bilingual lessons; 18 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
 
-## Recommended next milestone: L8M01 authoring
+## Recommended next milestone: L8M02 authoring
 
-L7 is fully authored and its existing level assessment is available under the usual mastery requirements. Operational permission, connection and incident examples remain authored decision exercises; no grants, pools, mitigations or production drills were executed.
+L8M01 is fully authored. Cache TTL/source-age decisions, full-state invoice projections and API contracts are prediction/design exercises; no cache, event transport, endpoint routing or freshness measurement was executed. L8 assessment remains unavailable until all four L8 modules are authored.
 
-Continue with L8M01 — Caching & Consistency Trade-offs: cache-aside and TTL, eventually consistent invoice projections/read models, and explicit freshness, ordering and failure contracts for dashboards, ledgers and notifications. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Follow AGENTS.md: source/diff review only, no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build; commit, push and continue.
+Continue with L8M02 — Partitioning, Sharding, dan Tenant: PostgreSQL range partitions, shard routing and hot tenants, and tenant-isolation trade-offs. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Follow AGENTS.md: source/diff review only, no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build; commit, push and continue.
 
 ## Later learning improvements
 

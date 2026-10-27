@@ -30,3 +30,12 @@
 - [x] Review source/diff, including independent read-only review; no important findings. Commit and push L7M04 under the explicit origin/main approval.
 
 Continue subsequent canonical work only with enough remaining session capacity to satisfy the complete authoring contract. Do not publish incomplete records.
+
+## Task 3: L8M01 — Caching & Consistency Trade-offs
+
+- [x] Add `src/content/database/l8-caching.json` and `src/content/messages/en-database-caching.json` with the full authoring contract.
+- [x] Teach TTL versus source freshness, invalidation/refill races, complete invoice-state projections with per-invoice versions, and explicit API freshness/ordering/failure contracts.
+- [x] Register content, tag labels and existing file lists; update counts to 34 modules / 102 published / 18 draft and first draft route l8m02l01 without adding test coverage.
+- [x] Review source/diff and independent read-only review. Clarified delta buffering/resync versus full-state skipping in the notification answer. Commit and push origin/main under the explicit user approval; see Git history for the outcome.
+
+All fixtures stay isolated and deterministic. Projection examples do not install a broker, consumer or exactly-once guarantee; cache decisions do not contact a cache or benchmark latency. L8 remains incomplete.
