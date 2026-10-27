@@ -322,3 +322,11 @@ Added l8m01l01–l8m01l03 with complete Indonesian/English prose, independent TE
 Totals: 34 authored modules, 102 published / 18 draft lessons; 105 combined lessons plus three labs (108 activity milestones). Registries include the new content; existing E2E count and first-draft expectations move to l8m02l01 without extending coverage. Blueprint, prior content versions, School Finance seed, player and progress storage stay unchanged. L8 assessment remains gated on completing all L8 modules.
 
 Review is source/diff only. No tests, audits, SQL, runtime, manual/browser checks, lint, typecheck or build were run. Expected rows are authored, not observed. No cache, broker, consumer or endpoint was installed or contacted. Next canonical milestone: L8M02; commit and push L8M01 before continuing.
+
+## L8M02 — Partitioning, Sharding, dan Tenant — 27 October 2026
+
+Added l8m02l01–l8m02l03 with full bilingual authoring, worked TEMP SQL/results, two checks, two variants, two edge cases, three hints, reference solutions and reflection per lesson. Monthly partitions demonstrate half-open bounds and DEFAULT without claiming measured pruning; global uniqueness and rollover/retention limits are explicit. Directory routing distinguishes stale epochs, migration readiness, unknown tenants and authored load concentration without implementing movement/fencing. Multi-tenancy compares database/schema/shared-row layouts and demonstrates tenant-scoped PK/FK/aggregation/joins with a readable UML/ERD.
+
+Totals: 35 authored modules, 105 published / 15 draft lessons; 108 combined lessons plus three labs (111 activity milestones). Catalog/messages/labels and existing content registries include the new module. Existing E2E count/draft-route expectations only move to l8m03l01, without expanded coverage. Prior IDs/versions, blueprint, seed and storage stay unchanged; L8 assessment remains gated.
+
+Source/diff review only. No tests, audits, SQL, runtime, manual/browser checks, lint, typecheck or build were run. Result rows and flags are authored expectations, not observed pruning, capacity, migration or security evidence. Next milestone: L8M03; commit and push L8M02 before continuing.

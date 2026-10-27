@@ -340,5 +340,14 @@
   "read-models": "model baca",
   "projection": "proyeksi",
   "event-versioning": "versi event",
-  "failure-semantics": "semantik kegagalan"
+  "failure-semantics": "semantik kegagalan",
+  "partitioning": "partisi tabel",
+  "partition-pruning": "pemangkasan partisi",
+  "retention": "retensi",
+  "sharding": "sharding",
+  "hot-tenants": "tenant dengan beban tinggi",
+  "multi-tenancy": "multi-tenancy",
+  "tenant-isolation": "isolasi tenant",
+  "composite-keys": "kunci gabungan",
+  "row-security": "keamanan baris"
 }

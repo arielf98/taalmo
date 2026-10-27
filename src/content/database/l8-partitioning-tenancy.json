@@ -1,0 +1,607 @@
+[
+  {
+    "id": "l8m02l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "partitioning",
+      "partition-pruning",
+      "retention",
+      "postgresql-lab"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/ddl-partitioning.html"
+    ],
+    "hook": "Riwayat transaksi bertambah setiap bulan, tetapi laporan hanya meminta Oktober. Bagaimana partisi lokal membantu membatasi kandidat data tanpa menganggap semua query pasti lebih cepat atau ID otomatis unik global?",
+    "objectives": [
+      "Membaca batas RANGE bulanan yang inklusif di bawah dan eksklusif di atas.",
+      "Membedakan lokasi row, peluang pruning, indeks dan bukti performance.",
+      "Menentukan scope uniqueness serta rencana rollover dan retensi."
+    ],
+    "sections": [
+      {
+        "title": "Satu tabel logis, beberapa bagian lokal",
+        "paragraphs": [
+          "Partitioning lokal membagi satu tabel logis menjadi child table pada satu deployment PostgreSQL. Aplikasi dapat memakai parent untuk INSERT dan SELECT, sementara partition key menentukan penempatan row. Ini berbeda dari sharding lintas node yang membutuhkan routing dan batas transaksi tersendiri. Partitioning dapat memudahkan lifecycle data serta mengurangi bagian yang relevan untuk sebagian query, tetapi bukan alasan mempartisi setiap tabel kecil. Jumlah partisi juga menambah objek, indeks, statistik dan pekerjaan operasi; ukuran data serta pola akses harus membenarkan biaya tersebut.",
+          "Fixture M menggunakan occurred_on bertipe DATE dan partisi September serta Oktober 2026. Rentang Oktober adalah tanggal satu Oktober termasuk sampai satu November tidak termasuk. Tanggal satu November masuk DEFAULT yang sengaja disediakan agar setup tidak gagal. Untuk timestamp pembayaran nyata, tentukan zona bisnis dan gunakan batas instant yang sesuai; jangan menyalin DATE bulanan lalu mengabaikan perbedaan Asia/Jakarta dan UTC. Penetapan partition key harus sesuai kebutuhan filter, retensi, dan aturan perubahan tanggal transaksi."
+        ]
+      },
+      {
+        "title": "Pruning bukan hasil query yang kebetulan kecil",
+        "paragraphs": [
+          "Predicate langsung occurred_on >= awal dan occurred_on < akhir menyatakan rentang yang selaras dengan partition key. Planner dapat mengabaikan partisi yang pasti tidak mungkin memenuhi predicate melalui partition pruning, bergantung bentuk query, parameter, konfigurasi dan tahap planning/execution. Filter hanya transaction_id tidak memberi batas occurred_on. Membungkus key dalam ekspresi tertentu juga dapat mengurangi kemampuan pembuktian batas; jangan mengasumsikan semua ekspresi bulan identik untuk planner. Indeks lokal masih dapat diperlukan untuk mencari row di partisi yang relevan.",
+          "Worked example mengembalikan dua transaksi Oktober beserta label lokasi fisiknya melalui tableoid. Label itu mengajarkan routing penyimpanan, bukan membuktikan partisi lain tidak dipindai. Evidence pruning perlu plan yang relevan; klaim lebih cepat perlu baseline, hasil setara, beberapa pengamatan dan biaya write/storage. Contoh ini belum disertai pengukuran plan atau latency; tidak ada hasil benchmark yang dapat disimpulkan. Baris output di sini adalah ekspektasi authored yang ditinjau melalui source."
+        ]
+      },
+      {
+        "title": "Identitas dan lifecycle tetap harus dirancang",
+        "paragraphs": [
+          "Primary key parent adalah pasangan occurred_on dan transaction_id. Dua row dengan ID sama pada tanggal berbeda masih dapat diterima, sehingga key ini tidak membuktikan identitas transaksi global. Unique constraint parent PostgreSQL memerlukan seluruh partition key untuk memastikan keunikan antar partisi. Jika payment callback membutuhkan business key global, rancang registry atau batas transaksi yang benar, bukan menganggap composite key menghilangkan duplicate lintas bulan. Foreign key pemakai identitas itu juga harus sesuai scope key yang benar.",
+          "Buat partisi berikutnya sebelum rollover dan tentukan owner alert. DEFAULT dapat menampung data di luar rencana, tetapi harus dipantau; memasang partisi baru dapat memerlukan pemindahan atau validasi row yang sudah ada serta lock. Retention melalui detach/drop harus mempertimbangkan laporan, referensi, backup dan recovery terotorisasi. Tidak ada command penghapusan dalam reference. Semua objek lesson adalah TEMP dan independen dari seed School Finance; tidak ada migrasi tabel production atau pembuktian retensi aman."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset M: lima transaksi DATE pada partisi TEMP September, Oktober dan DEFAULT. Lokasi row adalah contoh authored, bukan execution plan terukur.",
+      "setupSql": "CREATE TEMP TABLE lesson_transactions (\n  transaction_id INTEGER NOT NULL, occurred_on DATE NOT NULL,\n  tenant_id INTEGER NOT NULL, amount INTEGER NOT NULL CHECK (amount > 0),\n  PRIMARY KEY (occurred_on, transaction_id)\n) PARTITION BY RANGE (occurred_on);\nCREATE TEMP TABLE lesson_transactions_2026_09\n  PARTITION OF pg_temp.lesson_transactions\n  FOR VALUES FROM ('2026-09-01') TO ('2026-10-01');\nCREATE TEMP TABLE lesson_transactions_2026_10\n  PARTITION OF pg_temp.lesson_transactions\n  FOR VALUES FROM ('2026-10-01') TO ('2026-11-01');\nCREATE TEMP TABLE lesson_transactions_future\n  PARTITION OF pg_temp.lesson_transactions DEFAULT;\nINSERT INTO pg_temp.lesson_transactions VALUES\n  (101,DATE '2026-09-01',10,100),\n  (102,DATE '2026-09-30',10,50),\n  (103,DATE '2026-10-01',10,40),\n  (104,DATE '2026-10-31',20,60),\n  (105,DATE '2026-11-01',20,70);",
+      "sql": "SELECT transaction_id, occurred_on, tenant_id, amount,\n       CASE WHEN tableoid = 'pg_temp.lesson_transactions_2026_10'::regclass\n            THEN 'october_partition' ELSE 'other_partition' END AS stored_in\nFROM pg_temp.lesson_transactions\nWHERE occurred_on >= DATE '2026-10-01'\n  AND occurred_on < DATE '2026-11-01'\nORDER BY occurred_on, transaction_id;",
+      "columns": [
+        "transaction_id",
+        "occurred_on",
+        "tenant_id",
+        "amount",
+        "stored_in"
+      ],
+      "rows": [
+        [
+          "103",
+          "2026-10-01",
+          "10",
+          "40",
+          "october_partition"
+        ],
+        [
+          "104",
+          "2026-10-31",
+          "20",
+          "60",
+          "october_partition"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Batas half-open memilih ID 103 dan 104 pada partisi Oktober. ID 105 tepat pada batas atas masuk DEFAULT dan tidak tampil. tableoid menjelaskan lokasi row; ia belum membuktikan pruning atau latency."
+    },
+    "checks": [
+      {
+        "id": "l8m02l01-check-1",
+        "question": "Partisi Oktober memiliki FROM 2026-10-01 TO 2026-11-01. Ke mana row tanggal 1 November?",
+        "options": [
+          "Tetap Oktober karena batas atas termasuk.",
+          "Ke partisi yang mencakup November; fixture ini memakai DEFAULT.",
+          "Ke semua partisi sekaligus."
+        ],
+        "answer": 1,
+        "explanation": "RANGE memakai batas bawah inklusif dan batas atas eksklusif; DEFAULT menampung row yang tidak cocok partisi eksplisit.",
+        "feedback": [
+          "Belum tepat. TO adalah batas eksklusif.",
+          "Benar. Row November tidak termasuk rentang Oktober.",
+          "Belum tepat. Routing tidak menggandakan row."
+        ]
+      },
+      {
+        "id": "l8m02l01-check-2",
+        "question": "PRIMARY KEY (occurred_on, transaction_id) menjamin transaction_id unik di seluruh bulan?",
+        "options": [
+          "Ya, kolom kedua selalu global unique.",
+          "Ya, partitioning menciptakan global index otomatis.",
+          "Tidak; pasangan unik, tetapi ID sama pada tanggal berbeda masih dapat lolos."
+        ],
+        "answer": 2,
+        "explanation": "Constraint unik pada parent partitioned harus menyertakan partition key; identitas global memerlukan rancangan tambahan.",
+        "feedback": [
+          "Belum tepat. Keunikan berlaku pada seluruh pasangan key.",
+          "Belum tepat. Jangan mengasumsikan global index yang tidak dibuat.",
+          "Benar. Jelaskan scope identitas sebelum memigrasi FK/payment key."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi batas bulan dan hasil tabel, lalu jelaskan key identity, peluang pruning, rollover serta retensi yang aman.",
+      "setup": "Gunakan setup TEMP M pada session segar untuk masing-masing contoh/reference. Aktivitas ini memprediksi hasil authored, bukan engine SQL atau sesi profiling.",
+      "starterSql": "SELECT transaction_id, occurred_on, amount FROM pg_temp.lesson_transactions ORDER BY occurred_on, transaction_id;",
+      "variants": [
+        {
+          "id": "l8m02l01-variant-1",
+          "question": "Filter September menggunakan >= 2026-09-01 dan < 2026-10-01. Berapa row dan total amount?",
+          "options": [
+            "2 row, total 150.",
+            "3 row, total 190 termasuk 1 Oktober.",
+            "1 row, total 100 karena 30 September hilang."
+          ],
+          "answer": 0,
+          "explanation": "Tanggal 1 dan 30 September masuk, sedangkan 1 Oktober berada di batas eksklusif.",
+          "feedback": [
+            "Benar. Dua row September berjumlah 100+50.",
+            "Belum tepat. Batas atas tidak termasuk.",
+            "Belum tepat. 30 September masih di bawah 1 Oktober."
+          ]
+        },
+        {
+          "id": "l8m02l01-variant-2",
+          "question": "Filter Oktober di worked example menghasilkan apa?",
+          "options": [
+            "Hanya 103 dengan total 40.",
+            "103 dan 104, total 100; hasil tidak membuktikan plan pruning.",
+            "103,104,105 dengan total 170."
+          ],
+          "answer": 1,
+          "explanation": "Predicate half-open mencakup 1–31 Oktober; mengetahui hasil dan lokasi row berbeda dari mengamati planner.",
+          "feedback": [
+            "Belum tepat. 31 Oktober masih termasuk.",
+            "Benar. Pruning perlu evidence plan pada workload yang relevan.",
+            "Belum tepat. 1 November tidak masuk."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l8m02l01-edge-1",
+          "question": "Tidak ada partisi November dan tidak ada DEFAULT. INSERT 1 November diusulkan. Apa yang perlu direncanakan?",
+          "options": [
+            "Database selalu membuat partisi sendiri.",
+            "Row hilang diam-diam tetapi INSERT sukses.",
+            "Pembuatan partisi sebelum rollover atau penanganan rejection; jangan mengasumsikan auto-create."
+          ],
+          "answer": 2,
+          "explanation": "Tanpa partisi yang cocok, INSERT ditolak; provisioning dan alert perlu menjadi tanggung jawab operasional.",
+          "feedback": [
+            "Belum tepat. Declarative partitioning tidak menjadwalkan partisi baru.",
+            "Belum tepat. Rejection bukan keberhasilan kosong.",
+            "Benar. Fixture mempunyai DEFAULT, tetapi sistem lain belum tentu."
+          ]
+        },
+        {
+          "id": "l8m02l01-edge-2",
+          "question": "Ingin melepas partisi lama yang masih dirujuk laporan dan kewajiban retensi. Apa keputusan?",
+          "options": [
+            "Review retensi, referensi, backup/recovery, lock dan akses sebelum perubahan terotorisasi.",
+            "DROP segera karena semua partisi lama pasti tidak berguna.",
+            "Partitioning otomatis memindahkan data ke backup valid."
+          ],
+          "answer": 0,
+          "explanation": "Lifecycle partisi adalah perubahan data/akses dan memerlukan runbook; hasil query kecil tidak mengizinkan penghapusan.",
+          "feedback": [
+            "Benar. Retention dan recoverability tetap wajib.",
+            "Belum tepat. Umur bukan izin menghapus data.",
+            "Belum tepat. Partisi bukan backup yang sudah direstore."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Baca TO sebagai batas yang tidak termasuk partisi.",
+        "Filter langsung partition key dengan >= awal dan < awal bulan berikutnya.",
+        "Pisahkan hasil query, lokasi row, evidence pruning, dan scope primary key."
+      ],
+      "solutionSql": "SELECT transaction_id, occurred_on, tenant_id, amount,\n       CASE WHEN tableoid = 'pg_temp.lesson_transactions_2026_10'::regclass\n            THEN 'october_partition' ELSE 'other_partition' END AS stored_in\nFROM pg_temp.lesson_transactions\nWHERE occurred_on >= DATE '2026-10-01'\n  AND occurred_on < DATE '2026-11-01'\nORDER BY occurred_on, transaction_id;",
+      "solutionExplanation": "Reference memfilter rentang Oktober pada parent TEMP dan melabel lokasi row. Ia tidak mengeksekusi pruning evidence, mengubah partition lifecycle, atau menjamin ID global. Semua benchmark, retensi dan migration safety perlu evidence serta otorisasi terpisah.",
+      "critical": true
+    },
+    "reflection": "Rancang filter partisi bulanan untuk laporan Oktober, jelaskan mengapa hasil kecil belum membuktikan pruning, dan sebutkan risiko duplicate ID lintas tanggal serta partisi baru yang terlambat dibuat."
+  },
+  {
+    "id": "l8m02l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "sharding",
+      "routing",
+      "hot-tenants",
+      "fencing"
+    ],
+    "officialRefs": [
+      "https://learn.microsoft.com/en-us/azure/architecture/patterns/sharding"
+    ],
+    "hook": "Seratus tenant kecil dan satu tenant besar berbagi dua shard. Mengapa pembagian jumlah tenant yang rata belum menjamin beban rata, dan mengapa memindahkan satu entry directory belum cukup untuk memindahkan write ownership?",
+    "objectives": [
+      "Memilih routing key berdasarkan colocation, cardinality, stabilitas dan skew.",
+      "Membaca directory epoch dan gate ownership tanpa mengklaim migrasi sudah berjalan.",
+      "Menjelaskan hot tenant, fan-out dan biaya transaksi lintas shard."
+    ],
+    "sections": [
+      {
+        "title": "Shard key adalah batas operasi data",
+        "paragraphs": [
+          "Sharding menempatkan subset data pada node penyimpanan yang dapat dioperasikan terpisah. Routing memilih lokasi data berdasarkan key atau directory. Untuk platform sekolah, tenant_id dapat membuat invoice dan payment satu sekolah berada pada satu shard sehingga transaksi lokal tetap sederhana. Key perlu tersedia pada jalur request, stabil, mempunyai cukup banyak nilai dan cocok dengan query dominan. Identitas tenant berasal dari autentikasi serta otorisasi server, bukan sekadar field bebas yang dikirim pengguna. Routing benar tidak menggantikan pembatasan akses di target.",
+          "Hash sederhana dapat menyebarkan banyak tenant tetapi tidak memecah satu tenant besar. Directory mapping memungkinkan penempatan khusus dan virtual shard, dengan biaya lookup serta konsistensi metadata. Mengubah modulus hash ketika jumlah shard berubah dapat memindahkan banyak key sekaligus; teknik mapping lain pun tetap membutuhkan pemindahan data yang aman. Jangan memilih shard key hanya karena mudah dihitung jika query utama akhirnya selalu fan-out ke semua shard atau key sering berubah."
+        ]
+      },
+      {
+        "title": "Beban yang rata memerlukan satuan yang tepat",
+        "paragraphs": [
+          "Dataset S mempunyai tenant 10 dengan planned_rps 900 dan tenant 30 dengan 100 pada shard_a. Total rencana adalah seribu, melewati threshold review delapan ratus yang ditentukan latihan. Ini bukan kapasitas server terukur atau jaminan request akan gagal tepat pada angka tertentu. Jumlah tenant, jumlah row, volume byte, CPU, lock contention dan request rate adalah ukuran berbeda. Satu tenant dapat menjadi hot karena sedikit row yang terus diperbarui; indeks tambahan atau shard lebih banyak belum tentu menghilangkan bottleneck pada aggregate yang sama.",
+          "Pilihan penanganan termasuk kapasitas khusus, pembatasan beban, query yang lebih efisien atau subsharding tenant. Setiap pilihan harus menjaga lokasi otoritatif dan invariant; jangan mengirim write ke shard kosong hanya untuk menyeimbangkan angka. Subsharding dapat mengubah transaksi satu tenant menjadi lintas unit, sehingga join, unique business key, ordering dan recovery perlu ditinjau ulang. Laporan lintas tenant memerlukan fan-out yang terkontrol atau read model analitik dengan kontrak completeness dan freshness tersendiri."
+        ]
+      },
+      {
+        "title": "Perpindahan memerlukan ownership yang tegas",
+        "paragraphs": [
+          "Directory menyimpan route_epoch yang meningkat setiap perubahan ownership. Client dengan epoch lama harus refresh sebelum write, tetapi pengecekan client saja belum menolak request yang sudah berjalan di owner lama. Protokol migrasi perlu snapshot/catch-up yang konsisten, pembatasan writer, fencing pada jalur penyimpanan, rekonsiliasi serta cutover yang menjaga satu owner sah. Cache route juga perlu invalidation dan batas stale. ownership_ready pada fixture hanya flag asumsi runbook; false atau unknown menahan write, bukan memutuskan otomatis untuk mencoba kedua shard.",
+          "Transaksi lokal tidak mencakup koneksi ke shard lain. Bila dua sisi transfer tersebar, tentukan koordinasi, saga atau desain colocation berdasarkan invariant dan failure behavior; jangan menganggap retry menyatukan dua COMMIT. Worked SQL hanya membaca directory TEMP serta rencana beban, mempertahankan unknown tenant sebagai hold. Ia tidak membuka shard, memindahkan data, menegakkan epoch, mengukur throughput atau membuktikan failover. Tabel hasil adalah keputusan authored untuk menilai rancangan sebelum operasi nyata."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset S: tiga tenant, dua lokasi shard authored dan lima request. Threshold 800 adalah batas review rencana, bukan kapasitas terukur.",
+      "setupSql": "CREATE TEMP TABLE lesson_shard_directory (\n  tenant_id INTEGER PRIMARY KEY, shard_id TEXT NOT NULL,\n  route_epoch INTEGER NOT NULL, ownership_ready BOOLEAN,\n  planned_rps INTEGER NOT NULL CHECK (planned_rps >= 0)\n);\nCREATE TEMP TABLE lesson_shard_requests (\n  request_id TEXT PRIMARY KEY, tenant_id INTEGER NOT NULL,\n  client_epoch INTEGER NOT NULL\n);\nINSERT INTO pg_temp.lesson_shard_directory VALUES\n  (10,'shard_a',2,true,900), (20,'shard_b',5,false,50),\n  (30,'shard_a',3,true,100);\nINSERT INTO pg_temp.lesson_shard_requests VALUES\n  ('01_stale_route',10,1), ('02_hot_tenant',10,2),\n  ('03_moving',20,5), ('04_neighbor',30,3), ('05_unknown',40,1);",
+      "sql": "WITH planned_load AS (\n  SELECT shard_id, SUM(planned_rps) AS shard_planned_rps\n  FROM pg_temp.lesson_shard_directory GROUP BY shard_id\n)\nSELECT r.request_id, r.tenant_id, d.shard_id, d.route_epoch,\n       l.shard_planned_rps,\n       CASE\n         WHEN d.tenant_id IS NULL THEN 'hold_unknown_tenant'\n         WHEN r.client_epoch <> d.route_epoch THEN 'refresh_route_before_write'\n         WHEN d.ownership_ready IS NOT TRUE THEN 'hold_migration_fence'\n         WHEN l.shard_planned_rps > 800 THEN 'route_owner_with_capacity_review'\n         ELSE 'route_current_owner'\n       END AS decision\nFROM pg_temp.lesson_shard_requests r\nLEFT JOIN pg_temp.lesson_shard_directory d USING (tenant_id)\nLEFT JOIN planned_load l USING (shard_id)\nORDER BY r.request_id;",
+      "columns": [
+        "request_id",
+        "tenant_id",
+        "shard_id",
+        "route_epoch",
+        "shard_planned_rps",
+        "decision"
+      ],
+      "rows": [
+        [
+          "01_stale_route",
+          "10",
+          "shard_a",
+          "2",
+          "1000",
+          "refresh_route_before_write"
+        ],
+        [
+          "02_hot_tenant",
+          "10",
+          "shard_a",
+          "2",
+          "1000",
+          "route_owner_with_capacity_review"
+        ],
+        [
+          "03_moving",
+          "20",
+          "shard_b",
+          "5",
+          "50",
+          "hold_migration_fence"
+        ],
+        [
+          "04_neighbor",
+          "30",
+          "shard_a",
+          "3",
+          "1000",
+          "route_owner_with_capacity_review"
+        ],
+        [
+          "05_unknown",
+          "40",
+          null,
+          null,
+          null,
+          "hold_unknown_tenant"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Request epoch lama refresh, tenant yang sedang pindah ditahan, dan tenant unknown tidak diberi default shard. Dua tenant pada shard_a berbagi konsentrasi rencana 1000; keputusan capacity review tetap mempertahankan owner yang sah."
+    },
+    "checks": [
+      {
+        "id": "l8m02l02-check-1",
+        "question": "Mengapa tenant_id sering menjadi kandidat shard key untuk platform sekolah?",
+        "options": [
+          "Semua tenant pasti mempunyai beban sama.",
+          "Ia otomatis menjamin otorisasi dan global uniqueness.",
+          "Operasi satu tenant dapat colocated, tetapi hot tenant dan query lintas tenant tetap perlu ditangani."
+        ],
+        "answer": 2,
+        "explanation": "Colocation membantu transaksi lokal; satu tenant sangat sibuk masih dapat mendominasi shard.",
+        "feedback": [
+          "Belum tepat. Banyak row atau request dapat terkonsentrasi pada satu tenant.",
+          "Belum tepat. Routing bukan permission maupun constraint global.",
+          "Benar. Nilai key harus dibandingkan dengan pola akses dan skew."
+        ]
+      },
+      {
+        "id": "l8m02l02-check-2",
+        "question": "Directory sudah epoch 5, tetapi writer membawa epoch 4 saat tenant berpindah. Apa perlindungan yang dibutuhkan?",
+        "options": [
+          "Refresh route dan fence write lama pada jalur penyimpanan; cache directory saja belum cukup.",
+          "Kirim ke shard lama dan baru bersamaan agar pasti sukses.",
+          "Abaikan epoch karena tenant_id sama."
+        ],
+        "answer": 0,
+        "explanation": "Perubahan map tidak membatalkan writer yang sudah berjalan; ownership tunggal perlu ditegakkan selama cutover.",
+        "feedback": [
+          "Benar. Stale writers perlu ditolak atau diarahkan lewat protokol yang aman.",
+          "Belum tepat. Dual write tanpa protokol dapat membelah kebenaran.",
+          "Belum tepat. Key sama tidak menetapkan owner epoch yang sah."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi route decision, lalu pertahankan pilihan tenant_id beserta rencana hot tenant dan fenced cutover.",
+      "setup": "Semua shard hanya label di fixture TEMP S. Flag readiness dan epoch adalah input authored, bukan fence yang sudah ditegakkan.",
+      "starterSql": "SELECT tenant_id, shard_id, route_epoch, planned_rps FROM pg_temp.lesson_shard_directory ORDER BY tenant_id;",
+      "variants": [
+        {
+          "id": "l8m02l02-variant-1",
+          "question": "Tenant 10 merencanakan 900 request/detik dan tenant 30 merencanakan 100 pada shard_a. Batas review authored 800. Apa hasil?",
+          "options": [
+            "Total 100 karena tenant hot diabaikan.",
+            "Total 1000; pertahankan owner yang benar sambil review kapasitas dan isolasi hot tenant.",
+            "Ubah tenant 10 ke shard lain hanya pada cache client."
+          ],
+          "answer": 1,
+          "explanation": "SUM rencana menunjukkan konsentrasi beban, bukan throughput terukur; routing tetap mengikuti ownership yang sah.",
+          "feedback": [
+            "Belum tepat. Seluruh tenant pada shard harus dihitung.",
+            "Benar. Kapasitas dan correctness routing adalah pertanyaan berbeda.",
+            "Belum tepat. Perpindahan memerlukan migrasi data dan fence."
+          ]
+        },
+        {
+          "id": "l8m02l02-variant-2",
+          "question": "Request tenant 20 membawa epoch 5 yang cocok tetapi ownership_ready=false. Apa keputusan?",
+          "options": [
+            "route_current_owner karena epoch sama saja cukup.",
+            "hold_unknown_tenant walau directory ada.",
+            "hold_migration_fence sampai protokol ownership siap."
+          ],
+          "answer": 2,
+          "explanation": "Map yang diketahui belum membuktikan write owner sudah aman menerima request selama perpindahan.",
+          "feedback": [
+            "Belum tepat. Readiness/fence adalah gate terpisah.",
+            "Belum tepat. Tenant diketahui, status perpindahan belum siap.",
+            "Benar. Jangan menyamakan metadata route dengan cutover selesai."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l8m02l02-edge-1",
+          "question": "Hash tenant_id didistribusikan merata tetapi satu tenant menyumbang 80% traffic. Apakah menambah jumlah shard pasti menghilangkan hotspot?",
+          "options": [
+            "Tidak; tenant utuh tetap satu unit. Review isolasi, pembatasan atau subsharding dengan biaya transaksi baru.",
+            "Ya, satu tenant otomatis terbelah mengikuti hash.",
+            "Ya, jumlah row sama berarti request rate sama."
+          ],
+          "answer": 0,
+          "explanation": "Distribusi jumlah key bukan distribusi beban; subsharding mengubah batas colocation dan invariant.",
+          "feedback": [
+            "Benar. Ukur beban tenant dan dampak cross-partition sebelum memilih.",
+            "Belum tepat. Hash per tenant menempatkan tenant pada satu unit.",
+            "Belum tepat. Pola akses dapat sangat skew."
+          ]
+        },
+        {
+          "id": "l8m02l02-edge-2",
+          "question": "Transfer saldo melibatkan dua tenant pada shard berbeda. Apakah BEGIN pada koneksi shard_a mencakup debit shard_b?",
+          "options": [
+            "Ya, nama tabel sama menyatukan transaksi.",
+            "Tidak; butuh desain lintas shard seperti koordinasi atau workflow kompensasi sesuai invariant.",
+            "Ya, directory lookup membuat distributed commit otomatis."
+          ],
+          "answer": 1,
+          "explanation": "Transaksi PostgreSQL lokal tidak menjadikan operasi koneksi/node lain atomik; pilih batas domain sebelum sharding.",
+          "feedback": [
+            "Belum tepat. Nama objek tidak menyatukan commit.",
+            "Benar. Co-location atau protokol tambahan perlu dipertimbangkan.",
+            "Belum tepat. Routing hanya memilih lokasi."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Cari tenant pada directory; unknown tidak boleh masuk default shard.",
+        "Bandingkan epoch sebelum readiness, lalu jumlahkan beban semua tenant pada shard.",
+        "Review kapasitas tidak mengubah ownership; migrasi memerlukan catch-up, fence dan rekonsiliasi."
+      ],
+      "solutionSql": "WITH planned_load AS (\n  SELECT shard_id, SUM(planned_rps) AS shard_planned_rps\n  FROM pg_temp.lesson_shard_directory GROUP BY shard_id\n)\nSELECT r.request_id, r.tenant_id, d.shard_id, d.route_epoch,\n       l.shard_planned_rps,\n       CASE\n         WHEN d.tenant_id IS NULL THEN 'hold_unknown_tenant'\n         WHEN r.client_epoch <> d.route_epoch THEN 'refresh_route_before_write'\n         WHEN d.ownership_ready IS NOT TRUE THEN 'hold_migration_fence'\n         WHEN l.shard_planned_rps > 800 THEN 'route_owner_with_capacity_review'\n         ELSE 'route_current_owner'\n       END AS decision\nFROM pg_temp.lesson_shard_requests r\nLEFT JOIN pg_temp.lesson_shard_directory d USING (tenant_id)\nLEFT JOIN planned_load l USING (shard_id)\nORDER BY r.request_id;",
+      "solutionExplanation": "Reference mempertahankan NULL untuk directory yang hilang dan memisahkan epoch, readiness serta rencana kapasitas. Ini klasifikasi metadata, bukan router production atau bukti single-writer. Otorisasi tenant, epoch enforcement, data movement dan recovery masih harus dirancang terpisah.",
+      "critical": true
+    },
+    "reflection": "Jelaskan kapan tenant_id membantu transaksi lokal, bagaimana satu hot tenant tetap dapat membebani shard, dan langkah fencing/catch-up yang diperlukan sebelum mengganti route epoch."
+  },
+  {
+    "id": "l8m02l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "multi-tenancy",
+      "tenant-isolation",
+      "composite-keys",
+      "row-security"
+    ],
+    "officialRefs": [
+      "https://www.postgresql.org/docs/17/ddl-rowsecurity.html",
+      "https://www.postgresql.org/docs/17/ddl-schemas.html"
+    ],
+    "hook": "Dua sekolah sama-sama mempunyai invoice 101. Dashboard hanya memfilter tenant pada invoice, tetapi join payment memakai invoice_id saja. Mengapa hasil dapat mencampur uang sekolah lain walaupun setiap tabel mempunyai primary key?",
+    "objectives": [
+      "Membandingkan biaya dan boundary tiga strategi tenancy.",
+      "Membawa tenant identity pada PK, FK, aggregate dan join.",
+      "Menjelaskan batas query filter, RLS, ownership serta trusted tenant context."
+    ],
+    "sections": [
+      {
+        "title": "Pilih unit isolasi dan unit operasi",
+        "paragraphs": [
+          "Database-per-tenant memisahkan database dan dapat mempermudah restore logis atau migrasi per tenant, tetapi menambah koneksi, provisioning serta jumlah migrasi yang harus dikelola. Jika masih berbagi cluster, CPU, disk, role cluster dan kegagalan infrastruktur tetap dapat berbagi blast radius. Physical backup atau PITR biasanya berorientasi cluster; kebutuhan restore satu tenant perlu prosedur dan rekonsiliasi yang sesuai. Jangan menganggap database terpisah otomatis berarti server terpisah atau backup per tenant yang sudah terbukti.",
+          "Schema-per-tenant memisahkan namespace dalam database yang sama. Tabel bernama sama dapat ada di schema berbeda, tetapi privileges dan search_path harus benar; pengguna yang dapat CREATE pada schema yang dipercaya search_path dapat memengaruhi resolusi objek. Migrasi berulang dan schema drift juga menjadi beban. Shared rows memusatkan schema dan query, biasanya dengan tenant_id pada setiap identitas yang scoped. Layout ini mengurangi objek tetapi kesalahan filter atau join dapat berdampak lintas tenant, sehingga batas akses dan observability harus dirancang dari awal."
+        ]
+      },
+      {
+        "title": "Tenant harus ikut di seluruh identitas",
+        "paragraphs": [
+          "Fixture T memakai shared rows dengan primary key invoice berupa pasangan tenant_id dan invoice_id, serta primary key payment berupa tenant_id dan payment_id. Kedua sekolah boleh mempunyai invoice 101 karena identitas lengkap berbeda. Composite foreign key payment memastikan pasangan tenant dan invoice memang ada. ERD menampilkan dua komponen key, tipe data dan relasi satu invoice ke nol atau banyak payment; setiap payment wajib memiliki tepat satu invoice pada tenant yang sama. FK tidak otomatis memeriksa jumlah payment atau melarang overpayment.",
+          "Aggregate receipts harus GROUP BY tenant_id dan invoice_id, lalu join menggunakan keduanya. Filter invoice tenant 10 saja belum mencegah payment tenant 20 bergabung jika aggregate atau join melupakan tenant. Contoh menampilkan invoice 101 dengan paid tiga puluh dan outstanding tujuh puluh, sementara payment lima ratus milik tenant 20 tidak ikut. Invoice 102 tanpa payment tetap terlihat melalui LEFT JOIN dengan paid nol. Cache key, export, background job, audit lookup dan business idempotency key juga harus mempertahankan scope yang benar."
+        ]
+      },
+      {
+        "title": "Query benar belum membuktikan kontrol akses",
+        "paragraphs": [
+          "WHERE tenant_id = 10 adalah filter contoh, bukan autentikasi. Server harus membangun tenant context terpercaya dari identity dan membership yang diverifikasi; parameter client tidak memberikan hak akses. Pada connection pool, context tidak boleh terbawa ke tenant request berikutnya. PostgreSQL RLS dapat membantu menegakkan policy row untuk role tertentu dengan USING dan WITH CHECK yang sesuai. Namun table owner biasanya bypass kecuali FORCE RLS, sementara superuser dan BYPASSRLS tetap memiliki bypass. Policy juga tidak menggantikan privileges serta boundary untuk operasi seperti TRUNCATE.",
+          "Pilih layout berdasarkan kebutuhan isolasi, ukuran tenant, recovery, migrasi dan kapasitas tim, bukan slogan satu strategi selalu aman. Worked/reference hanya membangun tabel TEMP dan report tenant-scoped. Tidak ada role, schema tenant production, policy RLS atau authenticator yang dibuat, dan tidak ada security test yang dijalankan. Output yang benar mengajarkan query scope; bukti isolasi menyeluruh tetap membutuhkan evaluasi akses terotorisasi pada seluruh jalur data di pekerjaan terpisah."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Dataset T: invoice dan payment dua tenant dengan ID lokal yang sama. Composite PK/FK menjaga referensi; report tidak memasang RLS atau otorisasi.",
+      "setupSql": "CREATE TEMP TABLE lesson_tenant_invoices (\n  tenant_id INTEGER NOT NULL, invoice_id INTEGER NOT NULL,\n  amount INTEGER NOT NULL CHECK (amount > 0),\n  PRIMARY KEY (tenant_id, invoice_id)\n);\nCREATE TEMP TABLE lesson_tenant_payments (\n  tenant_id INTEGER NOT NULL, payment_id INTEGER NOT NULL,\n  invoice_id INTEGER NOT NULL, amount INTEGER NOT NULL CHECK (amount > 0),\n  PRIMARY KEY (tenant_id, payment_id),\n  FOREIGN KEY (tenant_id, invoice_id)\n    REFERENCES pg_temp.lesson_tenant_invoices (tenant_id, invoice_id)\n);\nINSERT INTO pg_temp.lesson_tenant_invoices VALUES\n  (10,101,100), (10,102,80), (20,101,900);\nINSERT INTO pg_temp.lesson_tenant_payments VALUES\n  (10,1,101,30), (20,1,101,500);",
+      "sql": "WITH receipts AS (\n  SELECT tenant_id, invoice_id, SUM(amount) AS paid\n  FROM pg_temp.lesson_tenant_payments\n  GROUP BY tenant_id, invoice_id\n)\nSELECT i.tenant_id, i.invoice_id, i.amount,\n       COALESCE(r.paid,0) AS paid,\n       i.amount - COALESCE(r.paid,0) AS outstanding\nFROM pg_temp.lesson_tenant_invoices i\nLEFT JOIN receipts r\n  ON r.tenant_id = i.tenant_id AND r.invoice_id = i.invoice_id\nWHERE i.tenant_id = 10\nORDER BY i.invoice_id;",
+      "columns": [
+        "tenant_id",
+        "invoice_id",
+        "amount",
+        "paid",
+        "outstanding"
+      ],
+      "rows": [
+        [
+          "10",
+          "101",
+          "100",
+          "30",
+          "70"
+        ],
+        [
+          "10",
+          "102",
+          "80",
+          "0",
+          "80"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Tenant ikut pada aggregate dan join, sehingga payment 500 milik tenant 20 tidak muncul pada tenant 10. Invoice tanpa payment tetap ada. Hasil ini tidak membuktikan user tenant 10 ditolak ketika meminta tenant 20."
+    },
+    "checks": [
+      {
+        "id": "l8m02l03-check-1",
+        "question": "Apa trade-off utama database-per-tenant, schema-per-tenant dan shared rows?",
+        "options": [
+          "Semua memberi security dan recovery identik tanpa operasi tambahan.",
+          "Batas akses, migrasi, restore dan biaya operasinya berbeda; nama layout saja belum membuktikan isolasi.",
+          "Shared rows selalu bocor dan database terpisah selalu aman."
+        ],
+        "answer": 1,
+        "explanation": "Pilih berdasarkan requirement dan kemampuan operasi; privilege, routing, backup dan query tetap harus benar.",
+        "feedback": [
+          "Belum tepat. Unit deployment dan recovery berbeda.",
+          "Benar. Evaluasi boundary dan biaya secara konkret.",
+          "Belum tepat. Konfigurasi serta akses menentukan efektivitas."
+        ]
+      },
+      {
+        "id": "l8m02l03-check-2",
+        "question": "Mengapa FK payment memakai (tenant_id, invoice_id), bukan invoice_id saja?",
+        "options": [
+          "Untuk memaksa payment merujuk invoice pada tenant yang sama sesuai identitas composite.",
+          "Agar SELECT otomatis terfilter untuk semua role.",
+          "Agar payment tidak pernah overpay tanpa guard lain."
+        ],
+        "answer": 0,
+        "explanation": "Composite FK menjaga referensi tenant, tetapi tidak menggantikan otorisasi read atau invariant aggregate payment.",
+        "feedback": [
+          "Benar. Scope FK harus sama dengan scope PK.",
+          "Belum tepat. FK bukan row access policy.",
+          "Belum tepat. Batas SUM payment memerlukan penjagaan tersendiri."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi report tenant 10, temukan kebocoran join tanpa tenant, lalu bandingkan strategi tenancy dan batas aksesnya.",
+      "setup": "Setup TEMP T terpisah dari School Finance. Nilai tenant 10 adalah konstanta latihan, bukan context autentikasi atau policy RLS.",
+      "starterSql": "SELECT tenant_id, invoice_id, amount FROM pg_temp.lesson_tenant_invoices ORDER BY tenant_id, invoice_id;",
+      "variants": [
+        {
+          "id": "l8m02l03-variant-1",
+          "question": "Report tenant 10 pada fixture memberi paid dan outstanding berapa untuk invoice 101?",
+          "options": [
+            "Paid 530, outstanding -430 karena tenant 20 ikut dijumlah.",
+            "Paid 500, outstanding -400 karena payment_id sama.",
+            "Paid 30, outstanding 70 karena aggregate dan join menyertakan tenant."
+          ],
+          "answer": 2,
+          "explanation": "Invoice 101 milik tenant 20 adalah entity berbeda; payment 500 tidak boleh menambah paid tenant 10.",
+          "feedback": [
+            "Belum tepat. Ini mencampur identitas lintas tenant.",
+            "Belum tepat. payment_id juga hanya unik dalam tenant.",
+            "Benar. Dua komponen key harus ikut sepanjang query."
+          ]
+        },
+        {
+          "id": "l8m02l03-variant-2",
+          "question": "Tenant 10 invoice 102 belum mempunyai payment. Apa hasil LEFT JOIN yang benar?",
+          "options": [
+            "Row hilang karena receipts kosong.",
+            "Amount 80, paid 0, outstanding 80.",
+            "Paid NULL berarti invoice sudah lunas."
+          ],
+          "answer": 1,
+          "explanation": "Invoice tanpa receipt dipertahankan dan SUM yang tidak ada diganti nol pada query, bukan menghapus invoice.",
+          "feedback": [
+            "Belum tepat. LEFT JOIN mempertahankan invoice.",
+            "Benar. Nol receipt bukan invoice yang tidak ada.",
+            "Belum tepat. Tidak ada receipt bukan bukti lunas."
+          ]
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l8m02l03-edge-1",
+          "question": "Aplikasi memakai RLS tetapi role runtime adalah table owner tanpa FORCE RLS. Apa kesimpulan?",
+          "options": [
+            "Owner biasanya bypass RLS; review role non-owner, policy, FORCE bila tepat, dan seluruh privilege path.",
+            "RLS selalu membatasi superuser dan BYPASSRLS.",
+            "FK composite membuat policy RLS tidak diperlukan pada semua sistem."
+          ],
+          "answer": 0,
+          "explanation": "PostgreSQL membedakan owner, superuser/BYPASSRLS dan role biasa; hasil query owner tidak membuktikan policy runtime.",
+          "feedback": [
+            "Benar. Security harus dinilai dari identity efektif.",
+            "Belum tepat. Superuser dan BYPASSRLS tetap mempunyai bypass.",
+            "Belum tepat. Referensi dan otorisasi adalah batas berbeda."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l8m02l03-edge-2",
+          "question": "Client mengganti tenant_id dari 10 ke 20 pada query parameter. Apa tanggung jawab server?",
+          "options": [
+            "Percaya parameter karena berbentuk INTEGER.",
+            "Cukup ganti warna badge tenant.",
+            "Verifikasi membership/otorisasi dan context terpercaya pada setiap request; jangan mengambil scope dari input bebas."
+          ],
+          "answer": 2,
+          "explanation": "Tipe data tidak membuktikan hak akses; tenant context juga harus aman pada pool, cache, job dan export.",
+          "feedback": [
+            "Belum tepat. Tenant valid belum berarti user berhak.",
+            "Belum tepat. Tampilan tidak menegakkan isolation.",
+            "Benar. Terapkan scope di seluruh jalur data yang relevan."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Baca identitas invoice sebagai pasangan tenant_id dan invoice_id.",
+        "GROUP BY dan ON harus mempertahankan kedua komponen scope.",
+        "LEFT JOIN mempertahankan invoice kosong; FK/filter tidak menggantikan akses runtime."
+      ],
+      "solutionSql": "WITH receipts AS (\n  SELECT tenant_id, invoice_id, SUM(amount) AS paid\n  FROM pg_temp.lesson_tenant_payments\n  GROUP BY tenant_id, invoice_id\n)\nSELECT i.tenant_id, i.invoice_id, i.amount,\n       COALESCE(r.paid,0) AS paid,\n       i.amount - COALESCE(r.paid,0) AS outstanding\nFROM pg_temp.lesson_tenant_invoices i\nLEFT JOIN receipts r\n  ON r.tenant_id = i.tenant_id AND r.invoice_id = i.invoice_id\nWHERE i.tenant_id = 10\nORDER BY i.invoice_id;",
+      "solutionExplanation": "Reference mengagregasi dan join pada composite identity sebelum memfilter tenant 10. Foreign key menjamin referensi tenant, bukan batas SUM atau permission. Rancangan production masih memerlukan trusted context, role minimum, policy bila dipakai, pool hygiene dan scope semua jalur data.",
+      "critical": true
+    },
+    "reflection": "Pilih layout untuk platform sekolah multi-cabang dan jelaskan biaya migrasi/restore, composite identity, satu risiko join/filter, serta bagaimana role dan trusted tenant context membatasi akses."
+  }
+]

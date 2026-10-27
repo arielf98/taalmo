@@ -1,16 +1,8 @@
 # Remaining curriculum authoring
 
-The following 18 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
+The following 15 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L8 — Database Architecture & Scaling
-
-### L8M02 — Partitioning, Sharding, dan Tenant
-
-Prerequisite: l8m01. Scenario: Platform-scale.
-
-- [ ] `l8m02l01` — Partitioning lokal PostgreSQL
-- [ ] `l8m02l02` — Sharding dan routing key
-- [ ] `l8m02l03` — Multi-tenancy & isolation
 
 ### L8M03 — Distributed Data Systems
 

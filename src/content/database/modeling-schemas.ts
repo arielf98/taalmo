@@ -326,6 +326,33 @@ const cacheItems: SchemaTable = {
 
 export const databaseLessonSchemas: Partial<Record<string, ModelDiagram>> = {
   ...typesConstraintsLessonSchemas,
+  l8m02l03: {
+    title: "Tenant · identitas composite dan referensi UML/ERD",
+    note: "Semua kolom NOT NULL. PK invoice adalah (tenant_id, invoice_id); PK payment adalah (tenant_id, payment_id). Dua kolom FK payment bersama-sama menunjuk satu invoice pada tenant yang sama. Relasi ini menjaga referensi, bukan otorisasi read atau batas total payment.",
+    relations: [
+      {
+        parent: {
+          name: "lesson_tenant_invoices",
+          columns: [
+            { name: "tenant_id", type: "INTEGER", key: "PK" },
+            { name: "invoice_id", type: "INTEGER", key: "PK" },
+            { name: "amount", type: "INTEGER" },
+          ],
+        },
+        child: {
+          name: "lesson_tenant_payments",
+          columns: [
+            { name: "tenant_id", type: "INTEGER", key: "PK/FK" },
+            { name: "payment_id", type: "INTEGER", key: "PK" },
+            { name: "invoice_id", type: "INTEGER", key: "FK" },
+            { name: "amount", type: "INTEGER" },
+          ],
+        },
+        foreignKey: "(tenant_id, invoice_id)",
+        description: "Satu invoice pada satu tenant memiliki 0..N payment. Setiap payment wajib merujuk tepat satu invoice dengan pasangan tenant_id dan invoice_id yang sama; invoice_id saja bukan identitas global.",
+      },
+    ],
+  },
   l3m01l01: {
     title: "Commerce · identitas dan relasi UML/ERD",
     note: "PK = identitas unik; FK = referensi wajib; 1 = tepat satu; 0..N = nol atau banyak. Semua kolom wajib terisi kecuali paid_at. Tabel yang tampil kembali adalah entity yang sama, bukan salinan data. Garis menyatakan relasi, bukan urutan proses; batas refund dan lifecycle belum seluruhnya dijaga constraint.",

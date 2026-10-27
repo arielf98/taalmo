@@ -13,13 +13,13 @@
 
 ## Database Engineering — database curriculum
 
-The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L7 and L8M01 provide 102 published bilingual lessons; 18 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
+The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L7 and L8M01–L8M02 provide 105 published bilingual lessons; 15 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
 
-## Recommended next milestone: L8M02 authoring
+## Recommended next milestone: L8M03 authoring
 
-L8M01 is fully authored. Cache TTL/source-age decisions, full-state invoice projections and API contracts are prediction/design exercises; no cache, event transport, endpoint routing or freshness measurement was executed. L8 assessment remains unavailable until all four L8 modules are authored.
+L8M02 is fully authored. Partition boundaries, directory routing, hot-tenant plans and tenant-scoped composite identities are prediction/design exercises. No pruning benchmark, shard movement, RLS policy or access-control evaluation was executed. L8 assessment remains unavailable until all four L8 modules are authored.
 
-Continue with L8M02 — Partitioning, Sharding, dan Tenant: PostgreSQL range partitions, shard routing and hot tenants, and tenant-isolation trade-offs. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Follow AGENTS.md: source/diff review only, no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build; commit, push and continue.
+Continue with L8M03 — Distributed Data Systems: replication consistency, distributed transactions/sagas, and durable retry/dedup/order contracts. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Follow AGENTS.md: source/diff review only, no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build; commit, push and continue.
 
 ## Later learning improvements
 
