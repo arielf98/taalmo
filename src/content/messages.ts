@@ -38,6 +38,7 @@ import englishPartitioningTenancy from "./messages/en-database-partitioning-tena
 import englishDistributed from "./messages/en-database-distributed.json" with { type: "json" };
 import englishDataStores from "./messages/en-database-data-stores.json" with { type: "json" };
 import englishLedgerDesign from "./messages/en-database-ledger-design.json" with { type: "json" };
+import englishLoadFailure from "./messages/en-database-load-failure.json" with { type: "json" };
 export type Locale = "en" | "id";
 const indonesian: Record<string, string> = {
   ...interfaceMessages,
@@ -82,6 +83,7 @@ const english: Record<string, string> = {
   ...englishDistributed,
   ...englishDataStores,
   ...englishLedgerDesign,
+  ...englishLoadFailure,
 };
 const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

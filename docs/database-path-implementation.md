@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Initial goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L9M01: 114 published / 6 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L9M02: 117 published / 3 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -354,3 +354,11 @@ Added three complete bilingual lessons in l9-ledger-design.json. Requirements se
 Totals: 38 authored modules, 114 published / 6 draft lessons. Catalog/messages and existing audit/SQL registries include the new module. Existing E2E expectations only update the count and next draft to l9m02l01; no coverage was added. Prior IDs/versions, blueprint, School Finance seed and progress storage are unchanged. L9 assessment remains gated on the remaining modules.
 
 Source/diff review only; no tests, audits, SQL, runtime, manual/browser checks, lint, typecheck or build. Expected tables and flags are authored inputs/results, not executed ledger, migration, signature, load or concurrency evidence. Next canonical milestone: L9M02.
+
+## L9M02 — Load and Failure Testing — 28 October 2026
+
+Added three complete bilingual lessons in l9-load-failure.json. The load exercise teaches manifest-independent two-way effect reconciliation and explicit duplicate-rate denominators. Tuning compares static OFFSET/keyset output before interpreting five authored latency values; proposed scale and index/plan evidence stay unmeasured. Recovery cards distinguish chain, fencing, service acceptance and timestamp arithmetic, with external reconciliation after lost local history.
+
+Totals: 39 authored modules, 117 published / 3 draft lessons. Catalog/messages and existing file registries include the module; existing E2E count/first-draft expectations move to l9m03l01 without new coverage. Blueprint, prior versions, School Finance fixture and progress storage remain unchanged. L9 assessment stays gated until L9M03.
+
+Source/diff review only. No tests, audits, SQL, runtime, manual/browser checks, lint, typecheck or build. No load generator, EXPLAIN, index, backup, restore, failover, deletion, network fault or provider interaction was executed. Next: L9M03.

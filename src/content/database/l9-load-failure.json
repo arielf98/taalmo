@@ -1,0 +1,557 @@
+[
+  {
+    "id": "l9m02l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "Evidence capstone",
+      "Rekonsiliasi beban"
+    ],
+    "hook": "Dashboard menunjukkan 300 request/detik dan hampir semua respons 200. Namun satu key terdebit dua kali dan satu efek hilang. Evidence apa yang sebenarnya diperlukan sebelum menyebut idempotency bertahan?",
+    "objectives": [
+      "Rancang workload terkontrol dengan duplicate rate dan identitas bisnis eksplisit.",
+      "Rekonsiliasi efek kurang, lebih, ganda dan payload salah.",
+      "Pisahkan target, prediksi schedule dan evidence concurrent yang benar-benar dijalankan."
+    ],
+    "sections": [
+      {
+        "title": "Definisikan eksperimen sebelum angka",
+        "paragraphs": [
+          "Target blueprint adalah 300 request per detik dengan 5 persen callback duplikat pada ledger berisi satu juta riwayat. Tuliskan durasi steady state, warm-up, concurrency, distribusi merchant/akun, proporsi read/write dan aturan saldo. Nyatakan apakah 5 persen dihitung dari seluruh delivery atau dari intent unik. Contoh perencanaan satu menit berisi 18000 delivery, tepat 900 replay dan 17100 intent baru bila satu replay menyalin satu key yang sudah ada dan tidak ada retry lain.",
+          "Buat manifest intent yang independen dari database hasil: merchant, business key, canonical payload dan expected disposition. Jangan menyusun expected dari row yang sudah ditulis sistem karena efek hilang akan ikut hilang dari oracle. Simpan run ID, versi kode/schema, konfigurasi, seed generator dan batas waktu. Payload konflik, signature salah, dana kurang dan akun lintas merchant mempunyai expected rejection sendiri; jangan menggabungkannya sebagai duplicate sukses dalam denominator."
+        ]
+      },
+      {
+        "title": "Rancang schedule yang berisiko",
+        "paragraphs": [
+          "Dua client mengirim key dan payload sama sebelum salah satunya commit: oracle menuntut satu posting dengan dua entry yang benar. Variasi berikutnya memakai key sama dengan amount berbeda, sehingga satu intent menang dan yang lain konflik. Untuk dua debit key berbeda pada akun yang dananya hanya cukup satu debit, paksa kedua client mulai berdekatan dan periksa saldo akhir. Semua jalur penulis saldo harus mengikuti guard yang sama; kecepatan respons tidak membuktikan protokol lock benar.",
+          "Sertakan deadlock, serialization failure, commit unknown dan worker redelivery sebagai kategori outcome terpisah. Setelah batas drain yang disepakati, semua delivery harus terpetakan ke intent serta keputusan yang bisa dijelaskan. Pending atau unknown yang belum selesai bukan sukses diam-diam; simpan sebagai unresolved dan hentikan klaim kelulusan. Retry memakai key semula dan batas attempt/deadline agar generator tidak menambah load tak terkendali. Injeksi kegagalan nyata memerlukan sandbox terpisah dan otorisasi; halaman ini tidak menjalankannya."
+        ]
+      },
+      {
+        "title": "Rekonsiliasi dari dua arah",
+        "paragraphs": [
+          "Contoh TEMP merangkum efek posting, bukan setiap delivery dan bukan tabel ledger lengkap. Manifest mempunyai a sampai d. Snapshot authored sengaja menggandakan a, mempertahankan b, kehilangan c, mengubah amount d dan menambah e yang tidak diharapkan. FULL JOIN menjaga efek tambahan tetap terlihat; LEFT JOIN dari expected saja akan menyembunyikan e. Prioritas classifier melaporkan duplicate sebelum amount mismatch; satu label tidak menjelaskan semua kerusakan bila keduanya terjadi.",
+          "effect_matches pada b hanya membuktikan satu amount cocok dalam mini report ini. Oracle capstone lengkap juga memeriksa arah akun, currency, jumlah/tanda entry, saldo awal-akhir, outbox, audit, konflik dan absence efek untuk rejection. Bandingkan identitas serta multiplicity, bukan hanya SUM yang dapat saling menutup. Angka dan snapshot di sini authored untuk prediksi; tidak ada satu juta baris, client concurrent, target RPS tercapai, atau hasil pengujian otomatis yang dihasilkan player."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Manifest dan snapshot efek authored dalam TEMP; bukan output stress test.",
+      "setupSql": "CREATE TEMP TABLE lesson_expected_effects (\n merchant_id INTEGER NOT NULL, business_key TEXT NOT NULL,\n amount INTEGER NOT NULL, PRIMARY KEY (merchant_id, business_key)\n);\nCREATE TEMP TABLE lesson_observed_effects (\n effect_id INTEGER PRIMARY KEY, merchant_id INTEGER NOT NULL,\n business_key TEXT NOT NULL, amount INTEGER NOT NULL\n);\nINSERT INTO pg_temp.lesson_expected_effects VALUES\n (1, 'a', 7000), (1, 'b', 5000), (1, 'c', 3000), (1, 'd', 4000);\nINSERT INTO pg_temp.lesson_observed_effects VALUES\n (1, 1, 'a', 7000), (2, 1, 'a', 7000), (3, 1, 'b', 5000),\n (4, 1, 'd', 4500), (5, 1, 'e', 1000);",
+      "sql": "WITH observed AS (\n SELECT merchant_id, business_key, COUNT(*) AS effects, MIN(amount) AS amount\n FROM pg_temp.lesson_observed_effects GROUP BY merchant_id, business_key\n)\nSELECT COALESCE(e.merchant_id, o.merchant_id) AS merchant_id,\n       COALESCE(e.business_key, o.business_key) AS business_key,\n       COALESCE(o.effects, 0) AS effects,\n       CASE WHEN e.business_key IS NULL THEN 'unexpected_effect'\n            WHEN o.business_key IS NULL THEN 'missing_effect'\n            WHEN o.effects <> 1 THEN 'duplicate_effect'\n            WHEN o.amount IS DISTINCT FROM e.amount THEN 'amount_mismatch'\n            ELSE 'effect_matches' END AS reconciliation\nFROM pg_temp.lesson_expected_effects e\nFULL JOIN observed o USING (merchant_id, business_key)\nORDER BY merchant_id, business_key;",
+      "columns": [
+        "merchant_id",
+        "business_key",
+        "effects",
+        "reconciliation"
+      ],
+      "rows": [
+        [
+          "1",
+          "a",
+          "2",
+          "duplicate_effect"
+        ],
+        [
+          "1",
+          "b",
+          "1",
+          "effect_matches"
+        ],
+        [
+          "1",
+          "c",
+          "0",
+          "missing_effect"
+        ],
+        [
+          "1",
+          "d",
+          "1",
+          "amount_mismatch"
+        ],
+        [
+          "1",
+          "e",
+          "1",
+          "unexpected_effect"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "FULL JOIN dan count per merchant/key membedakan lima jenis hasil. Tidak ada record delivery atau verifikasi ledger lengkap dalam fixture kecil ini."
+    },
+    "checks": [
+      {
+        "id": "l9m02l01-check-1",
+        "question": "Mengapa 200 OK bukan oracle idempotency?",
+        "options": [
+          "Harus memeriksa satu efek sesuai intent serta seluruh invariant, termasuk efek yang hilang.",
+          "Respons sukses selalu membuktikan jumlah entry benar."
+        ],
+        "answer": 0,
+        "explanation": "Status transport tidak merekonsiliasi keadaan bisnis.",
+        "feedback": [
+          "Benar. Ukur outcome setelah drain dan reconciliation.",
+          "Belum tepat. Respons dapat sukses saat efek ganda."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l9m02l01-check-2",
+        "question": "Mengapa expected harus independen dari tabel hasil?",
+        "options": [
+          "Expected cukup menyalin semua row yang ada.",
+          "Efek hilang tetap harus muncul sebagai missing, bukan menghilang dari oracle."
+        ],
+        "answer": 1,
+        "explanation": "Oracle yang berasal dari output dapat mengulang bug yang sama.",
+        "feedback": [
+          "Belum tepat. Itu tidak menemukan efek yang tidak tertulis.",
+          "Benar. Manifest berasal dari intent dan aturan domain."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi lima kategori rekonsiliasi dan rancang schedule duplicate/concurrent untuk target blueprint.",
+      "setup": "Perhitungan workload adalah rencana. Tidak ada generator, test atau injeksi kegagalan yang dijalankan.",
+      "starterSql": "SELECT * FROM pg_temp.lesson_observed_effects ORDER BY effect_id;",
+      "variants": [
+        {
+          "id": "l9m02l01-variant-1",
+          "question": "a mempunyai dua efek amount 7000. Apa kategori pertama?",
+          "options": [
+            "effect_matches karena MIN(amount)=7000.",
+            "duplicate_effect; inspect kedua identitas efek."
+          ],
+          "answer": 1,
+          "explanation": "Count diperiksa sebelum amount agar pengulangan tidak lolos.",
+          "feedback": [
+            "Belum tepat. Satu amount cocok belum berarti satu efek.",
+            "Benar. Amount benar tidak menghapus duplicate."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l9m02l01-variant-2",
+          "question": "18000 delivery dengan tepat 5% replay, tanpa retry lain. Berapa intent baru dalam asumsi ini?",
+          "options": [
+            "17100 intent baru dan 900 replay.",
+            "18000 intent baru ditambah 900 delivery di luar denominator."
+          ],
+          "answer": 0,
+          "explanation": "Denominator didefinisikan seluruh delivery, bukan intent baru.",
+          "feedback": [
+            "Benar. Ini aritmetika rencana, bukan throughput terukur.",
+            "Belum tepat. Itu mengubah definisi 5 persen."
+          ],
+          "critical": true
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l9m02l01-edge-1",
+          "question": "Efek e tidak ada dalam manifest. Mengapa LEFT JOIN dari expected berbahaya?",
+          "options": [
+            "Efek tambahan e hilang; FULL JOIN mempertahankan kedua arah.",
+            "Karena LEFT JOIN selalu menggandakan semua amount."
+          ],
+          "answer": 0,
+          "explanation": "Absence expected dan absence actual adalah dua kelas kegagalan berbeda.",
+          "feedback": [
+            "Benar. Unexpected effects wajib diinvestigasi.",
+            "Belum tepat. Masalahnya arah coverage, bukan selalu duplikasi."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l9m02l01-edge-2",
+          "question": "Sebagian outcome masih unknown sesudah drain. Bolehkah run dinyatakan lulus?",
+          "options": [
+            "Boleh jika p95 respons sukses rendah.",
+            "Tidak; rekonsiliasi atau laporkan unresolved sesuai oracle."
+          ],
+          "answer": 1,
+          "explanation": "Latency sukses tidak menyelesaikan efek yang belum dapat dijelaskan.",
+          "feedback": [
+            "Belum tepat. Populasi sukses saja bias.",
+            "Benar. Jangan hilangkan unknown dari laporan."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Definisikan denominator duplicate dan sumber expected yang independen.",
+        "Bandingkan per merchant/business key dan multiplicity dari dua arah.",
+        "Cocok amount belum membuktikan entry, saldo, outbox dan audit."
+      ],
+      "solutionSql": "WITH observed AS (\n SELECT merchant_id, business_key, COUNT(*) AS effects, MIN(amount) AS amount\n FROM pg_temp.lesson_observed_effects GROUP BY merchant_id, business_key\n)\nSELECT COALESCE(e.merchant_id, o.merchant_id) AS merchant_id,\n       COALESCE(e.business_key, o.business_key) AS business_key,\n       COALESCE(o.effects, 0) AS effects,\n       CASE WHEN e.business_key IS NULL THEN 'unexpected_effect'\n            WHEN o.business_key IS NULL THEN 'missing_effect'\n            WHEN o.effects <> 1 THEN 'duplicate_effect'\n            WHEN o.amount IS DISTINCT FROM e.amount THEN 'amount_mismatch'\n            ELSE 'effect_matches' END AS reconciliation\nFROM pg_temp.lesson_expected_effects e\nFULL JOIN observed o USING (merchant_id, business_key)\nORDER BY merchant_id, business_key;",
+      "solutionExplanation": "Reference membaca dua snapshot authored dan tidak menjalankan request. Hasil b hanya cocok pada scope amount/count; gunakan oracle lengkap untuk capstone nyata dan simpan unresolved outcomes sebagai gap evidence.",
+      "critical": true
+    },
+    "reflection": "Tulis manifest, denominator 5%, schedule dua request key sama dan dua debit akun panas; jelaskan query/artefak untuk missing, unexpected, duplicate, saldo, outbox, audit dan unknown."
+  },
+  {
+    "id": "l9m02l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "Evidence capstone",
+      "Rehearsal performa"
+    ],
+    "hook": "Query riwayat menjadi cepat setelah filter merchant hilang. Apakah p95 yang membaik boleh disebut optimasi, dan apa yang perlu dibandingkan sebelum membuka EXPLAIN?",
+    "objectives": [
+      "Periksa kesetaraan output dan scope akses sebelum kinerja.",
+      "Jelaskan cursor stabil, index kandidat dan perubahan snapshot.",
+      "Tafsirkan percentile sampel authored tanpa mengklaim benchmark satu juta baris."
+    ],
+    "sections": [
+      {
+        "title": "Kontrak query tidak boleh hilang",
+        "paragraphs": [
+          "Riwayat ledger memerlukan filter merchant dari principal terotorisasi, kolom hasil yang tetap dan urutan posted_at menurun dengan transfer_id sebagai tie-breaker. Cursor harus membawa kedua nilai serta scope merchant; akun pengguna tidak boleh berpindah scope hanya dengan mengubah cursor. Sebelum membandingkan latency, tentukan halaman, batas snapshot, status transfer, jumlah baris dan semantik duplicate yang sama. Menghapus filter atau mengganti LEFT JOIN yang dibutuhkan dapat mempercepat query dengan merusak kontrak.",
+          "Pada fixture statis, baseline OFFSET 1 LIMIT 2 untuk merchant 1 menghasilkan transfer 1 lalu 3. Candidate keyset memakai tuple lebih kecil daripada cursor timestamp 10:00 dan ID 2, dengan order sama. Timestamp yang sama pada ID 1 dan 2 menunjukkan mengapa cursor timestamp saja dapat melewatkan row. EXCEPT ALL dua arah membandingkan seluruh kolom beserta multiplicity; ia tidak membuktikan order, sehingga urutan harus diperiksa terhadap kontrak secara terpisah."
+        ]
+      },
+      {
+        "title": "Dari kandidat ke pengukuran",
+        "paragraphs": [
+          "Index kandidat dapat mengikuti merchant_id, posted_at DESC dan transfer_id DESC. Kelayakan bentuk index bukan bukti planner memilihnya atau waktu membaik; lihat data distribution, statistik, selectivity, visibility dan kolom yang dibaca. Plain EXPLAIN merencanakan, sedangkan EXPLAIN ANALYZE mengeksekusi statement. Pada write, jangan menganggap rollback menghapus semua efek eksternal atau urutan sequence. Di sesi ini tidak ada EXPLAIN, pembuatan index atau query benchmark yang dijalankan.",
+          "Rancangan rehearsal harus memakai satu juta riwayat dengan skew dan payload yang realistis, parameter query yang sama, snapshot sebanding serta resource dan konfigurasi tetap. Catat versi, plan before/after, jumlah row, buffer, lock, pool, CPU dan I/O. Ulangi beberapa run dengan urutan yang mengurangi bias warm cache, pisahkan warm-up dari steady state dan laporkan kegagalan serta timeout. p95 end-to-end mencakup antrian dan jaringan; waktu node plan bukan latency API."
+        ]
+      },
+      {
+        "title": "Sampel kecil bukan klaim kapasitas",
+        "paragraphs": [
+          "Tabel latency berisi lima angka authored per varian untuk mempelajari percentile_disc. Pada n=5, percentile 95 memilih nilai urut kelima: baseline 240 dan candidate 140 milidetik. Target 150 milidetik adalah contoh acceptance budget, bukan janji performa. CASE hanya membaca kesetaraan row pada fixture dan sampel kecil ini. Ia tidak melakukan pengukuran berulang, tidak menyertakan timeout dan tidak membuktikan distribusi p95 populasi workload nyata.",
+          "Keyset tidak memberikan snapshot lintas request secara otomatis. Jika posted_at dapat berubah, baris baru masuk atau status difilter berbeda, pagination memerlukan kontrak cutoff/snapshot dan kebijakan konsistensi yang dinyatakan. Jangan mengklaim tidak ada skip/duplicate untuk setiap workload berdasarkan dua halaman statis. Optimasi layak dipertimbangkan setelah correctness, authorization dan kebutuhan freshness dipertahankan, lalu benchmark nyata menunjukkan target tercapai dengan biaya write/index yang diterima."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Riwayat mini dan angka latency authored; tidak ada pengukuran EXPLAIN atau benchmark.",
+      "setupSql": "CREATE TEMP TABLE lesson_history (\n merchant_id INTEGER NOT NULL, transfer_id INTEGER NOT NULL,\n posted_at TIMESTAMPTZ NOT NULL, amount INTEGER NOT NULL,\n PRIMARY KEY (merchant_id, transfer_id)\n);\nINSERT INTO pg_temp.lesson_history VALUES\n (1, 1, '2026-10-28 10:00:00+07', 7000),\n (1, 2, '2026-10-28 10:00:00+07', 5000),\n (1, 3, '2026-10-28 09:00:00+07', 3000),\n (1, 4, '2026-10-28 08:00:00+07', 4000),\n (2, 9, '2026-10-28 09:30:00+07', 9000);\nCREATE TEMP TABLE lesson_latency_samples (\n variant TEXT NOT NULL, sample_id INTEGER NOT NULL, latency_ms INTEGER NOT NULL,\n PRIMARY KEY (variant, sample_id)\n);\nINSERT INTO pg_temp.lesson_latency_samples VALUES\n ('baseline', 1, 200), ('baseline', 2, 210), ('baseline', 3, 220),\n ('baseline', 4, 230), ('baseline', 5, 240),\n ('candidate', 1, 100), ('candidate', 2, 110), ('candidate', 3, 120),\n ('candidate', 4, 130), ('candidate', 5, 140);",
+      "sql": "WITH baseline AS (\n SELECT transfer_id, posted_at, amount FROM pg_temp.lesson_history\n WHERE merchant_id = 1 ORDER BY posted_at DESC, transfer_id DESC OFFSET 1 LIMIT 2\n), candidate AS (\n SELECT transfer_id, posted_at, amount FROM pg_temp.lesson_history\n WHERE merchant_id = 1\n   AND (posted_at, transfer_id) < (TIMESTAMPTZ '2026-10-28 10:00:00+07', 2)\n ORDER BY posted_at DESC, transfer_id DESC LIMIT 2\n), differences AS (\n SELECT (SELECT COUNT(*) FROM (SELECT * FROM baseline EXCEPT ALL SELECT * FROM candidate) d) AS missing_rows,\n        (SELECT COUNT(*) FROM (SELECT * FROM candidate EXCEPT ALL SELECT * FROM baseline) d) AS unexpected_rows\n), percentiles AS (\n SELECT variant, percentile_disc(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95_ms\n FROM pg_temp.lesson_latency_samples GROUP BY variant\n)\nSELECT d.missing_rows, d.unexpected_rows, b.p95_ms AS baseline_p95_ms,\n       c.p95_ms AS candidate_p95_ms,\n       CASE WHEN d.missing_rows <> 0 OR d.unexpected_rows <> 0 THEN 'reject_result_change'\n            WHEN c.p95_ms > 150 THEN 'sample_exceeds_target'\n            ELSE 'sample_within_target' END AS sample_review\nFROM differences d\nCROSS JOIN percentiles b CROSS JOIN percentiles c\nWHERE b.variant = 'baseline' AND c.variant = 'candidate';",
+      "columns": [
+        "missing_rows",
+        "unexpected_rows",
+        "baseline_p95_ms",
+        "candidate_p95_ms",
+        "sample_review"
+      ],
+      "rows": [
+        [
+          "0",
+          "0",
+          "240",
+          "140",
+          "sample_within_target"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Dua query membaca transfer 1 dan 3 dengan seluruh kolom sama. p95 lima angka adalah nilai terbesar; keputusan hanya berlaku pada sampel authored ini."
+    },
+    "checks": [
+      {
+        "id": "l9m02l02-check-1",
+        "question": "Apa gate pertama sebelum membandingkan latency candidate?",
+        "options": [
+          "Pilih angka terkecil meski filter merchant hilang.",
+          "Output, scope merchant dan kontrak order/freshness tetap benar."
+        ],
+        "answer": 1,
+        "explanation": "Kecepatan tidak mengganti correctness atau authorization.",
+        "feedback": [
+          "Belum tepat. Query berbeda scope bukan optimasi yang sah.",
+          "Benar. Equivalence adalah syarat sebelum benchmark."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l9m02l02-check-2",
+        "question": "Apakah EXCEPT ALL dua arah juga membuktikan order halaman?",
+        "options": [
+          "Tidak; ia membandingkan bag rows, order harus diperiksa terpisah.",
+          "Ya, karena semua kolom dibandingkan."
+        ],
+        "answer": 0,
+        "explanation": "Set operation tidak mempertahankan kontrak urutan display.",
+        "feedback": [
+          "Benar. Urutan stabil tetap membutuhkan ORDER BY yang sesuai.",
+          "Belum tepat. Nilai sama tidak berarti urutan sama."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi kesetaraan halaman dan p95 sampel. Tulis rencana benchmark before/after yang sebanding.",
+      "setup": "Lima sampel per varian adalah angka ajar. Tidak ada index, EXPLAIN atau benchmark dijalankan.",
+      "starterSql": "SELECT variant, sample_id, latency_ms FROM pg_temp.lesson_latency_samples ORDER BY variant, sample_id;",
+      "variants": [
+        {
+          "id": "l9m02l02-variant-1",
+          "question": "Candidate p95 authored 140 dan target 150, differences nol. Apa label?",
+          "options": [
+            "sample_within_target, terbatas pada fixture/sampel ini.",
+            "Production pasti sanggup 300 request/detik."
+          ],
+          "answer": 0,
+          "explanation": "Label sampel tidak menjadi kapasitas deployment.",
+          "feedback": [
+            "Benar. Pisahkan aritmetika sampel dari pengukuran workload.",
+            "Belum tepat. Tidak ada load run atau evidence environment."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l9m02l02-variant-2",
+          "question": "Candidate menghapus merchant filter lalu memasukkan row 9. Bagaimana gate?",
+          "options": [
+            "Terima karena row tambahan tidak mengubah SUM merchant 1.",
+            "Tolak perubahan hasil dan scope, meskipun latency turun."
+          ],
+          "answer": 1,
+          "explanation": "Semua row dan batas akses merupakan kontrak, bukan total saja.",
+          "feedback": [
+            "Belum tepat. Kebocoran row tetap salah.",
+            "Benar. Perbaiki query sebelum membahas timing."
+          ],
+          "critical": true
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l9m02l02-edge-1",
+          "question": "Dua transfer mempunyai posted_at sama. Apa risiko cursor timestamp saja?",
+          "options": [
+            "Tidak ada karena timestamp pasti unik.",
+            "Row pada timestamp yang sama dapat terlewat; gunakan tie-breaker ID dan order yang sama."
+          ],
+          "answer": 1,
+          "explanation": "Presisi waktu tidak menggantikan identitas urutan total.",
+          "feedback": [
+            "Belum tepat. Fixture mempunyai dua timestamp sama.",
+            "Benar. Tuple cursor harus sesuai tuple ORDER BY."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l9m02l02-edge-2",
+          "question": "Timeout dibuang dari populasi latency. Apa batas klaim p95?",
+          "options": [
+            "p95 sukses saja bias; laporkan populasi, error/timeout dan aturan pengukuran.",
+            "Angka tetap membuktikan seluruh request cepat."
+          ],
+          "answer": 0,
+          "explanation": "Request terburuk dapat hilang dari percentile ketika failure dikecualikan.",
+          "feedback": [
+            "Benar. Latency dan keberhasilan harus dibaca bersama.",
+            "Belum tepat. Denominator yang berubah menyembunyikan kegagalan."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Bandingkan kolom dan multiplicity dua arah sebelum timing.",
+        "Urutan cursor memerlukan timestamp dan ID dengan arah yang sama.",
+        "percentile_disc pada lima angka memilih urutan kelima untuk 0.95."
+      ],
+      "solutionSql": "WITH baseline AS (\n SELECT transfer_id, posted_at, amount FROM pg_temp.lesson_history\n WHERE merchant_id = 1 ORDER BY posted_at DESC, transfer_id DESC OFFSET 1 LIMIT 2\n), candidate AS (\n SELECT transfer_id, posted_at, amount FROM pg_temp.lesson_history\n WHERE merchant_id = 1\n   AND (posted_at, transfer_id) < (TIMESTAMPTZ '2026-10-28 10:00:00+07', 2)\n ORDER BY posted_at DESC, transfer_id DESC LIMIT 2\n), differences AS (\n SELECT (SELECT COUNT(*) FROM (SELECT * FROM baseline EXCEPT ALL SELECT * FROM candidate) d) AS missing_rows,\n        (SELECT COUNT(*) FROM (SELECT * FROM candidate EXCEPT ALL SELECT * FROM baseline) d) AS unexpected_rows\n), percentiles AS (\n SELECT variant, percentile_disc(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95_ms\n FROM pg_temp.lesson_latency_samples GROUP BY variant\n)\nSELECT d.missing_rows, d.unexpected_rows, b.p95_ms AS baseline_p95_ms,\n       c.p95_ms AS candidate_p95_ms,\n       CASE WHEN d.missing_rows <> 0 OR d.unexpected_rows <> 0 THEN 'reject_result_change'\n            WHEN c.p95_ms > 150 THEN 'sample_exceeds_target'\n            ELSE 'sample_within_target' END AS sample_review\nFROM differences d\nCROSS JOIN percentiles b CROSS JOIN percentiles c\nWHERE b.variant = 'baseline' AND c.variant = 'candidate';",
+      "solutionExplanation": "Reference membandingkan dua query pada fixture statis serta menghitung percentile angka authored. Ia tidak melakukan EXPLAIN, membangun index atau mengukur satu juta riwayat. Rencana evidence nyata harus mempertahankan correctness dan mencatat biaya serta failures.",
+      "critical": true
+    },
+    "reflection": "Rancang dossier before/after: query/cursor, index kandidat, equivalence dan order, dataset satu juta riwayat/skew, konfigurasi, repeated runs, plan/buffer, error/timeout dan batas interpretasi p95."
+  },
+  {
+    "id": "l9m02l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "Evidence capstone",
+      "Drill recovery"
+    ],
+    "hook": "Backup tersedia tetapi satu segmen WAL hilang, primary lama masih bisa menerima write, dan gateway sudah menagih pelanggan setelah titik restore. Apakah database yang menyala berarti layanan telah pulih?",
+    "objectives": [
+      "Susun drill terisolasi untuk commit unknown, primary gagal dan deletion.",
+      "Hitung gap RPO serta durasi RTO dengan clock dan acceptance scope eksplisit.",
+      "Jelaskan fencing, rekonsiliasi eksternal dan batas evidence restore."
+    ],
+    "sections": [
+      {
+        "title": "Rencana aman dan chain yang lengkap",
+        "paragraphs": [
+          "Drill nyata harus berada pada instance terisolasi dengan data tersanitasi, credential terpisah, resource bound dan cleanup yang dapat diaudit. Nyatakan hipotesis, titik injeksi, stop condition, owner keputusan dan cara mengembalikan layanan. Tiga skenario berbeda perlu oracle berbeda: koneksi hilang saat commit, primary gagal dengan replica tertinggal, dan penghapusan data yang ikut direplikasi. Replica bukan backup yang dapat mengembalikan keadaan sebelum deletion; failover saja tidak menyelesaikan kerusakan logis.",
+          "PITR memerlukan base backup yang sesuai dan rantai WAL kontinu pada timeline yang benar hingga target. Keberadaan file backup atau checksum file saja belum membuktikan restore, kunci dekripsi, izin storage dan konfigurasi recovery tersedia. Logical dump bukan base backup fisik untuk replay WAL. Pilih target sebelum transaksi deletion yang salah, catat inclusivity dan bukti target dicapai; jika WAL hilang, jangan mengganti unknown dengan klaim bahwa semua data pasti selamat."
+        ]
+      },
+      {
+        "title": "Jam ukur dan kelayakan layanan",
+        "paragraphs": [
+          "RPO adalah target kehilangan data yang dapat diterima. Dalam contoh time-based ini, loss_seconds ialah waktu incident dikurangi titik commit terakhir yang terbukti pulih; jangan memakai waktu backup mulai sebagai pengganti titik recovery. RTO contoh dimulai saat incident dan berakhir setelah layanan memenuhi acceptance: restore, konfigurasi, akses, invariant, rekonsiliasi serta read/write yang dibutuhkan siap. Waktu proses database menyala atau durasi menyalin backup saja bukan keseluruhan recovery layanan.",
+          "Kartu authored memakai target kehilangan paling banyak 60 detik dan recovery paling banyak 900 detik. Incident 10:00, recovered-through 09:59:30 dan service-ready 10:12 memberi gap 30 detik dan durasi 720 detik. Clock harus sebanding dan titik commit memiliki provenance yang jelas; timestamp masa depan atau ready sebelum incident adalah evidence tidak sah. Untuk deletion yang baru ditemukan lama kemudian, laporkan juga detection delay, rentang transaksi sah yang perlu direplay selektif dan impact bisnis.",
+          "Pecahan detik dipertahankan oleh EXTRACT numeric; trim_scale hanya membuang nol di belakang, bukan membulatkan. Loss 60.4 detik melampaui target 60, dan gap -0.4 detik tetap invalid."
+        ]
+      },
+      {
+        "title": "Database pulih, efek luar belum tentu",
+        "paragraphs": [
+          "Sebelum cutover, fence primary lama dan writer yang belum sesuai epoch agar tidak muncul dua otoritas. Refresh konfigurasi pool/client, invalidasi atau bangun ulang projection yang lebih maju dari database hasil restore, dan verifikasi hak akses. Unknown commit direkonsiliasi lewat key lama pada sumber otoritatif; jika database dipulihkan ke masa lalu, record idempotency dapat hilang walau efek gateway sudah terjadi. Retensi identitas dan sumber evidence eksternal menjadi bagian rancangan recovery.",
+          "Rekonsiliasi dengan provider melalui identitas bisnis yang terverifikasi sebelum menerima retry pembayaran. Jangan mengirim ulang debit karena lookup pada database hasil restore kosong. Simpan daftar gap serta keputusan kompensasi dan otorisasinya; efek luar tidak ikut rollback oleh PITR. Kartu berikut hanya merangkum input authored tentang chain, fencing dan acceptance. CASE menunjukkan urutan gate dan aritmetika, bukan menjalankan backup, failover, deletion, restore, koneksi gagal atau validasi RPO/RTO nyata."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Kartu recovery TEMP authored dengan waktu tetap +07 dan target contoh; bukan laporan drill.",
+      "setupSql": "CREATE TEMP TABLE lesson_recovery_cards (\n drill_id INTEGER PRIMARY KEY, incident_at TIMESTAMPTZ NOT NULL,\n recovered_through TIMESTAMPTZ, service_ready_at TIMESTAMPTZ,\n chain_verified BOOLEAN, old_writer_fenced BOOLEAN, reconciled BOOLEAN\n);\nINSERT INTO pg_temp.lesson_recovery_cards VALUES\n (1, '2026-10-28 10:00+07', '2026-10-28 09:59:30+07', '2026-10-28 10:12+07', true, true, true),\n (2, '2026-10-28 10:00+07', NULL, NULL, false, true, NULL),\n (3, '2026-10-28 10:00+07', '2026-10-28 09:58+07', '2026-10-28 10:20+07', true, true, true),\n (4, '2026-10-28 10:00+07', '2026-10-28 09:59:45+07', NULL, true, false, false);",
+      "sql": "WITH gaps AS (\n SELECT *, trim_scale(EXTRACT(EPOCH FROM (incident_at - recovered_through))) AS loss_seconds,\n           trim_scale(EXTRACT(EPOCH FROM (service_ready_at - incident_at))) AS recovery_seconds\n FROM pg_temp.lesson_recovery_cards\n)\nSELECT drill_id, loss_seconds, recovery_seconds,\n CASE WHEN chain_verified IS NOT TRUE THEN 'blocked_backup_chain'\n      WHEN old_writer_fenced IS NOT TRUE THEN 'block_cutover_unfenced'\n      WHEN recovered_through IS NULL OR service_ready_at IS NULL OR reconciled IS NOT TRUE THEN 'evidence_missing'\n      WHEN loss_seconds < 0 OR recovery_seconds < 0 THEN 'invalid_clock_scope'\n      WHEN loss_seconds > 60 OR recovery_seconds > 900 THEN 'missed_authored_targets'\n      ELSE 'within_authored_targets' END AS review\nFROM gaps ORDER BY drill_id;",
+      "columns": [
+        "drill_id",
+        "loss_seconds",
+        "recovery_seconds",
+        "review"
+      ],
+      "rows": [
+        [
+          "1",
+          "30",
+          "720",
+          "within_authored_targets"
+        ],
+        [
+          "2",
+          null,
+          null,
+          "blocked_backup_chain"
+        ],
+        [
+          "3",
+          "120",
+          "1200",
+          "missed_authored_targets"
+        ],
+        [
+          "4",
+          "15",
+          null,
+          "block_cutover_unfenced"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Gate chain dan fencing mendahului penilaian target. Kartu 1 memenuhi angka contoh dengan asumsi flags benar; tidak ada evidence restore yang dibuat SQL ini."
+    },
+    "checks": [
+      {
+        "id": "l9m02l03-check-1",
+        "question": "Apa syarat PITR selain base backup?",
+        "options": [
+          "WAL kontinu hingga target pada timeline yang sesuai, serta konfigurasi dan akses recovery.",
+          "Cukup replica yang menyalin deletion."
+        ],
+        "answer": 0,
+        "explanation": "Restore fisik bergantung pada chain yang dapat dipakai, bukan label backup.",
+        "feedback": [
+          "Benar. Chain perlu dibuktikan melalui drill terotorisasi.",
+          "Belum tepat. Replica dapat menyalin kerusakan logis."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l9m02l03-check-2",
+        "question": "Kapan clock RTO contoh berhenti?",
+        "options": [
+          "Saat proses database pertama kali menyala.",
+          "Setelah acceptance layanan, termasuk invariant dan rekonsiliasi, terpenuhi."
+        ],
+        "answer": 1,
+        "explanation": "Database hidup belum tentu aman menerima traffic.",
+        "feedback": [
+          "Belum tepat. Pemeriksaan layanan masih belum selesai.",
+          "Benar. Gunakan definisi ready yang disepakati."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi gate recovery dan hitung gap dari kartu. Susun runbook drill tanpa mengeksekusi operasi.",
+      "setup": "Tidak ada backup, restore, failover, deletion atau pemanggilan provider.",
+      "starterSql": "SELECT * FROM pg_temp.lesson_recovery_cards ORDER BY drill_id;",
+      "variants": [
+        {
+          "id": "l9m02l03-variant-1",
+          "question": "Incident 10:00, titik pulih 09:59:30, ready 10:12. Berapa loss dan recovery?",
+          "options": [
+            "720 detik kehilangan dan 30 detik recovery.",
+            "30 detik dan 720 detik, dalam target contoh jika seluruh gate benar."
+          ],
+          "answer": 1,
+          "explanation": "Loss memakai titik data; recovery memakai akhir pemulihan layanan.",
+          "feedback": [
+            "Belum tepat. Anda menukar dua clock.",
+            "Benar. Kedua metrik mempunyai endpoint berbeda."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l9m02l03-variant-2",
+          "question": "Kartu 3 memberi loss 120 dan recovery 1200, target 60/900. Apa label?",
+          "options": [
+            "missed_authored_targets; kedua batas terlewati.",
+            "within_authored_targets karena restore akhirnya selesai."
+          ],
+          "answer": 0,
+          "explanation": "Selesai akhirnya berbeda dari memenuhi target yang disepakati.",
+          "feedback": [
+            "Benar. Catat gap dan tindakan perbaikan.",
+            "Belum tepat. Target tetap perlu dibandingkan."
+          ],
+          "critical": true
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l9m02l03-edge-1",
+          "question": "Database restore tidak memiliki key, tetapi provider telah mendebit. Apa tindakan?",
+          "options": [
+            "Rekonsiliasi provider/identitas lama sebelum retry; jangan anggap kosong berarti belum pernah terjadi.",
+            "Kirim debit baru dengan key acak."
+          ],
+          "answer": 0,
+          "explanation": "PITR dapat menghapus bukti lokal tanpa menghapus efek luar.",
+          "feedback": [
+            "Benar. Recovery perlu jembatan evidence lintas boundary.",
+            "Belum tepat. Itu dapat membuat debit ganda."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l9m02l03-edge-2",
+          "question": "Target numerik tampak baik tetapi primary lama belum fenced. Bolehkah cutover?",
+          "options": [
+            "Boleh karena durasi recovery rendah.",
+            "Tidak; block_cutover_unfenced sampai satu otoritas write terjamin."
+          ],
+          "answer": 1,
+          "explanation": "Dua writer otoritatif dapat menambah kehilangan dan konflik sesudah recovery.",
+          "feedback": [
+            "Belum tepat. Angka tidak mencegah split-brain.",
+            "Benar. Gate keselamatan mendahului target angka."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Pisahkan backup chain, fencing dan acceptance layanan.",
+        "Kurangi titik data dari incident untuk loss, incident dari ready untuk recovery.",
+        "PITR tidak membatalkan efek gateway; lookup kosong perlu rekonsiliasi."
+      ],
+      "solutionSql": "WITH gaps AS (\n SELECT *, trim_scale(EXTRACT(EPOCH FROM (incident_at - recovered_through))) AS loss_seconds,\n           trim_scale(EXTRACT(EPOCH FROM (service_ready_at - incident_at))) AS recovery_seconds\n FROM pg_temp.lesson_recovery_cards\n)\nSELECT drill_id, loss_seconds, recovery_seconds,\n CASE WHEN chain_verified IS NOT TRUE THEN 'blocked_backup_chain'\n      WHEN old_writer_fenced IS NOT TRUE THEN 'block_cutover_unfenced'\n      WHEN recovered_through IS NULL OR service_ready_at IS NULL OR reconciled IS NOT TRUE THEN 'evidence_missing'\n      WHEN loss_seconds < 0 OR recovery_seconds < 0 THEN 'invalid_clock_scope'\n      WHEN loss_seconds > 60 OR recovery_seconds > 900 THEN 'missed_authored_targets'\n      ELSE 'within_authored_targets' END AS review\nFROM gaps ORDER BY drill_id;",
+      "solutionExplanation": "Reference menghitung selisih timestamp authored dan mengurutkan gate. Ia tidak menjalankan pemulihan atau menyatakan backup dapat dipakai. Evidence nyata perlu artefak chain/timeline, target dicapai, fencing, invariant, external reconciliation dan acceptance layanan.",
+      "critical": true
+    },
+    "reflection": "Tulis runbook terisolasi untuk deletion dan commit unknown: owner, stop condition, backup/WAL/timeline, titik target, fencing, clock RPO/RTO, rekonsiliasi gateway, acceptance dan cleanup."
+  }
+]

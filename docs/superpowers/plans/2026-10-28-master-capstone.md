@@ -33,9 +33,9 @@
 
 ## Task 2: L9M02 — Load and Failure Testing
 
-- [ ] Create l9-load-failure.json and English dictionary: authored concurrency/idempotency traces, correctness-first tuning, failure/restore evidence.
-- [ ] Keep the canonical 300 requests/second and 5% duplicates as a proposed target; do not run a generator, database or drill. Explain one-million-history workload as a design input.
-- [ ] Register and update counts/next draft. Source/diff plus independent read-only review, commit, push.
+- [x] Create l9-load-failure.json and English dictionary: authored concurrency/idempotency traces, correctness-first tuning, failure/restore evidence.
+- [x] Keep the canonical 300 requests/second and 5% duplicates as a proposed target; do not run a generator, database or drill. Explain one-million-history workload as a design input.
+- [x] Register and update counts/next draft. Source/diff plus independent read-only review, commit, push.
 
 ## Task 3: L9M03 — Master Defense
 
@@ -49,3 +49,5 @@
 - Continuation follows the approved canonical roadmap; no new product capability or execution workflow is introduced.
 
 - L9M01 source/diff and independent read-only review: no important findings. Reviewed constraint/ERD cardinality, expected rows and English feedback pairing. No execution evidence claimed. Commit/push outcome is recorded by Git history.
+
+- L9M02 independent source review found ambiguous merchant projection and precision loss from integer-cast recovery seconds. Fixed by projecting/ordering merchant+key and retaining numeric epoch seconds with trim_scale; added explanatory copy for 60.4/-0.4 boundaries. Source/diff review only; no execution. Commit/push outcome is recorded by Git history.

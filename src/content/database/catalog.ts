@@ -33,6 +33,7 @@ import partitioningTenancy from "./l8-partitioning-tenancy.json";
 import distributed from "./l8-distributed.json";
 import dataStores from "./l8-data-stores.json";
 import ledgerDesign from "./l9-ledger-design.json";
+import loadFailure from "./l9-load-failure.json";
 import type { AuthoredLesson, ConceptCheck } from "./types";
 import { pathHref } from "../lessons";
 export const databasePathHref = pathHref;
@@ -72,6 +73,7 @@ const authored = [
   ...distributed,
   ...dataStores,
   ...ledgerDesign,
+  ...loadFailure,
 ] as AuthoredLesson[];
 const byId = new Map(authored.map((lesson) => [lesson.id, lesson]));
 export const databaseLevels = blueprint.levels.map((level) => ({
