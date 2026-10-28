@@ -474,5 +474,13 @@
   "TRANSACTION LABS COMPLETE": "LAB TRANSAKSI SELESAI",
   "TRANSACTION PRACTICE": "PRAKTIK TRANSAKSI",
   "Transaction labs complete.": "Lab transaksi selesai.",
-  "Practice concurrency, one experiment at a time.": "Praktik concurrency melalui eksperimen bertahap."
+  "Practice concurrency, one experiment at a time.": "Praktik concurrency melalui eksperimen bertahap.",
+  "INTERACTIVE LABS": "LAB INTERAKTIF",
+  "Choose your next experiment": "Pilih eksperimen berikutnya",
+  "Finish both modes, then pass the final checkpoint. Your progress stays on this device.": "Selesaikan kedua mode, lalu lulus checkpoint terakhir. Progres Anda tersimpan di perangkat ini.",
+  "These labs use deterministic database models. No real PostgreSQL server, payments, or measured runtime metrics.": "Lab ini memakai model database deterministik. Tidak ada server PostgreSQL nyata, pembayaran nyata, atau metrik runtime yang diukur.",
+  "{0} of {1} labs complete": "{0} dari {1} lab selesai",
+  "Available sandboxes": "Sandbox yang tersedia",
+  "In progress": "Sedang dipelajari",
+  "{0} of {1} modes explored": "{0} dari {1} mode telah dijelajahi"
 }

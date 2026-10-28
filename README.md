@@ -36,6 +36,7 @@ Lihat [rencana dan evidence](docs/database-path-implementation.md), [panduan aut
 
 - Landing page dengan preview simulator yang bisa dijalankan.
 - Dashboard, satu learning path Database Engineering, progres, aktivitas, dan rekomendasi belajar.
+- Ringkasan `/sandbox` untuk memilih tiga lab, melihat mode yang telah dijelajahi serta status checkpoint lab, dan membuka lesson atau simulator. Menu Sandbox mengarah ke ringkasan ini.
 - Lesson Lost Update, Duplicate Payment Callback, dan Deadlock, masing-masing dengan contoh interleaving dan checkpoint.
 - Lab Deadlock: wait-for graph, mode urutan lock berlawanan/konsisten, pilihan transaksi korban, rollback perubahan pending, dan satu retry penuh.
 - Lab Lost Update: mode unsafe dan atomic increment, pilihan urutan penulisan serta saldo awal, run/step/reset/replay, histori, inspector, dan kuis akhir.

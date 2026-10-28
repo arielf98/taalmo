@@ -107,7 +107,7 @@ export function Header() {
           </Link>
           <Link
             className={pathname.startsWith("/sandbox") ? "active" : ""}
-            href="/sandbox/duplicate-payment"
+            href="/sandbox"
           >
             {t("Sandbox")}
           </Link>

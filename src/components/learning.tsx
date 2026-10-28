@@ -107,7 +107,7 @@ export function Dashboard() {
             <Link
               href={
                 transactionComplete || continueLab
-                  ? (readyLab?.href ?? labs[0].href)
+                  ? (readyLab?.href ?? "/sandbox")
                   : labDone
                     ? `/lessons/${next?.id ?? "duplicate-payment"}`
                     : "/lessons/duplicate-payment"

@@ -4,7 +4,7 @@ Taalmo is a single Next.js application. Route metadata stays on server entry poi
 
 ## Boundaries
 
-- **Routing:** `/`, `/dashboard`, `/learn/database-engineering`, `/lessons/[slug]`, `/challenges`, `/sandbox/duplicate-payment`, `/sandbox/lost-update`, `/sandbox/deadlock`. Unknown lessons return 404. The old database path URLs redirect to the unified Database Engineering path; the transaction alias targets its `#transaction-labs` section.
+- **Routing:** `/`, `/dashboard`, `/learn/database-engineering`, `/lessons/[slug]`, `/challenges`, `/sandbox`, `/sandbox/duplicate-payment`, `/sandbox/lost-update`, `/sandbox/deadlock`. Unknown lessons return 404. The old database path URLs redirect to the unified Database Engineering path; the transaction alias targets its `#transaction-labs` section.
 - **Content:** `src/content/lessons.ts` defines stable lesson IDs, concept text, examples, quiz options, answers, explanations, and per-lesson lab routes and a catalog of lab milestones. Transaction content and simulation copy use English source; the canonical database curriculum uses Indonesian source with authored English dictionaries. `src/content/messages/` provides English and Indonesian dictionaries; `messages.ts` handles translation and placeholder interpolation at render time.
 - **Simulation:** `src/lib/simulation/engine.ts` handles step/run/history. `payment.ts`, `lost-update.ts`, and `deadlock.ts` define scenario schedules, transitions, configuration validation, and evaluation.
 - **UI:** `Architecture` maps explicit state to React Flow nodes. `Experiment` controls execution, historical inspection, and replay. Tables display committed rows only; staged writes are visible separately in the inspector and raw state.
@@ -31,6 +31,12 @@ The public learning path has one dashboard card, one sidebar entry and one canon
 The same `taalmo.progress.v1` repository stores an optional `curriculum` extension: versioned lesson/exam records, immutable passed snapshots and a resume ID. `src/lib/curriculum.ts` derives mastery from the actual answers, required activities and canonical module prerequisites. Retakes keep earned mastery. The module/level thresholds are 80%/85% and critical questions cannot be overridden by the aggregate score. There is no calendar gating or account service.
 
 Current practice is prediction/debugging with deterministic authored inputs and graded edge cases. L9 uses hypothetical design/evidence cards; publishing the curriculum exposes the existing L9 assessment but does not establish an implemented, executed or human-reviewed capstone. No learner SQL runs in the product. The separate trusted-example checker uses a network-isolated disposable PostgreSQL container and accepts no external database URL; it was not run for L2M02–L9 under current AGENTS.md. See `database-path-authoring.md` for the content contract and `database-path-implementation.md` for actual evidence and limits.
+
+## Sandbox overview
+
+`/sandbox` renders `SandboxOverview`, joining the existing `labs` catalog to `lessons` by lessonId. Scenario copy, tags, launch URLs and mode identities remain in the existing catalog. `useProgress` supplies lab completion from completed lab IDs and exploration counts from each lab's mode list; the overview does not write progress or infer completion from visiting, lesson completion or running both modes alone. Each card links to its lesson and simulator with distinct accessible link names. The focused CSS module reuses shared cards/tokens and wraps labels/actions.
+
+Header Sandbox and the completed transaction-dashboard revisit action point to the overview. A ready unfinished lab and all scenario-specific launch links still open their existing simulator directly. No simulator, quiz, persistence or mastery behavior changed. All new UI copy follows useLocale and the existing Indonesian dictionary. This addition has source/diff review only; no tests, manual/browser checks, lint, typecheck or build were run.
 
 ## Add a lesson
 
