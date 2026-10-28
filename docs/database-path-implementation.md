@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Initial goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L9M02: 117 published / 3 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L9: 120 published / 0 draft across all 40 modules. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -362,3 +362,11 @@ Added three complete bilingual lessons in l9-load-failure.json. The load exercis
 Totals: 39 authored modules, 117 published / 3 draft lessons. Catalog/messages and existing file registries include the module; existing E2E count/first-draft expectations move to l9m03l01 without new coverage. Blueprint, prior versions, School Finance fixture and progress storage remain unchanged. L9 assessment stays gated until L9M03.
 
 Source/diff review only. No tests, audits, SQL, runtime, manual/browser checks, lint, typecheck or build. No load generator, EXPLAIN, index, backup, restore, failover, deletion, network fault or provider interaction was executed. Next: L9M03.
+
+## L9M03 — Master Defense — 28 October 2026
+
+Added three complete bilingual lessons in l9-defense.json. Threat cards teach identity/resource authorization, privilege and control-evidence boundaries. Architecture defense connects isolation/index/replication decisions to invariant coverage, representative evidence, recovery and ownership. A hypothetical dossier rubric preserves all required criteria, gates critical failures/evidence before scores and distinguishes candidate review from human judgment. Reflections request a sourced or explicitly hypothetical postmortem with owned acceptance actions.
+
+Totals: 40 authored modules, 120 published / 0 draft canonical lessons. The existing L9 level assessment is available through unchanged publication/prerequisite/mastery gates. No canonical authoring remains. Registries and English display copy include the module; the existing E2E count becomes 40/120 and its former first-draft probe now checks unknown l9m04l01, without expanded coverage. Previous IDs/versions, blueprint, fixture and learner storage remain unchanged.
+
+Source/diff review only. No tests, audits, SQL execution, runtime/manual/browser checks, lint, typecheck or build. No actual ledger API, load, benchmark, security drill, restore, migration, human defense, merge or deployment was performed. Authored curriculum completion is separate from real capstone evidence; optional future work needs separately agreed scope and execution authorization.

@@ -13,13 +13,13 @@
 
 ## Database Engineering — database curriculum
 
-The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L9M02 provide 117 published bilingual lessons; 3 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
+The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L9 provide all 120 published bilingual lessons across 40 modules; no canonical lessons remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
 
-## Recommended next milestone: L9M03 authoring
+## Canonical authoring complete; executed capstone evidence remains separate
 
-L9M02 is authored with independent expected/actual effect reconciliation, static OFFSET/keyset comparison, illustrative percentile samples and recovery evidence cards. The proposed 300 requests/second, 5% duplicate workload and one-million-history rehearsal remain design inputs. No load, benchmark, EXPLAIN, backup, failover or recovery drill was executed.
+L9M01–L9M03 cover ledger design, load/failure evidence interpretation and master defense in nine bilingual lessons. All 40 modules are authored; the existing L9 assessment is now available under normal publication/prerequisite/mastery gates. Critical checks still apply. This is completion of authored prediction learning, not proof that a learner built, tested, recovered or defended an operational payment system.
 
-Continue L9M03 — Capstone: Master Defense with threat-model reasoning, architecture defense and an evidence rubric/postmortem. Preserve the difference between completing the prediction curriculum and demonstrating an executed capstone. Follow AGENTS.md: source/diff review only; commit, push and continue.
+No next canonical authoring module remains. Future real-capstone work would need a separately agreed scope, isolated environment, authorization to execute checks, durable artifacts and human review. Current evidence after L2M01 remains source/diff review only. No load, EXPLAIN, security review execution, restore, migration, merge or deployment was performed. Later product ideas below are optional and have not been started.
 
 ## Later learning improvements
 

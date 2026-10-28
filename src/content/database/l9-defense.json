@@ -1,0 +1,561 @@
+[
+  {
+    "id": "l9m03l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "Defense capstone",
+      "Threat model ledger"
+    ],
+    "hook": "Endpoint memakai parameter SQL dan signature callback valid, tetapi akun merchant lain masih dapat dibaca lewat ID yang ditebak. Lapisan mana yang hilang dari threat model ledger?",
+    "objectives": [
+      "Petakan aset, aktor, entry point dan trust boundary ledger.",
+      "Bedakan validasi, autentikasi, otorisasi, privilege dan audit.",
+      "Rencanakan bukti kontrol serta rotasi secret tanpa menyimpan rahasia di log."
+    ],
+    "sections": [
+      {
+        "title": "Mulai dari aset dan kemampuan aktor",
+        "paragraphs": [
+          "Aset ledger meliputi nilai saldo, identitas merchant, intent pembayaran, key idempotency, riwayat entry, credential provider serta backup. Petakan aktor pelanggan, operator, provider callback, worker dan administrator. Untuk setiap entry point, tanyakan siapa yang bisa mengirim input, membaca output atau menulis state. Data melintasi browser ke API, provider ke verifier, API ke database, outbox ke broker serta backup ke storage; setiap perpindahan membutuhkan asumsi kepercayaan yang dinyatakan.",
+          "Threat adalah kemampuan merusak aset, misalnya memalsukan callback, mengganti merchant_id, membaca transfer orang lain, mengulang intent dengan payload berbeda atau menghapus audit. Bedakan likelihood, dampak dan residual risk dari daftar mitigasi. Kontrol yang ditulis di dokumen belum tentu terpasang atau efektif. Hubungkan satu abuse case ke enforcement point, owner serta artefak yang dapat menunjukkan allow/deny sesuai resource; jangan hanya memberi label secure pada diagram arsitektur."
+        ]
+      },
+      {
+        "title": "Lapisan kontrol mempunyai pekerjaan berbeda",
+        "paragraphs": [
+          "Validasi membatasi tipe, ukuran, amount dan format key. Parameter SQL menjaga nilai tidak menjadi struktur query, tetapi identifier dinamis perlu allowlist dan hak akses masih harus diperiksa. Autentikasi menetapkan principal; signature provider tidak otomatis memberi principal hak memilih setiap merchant atau akun. Otorisasi harus memeriksa operasi dan resource setiap request, termasuk duplicate replay serta lookup unknown outcome. Merchant scope berasal dari identitas terverifikasi, bukan field client yang kebetulan cocok dengan FK.",
+          "Runtime role sebaiknya hanya dapat memakai jalur writer yang menjaga invariant dan read yang diotorisasi, dengan role migration terpisah. FK composite menjaga referensi lintas merchant tetapi tidak mencegah SELECT lintas merchant. RLS dapat menjadi lapisan tambahan bila role, policy dan konteks koneksi dirancang benar; superuser serta BYPASSRLS melewatinya, owner biasanya juga. Pool harus mengatur dan membersihkan konteks dengan aman. Contoh halaman ini tidak membuat role atau policy dan tidak membuktikan isolation tenant."
+        ]
+      },
+      {
+        "title": "Audit, secret dan evidence",
+        "paragraphs": [
+          "Catat actor terverifikasi, merchant, correlation ID, business key sesuai kebijakan, keputusan, alasan dan waktu dengan akses serta retensi terbatas. Jangan mencatat secret, token, signature credential atau payload sensitif penuh untuk memudahkan debugging. Redaksi dan format terstruktur juga mencegah input newline menyamar sebagai event log baru. Audit posting pada schema sebelumnya hanya satu marker; audit keamanan perlu akses terpisah, perlindungan integritas, monitoring dan prosedur saat pencatatan gagal.",
+          "Rotasi secret perlu inventaris consumer, versi key, distribusi aman, masa transisi yang dibatasi, pencabutan key lama dan rencana compromise. Periksa retry in-flight agar perubahan key tidak membuat callback sah hilang atau key lama berlaku selamanya. Rate limit, timeout dan pembatasan resource mengurangi abuse tetapi tidak mengganti idempotency atau authorization. Kartu TEMP berikut hanya merangkum gate authored; flag true bukan hasil penetration test, audit security atau bukti kontrol sudah diterapkan pada produk."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Kartu threat-review authored; tidak ada credential, role, policy atau endpoint yang diuji.",
+      "setupSql": "CREATE TEMP TABLE lesson_threat_reviews (\n case_id INTEGER PRIMARY KEY, threat TEXT NOT NULL,\n principal_verified BOOLEAN, resource_authorized BOOLEAN,\n least_privilege BOOLEAN, control_evidence BOOLEAN\n);\nINSERT INTO pg_temp.lesson_threat_reviews VALUES\n (1, 'forged_callback', false, NULL, true, NULL),\n (2, 'cross_merchant_history', true, false, true, NULL),\n (3, 'writer_can_delete_ledger', true, true, false, NULL),\n (4, 'rotation_and_redaction', true, true, true, NULL),\n (5, 'scoped_control_review', true, true, true, true);",
+      "sql": "SELECT case_id, threat,\n CASE WHEN principal_verified IS NOT TRUE THEN 'deny_unverified_principal'\n      WHEN resource_authorized IS NOT TRUE THEN 'deny_resource_access'\n      WHEN least_privilege IS NOT TRUE THEN 'reduce_privileges'\n      WHEN control_evidence IS NOT TRUE THEN 'collect_control_evidence'\n      ELSE 'inspect_scoped_evidence' END AS next_action\nFROM pg_temp.lesson_threat_reviews ORDER BY case_id;",
+      "columns": [
+        "case_id",
+        "threat",
+        "next_action"
+      ],
+      "rows": [
+        [
+          "1",
+          "forged_callback",
+          "deny_unverified_principal"
+        ],
+        [
+          "2",
+          "cross_merchant_history",
+          "deny_resource_access"
+        ],
+        [
+          "3",
+          "writer_can_delete_ledger",
+          "reduce_privileges"
+        ],
+        [
+          "4",
+          "rotation_and_redaction",
+          "collect_control_evidence"
+        ],
+        [
+          "5",
+          "scoped_control_review",
+          "inspect_scoped_evidence"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Classifier mendahulukan identity dan resource access, lalu privilege dan evidence. Kartu 5 perlu dibaca artefak/scope-nya dan bukan sertifikat aman."
+    },
+    "checks": [
+      {
+        "id": "l9m03l01-check-1",
+        "question": "Signature valid dan FK merchant cocok. Apakah read transfer otomatis diotorisasi?",
+        "options": [
+          "Ya; authentication dan referensi mengganti authorization.",
+          "Tidak; periksa principal, operasi dan kepemilikan resource pada read/replay/lookup."
+        ],
+        "answer": 1,
+        "explanation": "Identity dan referential integrity tidak menentukan hak akses resource.",
+        "feedback": [
+          "Belum tepat. Ini celah akses lintas merchant.",
+          "Benar. Authorization mempunyai enforcement point sendiri."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l9m03l01-check-2",
+        "question": "Apa batas RLS ketika runtime memakai superuser?",
+        "options": [
+          "Superuser melewati RLS; gunakan desain role least privilege dan tinjau policy/konteks.",
+          "RLS tetap selalu memfilter superuser."
+        ],
+        "answer": 0,
+        "explanation": "Kontrol hanya efektif pada privilege dan jalur akses yang sesuai.",
+        "feedback": [
+          "Benar. ENABLE RLS saja belum membuktikan isolation.",
+          "Belum tepat. Bypass role mengubah jaminannya."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi gate threat-review dan tulis threat model ledger dengan mitigation, owner, residual risk dan evidence yang diperlukan.",
+      "setup": "Aktivitas berupa prediksi/desain; tidak ada pemindaian atau security drill dijalankan.",
+      "starterSql": "SELECT * FROM pg_temp.lesson_threat_reviews ORDER BY case_id;",
+      "variants": [
+        {
+          "id": "l9m03l01-variant-1",
+          "question": "case 2 principal valid tetapi resource_authorized=false. Apa gate?",
+          "options": [
+            "deny_resource_access sebelum mengembalikan riwayat.",
+            "inspect_scoped_evidence karena principal valid."
+          ],
+          "answer": 0,
+          "explanation": "Principal valid masih dapat meminta resource yang tidak dimilikinya.",
+          "feedback": [
+            "Benar. Hak akses harus sesuai resource.",
+            "Belum tepat. Identity bukan grant akses."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l9m03l01-variant-2",
+          "question": "case 4 kontrol diklaim ada tetapi control_evidence=NULL. Apa tindak lanjut?",
+          "options": [
+            "Ubah NULL ke true karena checklist selesai.",
+            "collect_control_evidence dengan scope dan artefak yang ditinjau."
+          ],
+          "answer": 1,
+          "explanation": "Kelengkapan dokumen tidak memverifikasi efektivitas kontrol.",
+          "feedback": [
+            "Belum tepat. Itu menutupi unknown.",
+            "Benar. Buat gap evidence terlihat."
+          ],
+          "critical": true
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l9m03l01-edge-1",
+          "question": "Bolehkah token rahasia dicatat ke audit untuk debugging?",
+          "options": [
+            "Boleh karena nama tabelnya audit.",
+            "Tidak; gunakan correlation dan metadata teredaksi dengan akses/retensi terbatas."
+          ],
+          "answer": 1,
+          "explanation": "Audit dapat menjadi sumber kebocoran bila payload sensitif disalin mentah.",
+          "feedback": [
+            "Belum tepat. Nama tabel tidak melindungi rahasia.",
+            "Benar. Pertahankan kemampuan investigasi tanpa membocorkan secret."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l9m03l01-edge-2",
+          "question": "Key lama dibiarkan valid selamanya setelah rotation. Apa gap-nya?",
+          "options": [
+            "Tidak ada pencabutan/batas transisi; rencanakan revocation dan in-flight retry.",
+            "Tidak ada; menambah key baru otomatis menonaktifkan yang lama."
+          ],
+          "answer": 0,
+          "explanation": "Rotasi mencakup lifecycle key, bukan sekadar menambah secret.",
+          "feedback": [
+            "Benar. Nyatakan batas dan owner compromise response.",
+            "Belum tepat. Pencabutan perlu mekanisme eksplisit."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Mulai dari siapa dapat mempengaruhi aset pada setiap boundary.",
+        "Identity, hak resource dan privilege database adalah gate berbeda.",
+        "Flag authored bukan evidence security; jangan simpan secret untuk membuktikannya."
+      ],
+      "solutionSql": "SELECT case_id, threat,\n CASE WHEN principal_verified IS NOT TRUE THEN 'deny_unverified_principal'\n      WHEN resource_authorized IS NOT TRUE THEN 'deny_resource_access'\n      WHEN least_privilege IS NOT TRUE THEN 'reduce_privileges'\n      WHEN control_evidence IS NOT TRUE THEN 'collect_control_evidence'\n      ELSE 'inspect_scoped_evidence' END AS next_action\nFROM pg_temp.lesson_threat_reviews ORDER BY case_id;",
+      "solutionExplanation": "Reference mengklasifikasikan kartu authored tanpa memasang kontrol. Threat model nyata harus menghubungkan abuse case ke implementasi, privilege, artefak review dan negative evidence terotorisasi; player hanya menilai prediksi dan menyimpan refleksi.",
+      "critical": true
+    },
+    "reflection": "Petakan lima aset/aktor/boundary, satu abuse case tiap boundary, enforcement point, owner, evidence allow/deny, redaksi log, rotasi key dan residual risk. Tandai kontrol yang baru proposed."
+  },
+  {
+    "id": "l9m03l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "Defense capstone",
+      "Pembelaan arsitektur"
+    ],
+    "hook": "Reviewer menantang pilihan isolation, index dan replication: mengapa satu PostgreSQL cukup, dan kapan asumsi itu batal? Bagaimana menjawab memakai kontrak dan evidence tanpa mempertahankan teknologi sebagai identitas diri?",
+    "objectives": [
+      "Hubungkan setiap keputusan ke requirement, alternatif dan konsekuensi.",
+      "Pertahankan argumen integrity, query dan recovery pada scope evidence yang sama.",
+      "Nyatakan asumsi, owner, exit dan trigger revisi keputusan."
+    ],
+    "sections": [
+      {
+        "title": "Defense adalah argumen yang dapat dibantah",
+        "paragraphs": [
+          "Mulai presentasi dengan contract ledger: unit rupiah, merchant scope, key intent, aturan saldo dan outcome unknown. Tunjukkan satu perjalanan transfer dari trust boundary ke commit dan outbox, lalu tunjukkan lokasi setiap invariant dijaga. Bedakan DDL yang benar-benar ada, protokol writer yang dirancang dan kontrol yang belum diterapkan. Klaim yang belum memiliki artefak diberi status proposed atau unverified; ketidakpastian yang dinyatakan membantu reviewer menemukan pekerjaan berikutnya.",
+          "Untuk setiap keputusan, catat context, paling sedikit dua alternatif yang masuk akal, kriteria, pilihan, konsekuensi dan evidence. Alternatif harus memenuhi hard invariant sebelum biaya dan performa dibandingkan. Jangan menyamarkan correctness sebagai skor preferensi yang boleh dikalahkan angka latency. Seorang reviewer boleh menantang assumption distribusi akun panas, retention callback, ukuran riwayat atau kemampuan operator; jawaban yang baik menyatakan hasil apa yang akan membuat keputusan berubah."
+        ]
+      },
+      {
+        "title": "Defend isolation dan index",
+        "paragraphs": [
+          "READ COMMITTED dengan lock akun terurut dan guard saldo dapat menjadi pilihan untuk model transfer ini hanya bila semua writer mengikuti protokol yang sama. Jelaskan siapa mengambil lock, kapan saldo otoritatif dibaca, kapan lock dilepas dan bagaimana retry bekerja. Serializable dapat menangkap kelas anomaly lebih luas tetapi memerlukan penanganan abort dan retry seluruh transaksi; ia tidak mengganti validasi intent, authorization atau idempotency efek luar. Pilih berdasarkan invariant dan jalur write yang benar-benar dicakup.",
+          "Untuk riwayat, jelaskan index kandidat merchant_id, posted_at dan transfer_id terhadap filter serta ORDER BY. Bawa kesetaraan hasil, plan before/after, statistik, repeated-run latency serta biaya insert dan storage. Tunjukkan juga query yang tidak dilayani index itu agar batasnya jelas. Satu plan pada data uniform kecil tidak membuktikan perilaku akun panas atau satu juta riwayat. Bila belum diukur, sampaikan hipotesis index dan rencana evidence, bukan angka performa karangan."
+        ]
+      },
+      {
+        "title": "Defend reliability dan biaya operasi",
+        "paragraphs": [
+          "Replication dapat mendukung availability atau read scale, tetapi replica lag tidak boleh menjadi otoritas untuk debit atau memastikan key tidak ada. Jelaskan acknowledgment yang dipilih, failure assumptions, fencing, failover dan titik data yang masih berisiko hilang. Backup/PITR menambah kemampuan recovery yang berbeda; sebuah replica dapat menyalin deletion. Sharding menambah routing, ownership, recovery per shard dan kemungkinan transaksi lintas shard. Tanpa workload dan kebutuhan yang menuntutnya, tambahan mekanisme belum menjadi keuntungan terbukti.",
+          "Sertakan owner on-call, dashboard, alert, batas resource, retention key, secret rotation, biaya storage dan prosedur upgrade. Tentukan trigger revisit seperti target latency terlewati pada workload relevan atau waktu restore melampaui budget, beserta migration/exit yang menjaga intent dan history. Kartu SQL hanya mengurutkan gap argumen authored. ready_for_defense_review berarti kandidat pembahasan pada scope tersebut; tidak memberikan izin deploy, membuktikan implementasi atau menilai kualitas presentasi refleksi secara otomatis."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Kartu proposal authored dalam TEMP; runtime_evidence bukan hasil pelaksanaan sesi ini.",
+      "setupSql": "CREATE TEMP TABLE lesson_defense_options (\n option_id INTEGER PRIMARY KEY, proposal TEXT NOT NULL,\n invariants_preserved BOOLEAN, workload_comparable BOOLEAN,\n recovery_contract BOOLEAN, operational_owner BOOLEAN, runtime_evidence BOOLEAN\n);\nINSERT INTO pg_temp.lesson_defense_options VALUES\n (1, 'single_postgres_account_locks', true, true, true, true, NULL),\n (2, 'replica_balance_authority', false, true, false, true, true),\n (3, 'shards_for_tiny_uniform_sample', true, false, true, true, true),\n (4, 'scoped_review_dossier', true, true, true, true, true);",
+      "sql": "SELECT option_id, proposal,\n CASE WHEN invariants_preserved IS NOT TRUE THEN 'reject_integrity_gap'\n      WHEN workload_comparable IS NOT TRUE THEN 'revisit_workload_scope'\n      WHEN recovery_contract IS NOT TRUE THEN 'define_recovery_contract'\n      WHEN operational_owner IS NOT TRUE THEN 'assign_operational_owner'\n      WHEN runtime_evidence IS NOT TRUE THEN 'collect_runtime_evidence'\n      ELSE 'ready_for_defense_review' END AS next_action\nFROM pg_temp.lesson_defense_options ORDER BY option_id;",
+      "columns": [
+        "option_id",
+        "proposal",
+        "next_action"
+      ],
+      "rows": [
+        [
+          "1",
+          "single_postgres_account_locks",
+          "collect_runtime_evidence"
+        ],
+        [
+          "2",
+          "replica_balance_authority",
+          "reject_integrity_gap"
+        ],
+        [
+          "3",
+          "shards_for_tiny_uniform_sample",
+          "revisit_workload_scope"
+        ],
+        [
+          "4",
+          "scoped_review_dossier",
+          "ready_for_defense_review"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Hard integrity diperiksa dahulu. Evidence dari workload tidak sebanding tidak cukup; semua flag true hanya membuka review scoped atas artefak yang masih perlu dibaca."
+    },
+    "checks": [
+      {
+        "id": "l9m03l02-check-1",
+        "question": "Kandidat replica balance cepat tetapi tidak menjaga guard debit. Bagaimana membandingkannya?",
+        "options": [
+          "Tolak gap invariant sebelum weighted performance score.",
+          "Latency rendah boleh menutup debit ganda."
+        ],
+        "answer": 0,
+        "explanation": "Hard requirement adalah gate, bukan preferensi yang dapat dirata-rata.",
+        "feedback": [
+          "Benar. Ubah desain atau kontrak secara eksplisit, bukan sembunyikan gap.",
+          "Belum tepat. Pelanggaran integritas tetap pelanggaran."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l9m03l02-check-2",
+        "question": "Apa argumen lengkap untuk pilihan READ COMMITTED plus lock?",
+        "options": [
+          "Cukup menyebut FOR UPDATE tanpa meninjau writer lain.",
+          "Seluruh jalur writer, urutan lock, baca saldo otoritatif dan bounded retry dijelaskan serta evidence scoped disediakan."
+        ],
+        "answer": 1,
+        "explanation": "Jaminan protokol bergantung pada semua jalur yang dapat mengubah state.",
+        "feedback": [
+          "Belum tepat. Satu lock tidak mengendalikan writer yang melewatinya.",
+          "Benar. Nyatakan assumption dan batas bukti juga."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi readiness proposal lalu susun defense isolation, index dan replication dengan alternatif dan evidence gap.",
+      "setup": "Tidak ada presentasi dinilai manusia atau benchmark baru; refleksi disimpan lokal.",
+      "starterSql": "SELECT * FROM pg_temp.lesson_defense_options ORDER BY option_id;",
+      "variants": [
+        {
+          "id": "l9m03l02-variant-1",
+          "question": "Opsi 1 mempunyai protokol tetapi runtime_evidence=NULL. Apa tindak lanjut?",
+          "options": [
+            "Nyatakan seluruh concurrency terbukti.",
+            "collect_runtime_evidence; pertahankan desain sebagai proposal."
+          ],
+          "answer": 1,
+          "explanation": "Penjelasan protokol belum menjadi evidence pelaksanaannya.",
+          "feedback": [
+            "Belum tepat. Tidak ada run di kartu ini.",
+            "Benar. Nyatakan eksperimen yang diperlukan."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l9m03l02-variant-2",
+          "question": "Opsi shards memakai evidence tiny uniform sample untuk workload hot merchant. Apa masalahnya?",
+          "options": [
+            "revisit_workload_scope; parameter/skew/resource harus relevan.",
+            "Nama distributed menjamin sample dapat digeneralisasi."
+          ],
+          "answer": 0,
+          "explanation": "Evidence dibatasi workload serta environment yang diukur.",
+          "feedback": [
+            "Benar. Jangan transfer klaim kapasitas tanpa dasar.",
+            "Belum tepat. Nama teknologi bukan evidence."
+          ],
+          "critical": true
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l9m03l02-edge-1",
+          "question": "Retention key diubah lebih singkat dari replay horizon provider. Apa yang harus dipertahankan di defense?",
+          "options": [
+            "Risiko efek ulang, sumber identitas durable dan migration/retention contract.",
+            "Cukup menambah CPU agar callback cepat."
+          ],
+          "answer": 0,
+          "explanation": "Riwayat dedup adalah bagian kontrak correctness dan recovery.",
+          "feedback": [
+            "Benar. Nyatakan horizon, owner dan evidence replay.",
+            "Belum tepat. CPU tidak mengganti identitas yang hilang."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l9m03l02-edge-2",
+          "question": "Requirement berubah sesudah ADR disetujui. Apakah mempertahankan keputusan lama wajib?",
+          "options": [
+            "Ya; defense harus menang tanpa perubahan.",
+            "Tidak; tulis ADR pengganti dengan evidence, konsekuensi, exit dan linkage history."
+          ],
+          "answer": 1,
+          "explanation": "Defense menguji kecocokan keputusan dengan context, bukan loyalitas teknologi.",
+          "feedback": [
+            "Belum tepat. Context yang berubah dapat membatalkan assumption.",
+            "Benar. Keputusan dapat berubah dengan alasan yang tercatat."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Tunjukkan lokasi invariant dijaga untuk setiap jalur write.",
+        "Bandingkan alternatif yang memenuhi hard contract lebih dahulu.",
+        "Setiap klaim butuh scope, artefak, owner dan trigger revisit."
+      ],
+      "solutionSql": "SELECT option_id, proposal,\n CASE WHEN invariants_preserved IS NOT TRUE THEN 'reject_integrity_gap'\n      WHEN workload_comparable IS NOT TRUE THEN 'revisit_workload_scope'\n      WHEN recovery_contract IS NOT TRUE THEN 'define_recovery_contract'\n      WHEN operational_owner IS NOT TRUE THEN 'assign_operational_owner'\n      WHEN runtime_evidence IS NOT TRUE THEN 'collect_runtime_evidence'\n      ELSE 'ready_for_defense_review' END AS next_action\nFROM pg_temp.lesson_defense_options ORDER BY option_id;",
+      "solutionExplanation": "Reference memeriksa kelengkapan argumen dari flag authored. Ia tidak mengukur index/isolation/replication, menilai presentasi atau memberikan approval production. Defense nyata menautkan setiap klaim ke artefak dan menyatakan batas kesimpulan.",
+      "critical": true
+    },
+    "reflection": "Tulis tiga keputusan tentang isolation, index dan replication: requirement, dua alternatif, invariant, evidence yang tersedia/hilang, konsekuensi biaya/operasi, owner dan kondisi yang membuat Anda mengganti keputusan."
+  },
+  {
+    "id": "l9m03l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "Defense capstone",
+      "Rubrik evidence"
+    ],
+    "hook": "Dossier memperoleh skor 99, tetapi satu acceptance case menunjukkan debit ganda. Sementara itu semua quiz player sudah lulus. Apa yang boleh dinyatakan selesai, dan apa yang masih membutuhkan bukti nyata?",
+    "objectives": [
+      "Terapkan gate invariant kritis sebelum skor agregat rubrik.",
+      "Bedakan prediksi authored, evidence executed dan penilaian manusia.",
+      "Susun postmortem berbasis timeline, dampak, sebab dan tindakan yang dapat diverifikasi."
+    ],
+    "sections": [
+      {
+        "title": "Dossier menyatukan klaim dan artefak",
+        "paragraphs": [
+          "Paket capstone nyata menghubungkan requirement dan invariant ke schema/migration, kode writer/API, automated checks, trace interleaving, metrics beban, plan before/after, restore drill, threat review, ADR dan runbook. Untuk setiap artefak, simpan versi kode/schema, konfigurasi, dataset/run ID, waktu, oracle, outcome serta batas scope. Tautan file tanpa konteks tidak menjelaskan apakah evidence cocok dengan versi sistem yang sedang dipertahankan. Assertion yang tidak pernah dijalankan adalah rencana, bukan hasil pengujian.",
+          "Pisahkan tiga status: authored memberi skenario dan expected outcome; executed mencatat pelaksanaan pada environment tertentu; reviewed menyatakan seseorang memeriksa mutu serta kesesuaian artefak. Ketiganya tidak saling mengganti. Boolean passed dalam fixture tetap input authored walaupun kolom evidence_kind bertuliskan executed. Label itu mewakili dossier hipotetis untuk belajar rubrik; sesi dan website ini tidak menghasilkan hasil load, recovery atau security yang sebenarnya."
+        ]
+      },
+      {
+        "title": "Critical gate mendahului nilai rata-rata",
+        "paragraphs": [
+          "Rubrik contoh memberi correctness 40 poin, performance 20, recovery 20 dan security 20. Correctness, recovery dan security memiliki gate kritis; satu kegagalan kritis menahan candidate meskipun jumlah poin tinggi. Evidence yang belum ada, belum executed, outcome unknown atau scope tidak cocok juga menahan review. Skor paling sedikit 85 hanya diperiksa setelah gate tersebut. Ini rubrik dossier contoh, berbeda dari aturan checkpoint modul 80 persen dan ujian level 85 persen yang sudah ada.",
+          "SQL mulai dari seluruh submission dikalikan daftar criterion canonical lalu LEFT JOIN evidence. Dengan demikian criterion security yang tidak dikirim tetap terlihat, bukan lenyap dari denominator. Nilai yang melampaui max_points diberi invalid_rubric_score, bukan dianggap prestasi tambahan. Prediksi-only memperoleh angka 100 tetapi incomplete_executed_evidence; high-score failure bernilai 99 tetapi blocked. Candidate dengan nilai 98 hanya siap dipresentasikan ke reviewer manusia, bukan otomatis production-ready atau tersertifikasi."
+        ]
+      },
+      {
+        "title": "Postmortem membuat pembelajaran dapat ditindaklanjuti",
+        "paragraphs": [
+          "Tuliskan dampak bisnis dan rentang waktu, lalu timeline berisi fakta teramati, hipotesis dan keputusan dengan sumbernya. Contoh debit ganda perlu menjelaskan identitas request, commit, retry dan perubahan saldo tanpa membocorkan data sensitif. Jelaskan mengapa guard serta deteksi sebelumnya tidak cukup, bukan menyalahkan orang yang kebetulan menjalankan prosedur. Pisahkan pemicu dari kondisi sistem yang memungkinkan kerusakan. Bila belum ada incident/drill, tulis skenario hipotetis secara eksplisit; jangan membuat log seolah nyata.",
+          "Setiap action item membutuhkan owner, prioritas, due date yang disepakati, acceptance evidence dan kondisi penutupan. Kaitkan perbaikan ke invariant yang dilanggar, monitoring yang mendeteksi lebih awal atau runbook yang mempercepat recovery. Catat residual risk dan follow-up yang belum selesai. Menyelesaikan seluruh 120 lesson memberi pembelajaran prediksi lokal melalui mastery gate yang ada; refleksi hanya tersimpan. Capstone yang dibangun, diuji, dipulihkan dan dipertahankan secara nyata masih memerlukan environment, otorisasi dan penilaian terpisah."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Rubrik dan dossier hipotetis TEMP; executed adalah nilai input authored, bukan bukti sesi ini.",
+      "setupSql": "CREATE TEMP TABLE lesson_rubric_criteria (\n criterion TEXT PRIMARY KEY, max_points INTEGER NOT NULL CHECK (max_points > 0), critical BOOLEAN NOT NULL\n);\nCREATE TEMP TABLE lesson_submissions (submission_id INTEGER PRIMARY KEY, label TEXT NOT NULL);\nCREATE TEMP TABLE lesson_dossier_evidence (\n submission_id INTEGER REFERENCES pg_temp.lesson_submissions,\n criterion TEXT REFERENCES pg_temp.lesson_rubric_criteria,\n points INTEGER NOT NULL CHECK (points >= 0), passed BOOLEAN,\n evidence_kind TEXT NOT NULL CHECK (evidence_kind IN ('authored', 'executed')),\n scope_matches BOOLEAN, PRIMARY KEY (submission_id, criterion)\n);\nINSERT INTO pg_temp.lesson_rubric_criteria VALUES\n ('correctness', 40, true), ('performance', 20, false),\n ('recovery', 20, true), ('security', 20, true);\nINSERT INTO pg_temp.lesson_submissions VALUES\n (1, 'prediction_only'), (2, 'high_score_integrity_failure'),\n (3, 'scoped_dossier_candidate'), (4, 'missing_security_artifact');\nINSERT INTO pg_temp.lesson_dossier_evidence VALUES\n (1, 'correctness', 40, true, 'authored', true),\n (1, 'performance', 20, true, 'authored', true),\n (1, 'recovery', 20, true, 'authored', true),\n (1, 'security', 20, true, 'authored', true),\n (2, 'correctness', 39, false, 'executed', true),\n (2, 'performance', 20, true, 'executed', true),\n (2, 'recovery', 20, true, 'executed', true),\n (2, 'security', 20, true, 'executed', true),\n (3, 'correctness', 40, true, 'executed', true),\n (3, 'performance', 18, true, 'executed', true),\n (3, 'recovery', 20, true, 'executed', true),\n (3, 'security', 20, true, 'executed', true),\n (4, 'correctness', 40, true, 'executed', true),\n (4, 'performance', 20, true, 'executed', true),\n (4, 'recovery', 20, true, 'executed', true);",
+      "sql": "WITH review AS (\n SELECT s.submission_id, s.label,\n        SUM(COALESCE(e.points, 0)) * 100 / SUM(c.max_points) AS score_percent,\n        bool_or(e.points > c.max_points) AS invalid_score,\n        bool_or(c.critical AND e.passed IS FALSE) AS critical_failure,\n        bool_or(e.criterion IS NULL OR e.passed IS NOT TRUE\n                OR e.evidence_kind IS DISTINCT FROM 'executed'\n                OR e.scope_matches IS NOT TRUE) AS evidence_gap\n FROM pg_temp.lesson_submissions s\n CROSS JOIN pg_temp.lesson_rubric_criteria c\n LEFT JOIN pg_temp.lesson_dossier_evidence e\n   ON e.submission_id = s.submission_id AND e.criterion = c.criterion\n GROUP BY s.submission_id, s.label\n)\nSELECT submission_id, label, score_percent,\n CASE WHEN invalid_score THEN 'invalid_rubric_score'\n      WHEN critical_failure THEN 'blocked_critical_failure'\n      WHEN evidence_gap THEN 'incomplete_executed_evidence'\n      WHEN score_percent < 85 THEN 'revise_dossier'\n      ELSE 'candidate_for_human_defense' END AS review\nFROM review ORDER BY submission_id;",
+      "columns": [
+        "submission_id",
+        "label",
+        "score_percent",
+        "review"
+      ],
+      "rows": [
+        [
+          "1",
+          "prediction_only",
+          "100",
+          "incomplete_executed_evidence"
+        ],
+        [
+          "2",
+          "high_score_integrity_failure",
+          "99",
+          "blocked_critical_failure"
+        ],
+        [
+          "3",
+          "scoped_dossier_candidate",
+          "98",
+          "candidate_for_human_defense"
+        ],
+        [
+          "4",
+          "missing_security_artifact",
+          "80",
+          "incomplete_executed_evidence"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Criterion yang hilang tetap masuk denominator 100 poin. Semua status dievaluasi dari input contoh; candidate_for_human_defense bukan keputusan reviewer atau izin deployment."
+    },
+    "checks": [
+      {
+        "id": "l9m03l03-check-1",
+        "question": "Skor 99 tetapi correctness kritis failed. Bagaimana keputusan rubrik?",
+        "options": [
+          "blocked_critical_failure; nilai tinggi tidak menutup pelanggaran invariant.",
+          "Lulus karena melewati 85."
+        ],
+        "answer": 0,
+        "explanation": "Gate kritis dievaluasi sebelum threshold score.",
+        "feedback": [
+          "Benar. Investigasi dan evidence ulang diperlukan.",
+          "Belum tepat. Threshold hanya berlaku sesudah gate."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l9m03l03-check-2",
+        "question": "Seluruh lesson dan ujian lokal selesai. Apakah capstone nyata sudah terbukti?",
+        "options": [
+          "Ya; quiz mengganti seluruh load dan restore drill.",
+          "Belum; player menilai prediksi, sementara build/run/drill dan defense nyata perlu evidence terpisah."
+        ],
+        "answer": 1,
+        "explanation": "Formative mastery tidak identik dengan kemampuan operasional terverifikasi.",
+        "feedback": [
+          "Belum tepat. Tidak ada drill yang dijalankan player.",
+          "Benar. Nyatakan jenis completion secara tepat."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi keputusan empat dossier, lalu susun indeks artefak dan postmortem hipotetis yang jujur terhadap gap evidence.",
+      "setup": "Label executed dan skor hanya fixture. Tidak ada penilaian manusia, sertifikasi produksi atau incident nyata yang dibuat.",
+      "starterSql": "SELECT * FROM pg_temp.lesson_dossier_evidence ORDER BY submission_id, criterion;",
+      "variants": [
+        {
+          "id": "l9m03l03-variant-1",
+          "question": "Submission 1 mendapat 100 tetapi seluruh evidence_kind=authored. Apa label?",
+          "options": [
+            "candidate_for_human_defense karena skor sempurna cukup.",
+            "incomplete_executed_evidence; angka bukan pelaksanaan."
+          ],
+          "answer": 1,
+          "explanation": "Rubrik meminta provenance pelaksanaan dan scope sebelum skor.",
+          "feedback": [
+            "Belum tepat. Gate evidence belum terpenuhi.",
+            "Benar. Pertahankan gap sampai artefak nyata tersedia."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l9m03l03-variant-2",
+          "question": "Submission 3 bernilai 98 dan gate input terpenuhi. Apa yang boleh disimpulkan?",
+          "options": [
+            "candidate_for_human_defense pada dossier hipotetis; reviewer masih harus memeriksa artefak.",
+            "Deployment disetujui otomatis."
+          ],
+          "answer": 0,
+          "explanation": "Kelengkapan rubrik bukan keputusan mutu atau operasi manusia.",
+          "feedback": [
+            "Benar. Scope kandidat tetap terbatas.",
+            "Belum tepat. SQL tidak memberi izin deployment."
+          ],
+          "critical": true
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l9m03l03-edge-1",
+          "question": "Submission tidak mengirim criterion security. Bagaimana mencegahnya hilang dari review?",
+          "options": [
+            "CROSS JOIN criterion canonical lalu LEFT JOIN evidence agar missing menjadi gap.",
+            "Hitung hanya criterion yang dikirim supaya denominator mengecil."
+          ],
+          "answer": 0,
+          "explanation": "Coverage rubrik harus berasal dari requirement, bukan hanya input yang tersedia.",
+          "feedback": [
+            "Benar. Submission 4 tetap mempunyai denominator 100.",
+            "Belum tepat. Itu memberi keuntungan pada bukti yang hilang."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l9m03l03-edge-2",
+          "question": "Postmortem tidak memiliki log incident nyata. Bagaimana menulisnya?",
+          "options": [
+            "Buat timestamp dan log lalu klaim teramati.",
+            "Label hipotetis, bedakan fakta/asumsi dan rencanakan evidence serta action owner."
+          ],
+          "answer": 1,
+          "explanation": "Pembelajaran boleh memakai skenario, tetapi provenance tidak boleh direkayasa.",
+          "feedback": [
+            "Belum tepat. Log karangan bukan evidence.",
+            "Benar. Jujur terhadap gap memudahkan follow-up."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Gate integrity dan evidence lebih dahulu daripada weighted score.",
+        "Mulai coverage dari seluruh criterion wajib, termasuk yang tidak dikirim.",
+        "Candidate, human review dan production approval adalah keputusan berbeda."
+      ],
+      "solutionSql": "WITH review AS (\n SELECT s.submission_id, s.label,\n        SUM(COALESCE(e.points, 0)) * 100 / SUM(c.max_points) AS score_percent,\n        bool_or(e.points > c.max_points) AS invalid_score,\n        bool_or(c.critical AND e.passed IS FALSE) AS critical_failure,\n        bool_or(e.criterion IS NULL OR e.passed IS NOT TRUE\n                OR e.evidence_kind IS DISTINCT FROM 'executed'\n                OR e.scope_matches IS NOT TRUE) AS evidence_gap\n FROM pg_temp.lesson_submissions s\n CROSS JOIN pg_temp.lesson_rubric_criteria c\n LEFT JOIN pg_temp.lesson_dossier_evidence e\n   ON e.submission_id = s.submission_id AND e.criterion = c.criterion\n GROUP BY s.submission_id, s.label\n)\nSELECT submission_id, label, score_percent,\n CASE WHEN invalid_score THEN 'invalid_rubric_score'\n      WHEN critical_failure THEN 'blocked_critical_failure'\n      WHEN evidence_gap THEN 'incomplete_executed_evidence'\n      WHEN score_percent < 85 THEN 'revise_dossier'\n      ELSE 'candidate_for_human_defense' END AS review\nFROM review ORDER BY submission_id;",
+      "solutionExplanation": "Reference menerapkan rubrik contoh pada dossier hipotetis, mempertahankan missing criteria dan memblokir failure kritis sebelum nilai. Ia tidak membaca artefak eksternal, menjalankan pengujian, menilai refleksi atau membuktikan capstone nyata. Gunakan indeks evidence dan review manusia untuk langkah berikutnya.",
+      "critical": true
+    },
+    "reflection": "Susun indeks requirement→artefak dengan versi/scope/outcome dan tandai authored versus executed. Tulis postmortem hipotetis: impact, timeline, sebab sistemik, detection/recovery gap, action owner/acceptance dan residual risk."
+  }
+]

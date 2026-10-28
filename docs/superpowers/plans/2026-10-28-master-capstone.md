@@ -39,9 +39,9 @@
 
 ## Task 3: L9M03 — Master Defense
 
-- [ ] Create l9-defense.json and English dictionary: threat model, architecture defense, evidence rubric/postmortem.
-- [ ] Explicitly retain missing real build/load/recovery/security evidence. Publishing 120 lessons enables existing L9 assessment, not capstone certification of operational skill.
-- [ ] Register and update final counts/docs; adapt the existing draft-route expectation to an unknown canonical-shaped ID if none remain, without adding tests. Source/diff plus independent read-only review, commit, push.
+- [x] Create l9-defense.json and English dictionary: threat model, architecture defense, evidence rubric/postmortem.
+- [x] Explicitly retain missing real build/load/recovery/security evidence. Publishing 120 lessons enables existing L9 assessment, not capstone certification of operational skill.
+- [x] Register and update final counts/docs; adapt the existing draft-route expectation to an unknown canonical-shaped ID if none remain, without adding tests. Source/diff plus independent read-only review, commit, push.
 
 ## Execution record
 
@@ -51,3 +51,7 @@
 - L9M01 source/diff and independent read-only review: no important findings. Reviewed constraint/ERD cardinality, expected rows and English feedback pairing. No execution evidence claimed. Commit/push outcome is recorded by Git history.
 
 - L9M02 independent source review found ambiguous merchant projection and precision loss from integer-cast recovery seconds. Fixed by projecting/ordering merchant+key and retaining numeric epoch seconds with trim_scale; added explanatory copy for 60.4/-0.4 boundaries. Source/diff review only; no execution. Commit/push outcome is recorded by Git history.
+
+- L9M03 independent source/diff review: no important findings. Reviewed threat/privilege boundaries, hypothetical evidence labels, rubric coverage/NULL handling and English option feedback. README/architecture/roadmap now consistently state 120 canonical lessons, 40 modules, 0 draft, 123 combined lessons plus 3 labs. Existing L9 publication gate is satisfied by content registration; no mastery/storage rules changed.
+- Completed commits 3fbd1ef (L9M01) and 981fdd4 (L9M02) were pushed successfully to origin/main. L9M03 commit/push outcome follows in Git history. Initial sandbox Git-index/DNS restrictions were resolved through authorized escalation; no force-push or remote change.
+- Canonical authoring is complete. Real ledger implementation, executed capstone/drill evidence and human defense remain outside authored prediction completion. No optional product work started. No tests/audits/SQL/runtime/manual/browser checks/lint/typecheck/build, merge or deployment performed.

@@ -41,6 +41,7 @@ export const authored = [
   "l8-data-stores",
   "l9-ledger-design",
   "l9-load-failure",
+  "l9-defense",
 ].flatMap((file) => read(`src/content/database/${file}.json`));
 const modules = blueprint.levels.flatMap((level) => level.modules);
 const lessons = modules.flatMap((module) => module.lessons);

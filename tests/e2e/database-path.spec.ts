@@ -38,7 +38,7 @@ test("complete registered lessons, module and level gates, resume, and preserve 
       .first(),
   ).toBeVisible();
   await expect(
-    page.getByText("Database curriculum: 39 modules, 117 lessons available;", {
+    page.getByText("Database curriculum: 40 modules, 120 lessons available;", {
       exact: false,
     }),
   ).toBeVisible();
@@ -205,13 +205,13 @@ test("complete registered lessons, module and level gates, resume, and preserve 
   expect(errors).toEqual([]);
 });
 
-test("draft routes, prerequisites, local progress compatibility and mobile access", async ({
+test("unknown routes, prerequisites, local progress compatibility and mobile access", async ({
   page,
 }) => {
-  const response = await page.goto("/lessons/l9m03l01");
+  const response = await page.goto("/lessons/l9m04l01");
   expect(response?.status()).toBe(404);
   await page.goto(path);
-  await expect(page.locator('a[href="/lessons/l9m03l01"]')).toHaveCount(0);
+  await expect(page.locator('a[href="/lessons/l9m04l01"]')).toHaveCount(0);
   await expect(page.locator('a[href="/lessons/l2m01l01"]')).toBeVisible();
   const level = page
     .locator(".database-level")

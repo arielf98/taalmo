@@ -39,6 +39,7 @@ import englishDistributed from "./messages/en-database-distributed.json" with { 
 import englishDataStores from "./messages/en-database-data-stores.json" with { type: "json" };
 import englishLedgerDesign from "./messages/en-database-ledger-design.json" with { type: "json" };
 import englishLoadFailure from "./messages/en-database-load-failure.json" with { type: "json" };
+import englishDefense from "./messages/en-database-defense.json" with { type: "json" };
 export type Locale = "en" | "id";
 const indonesian: Record<string, string> = {
   ...interfaceMessages,
@@ -84,6 +85,7 @@ const english: Record<string, string> = {
   ...englishDataStores,
   ...englishLedgerDesign,
   ...englishLoadFailure,
+  ...englishDefense,
 };
 const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
