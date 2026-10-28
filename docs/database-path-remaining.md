@@ -1,16 +1,8 @@
 # Remaining curriculum authoring
 
-The following 9 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
+The following 6 canonical lessons remain draft. Each checkbox requires the complete authoring contract (body, worked example, checks/feedback, variants, edge cases, hints, solution and reflection). Review source/diff only under current AGENTS.md; content after L2M01 has no executed SQL/runtime validation.
 
 ## L9 — Master Capstone
-
-### L9M01 — Capstone: Design the Ledger
-
-Prerequisite: l8m04. Scenario: Payment Ledger.
-
-- [ ] `l9m01l01` — Requirements & invariants
-- [ ] `l9m01l02` — Schema, constraints & migrations
-- [ ] `l9m01l03` — API transaction boundary
 
 ### L9M02 — Capstone: Load and Failure Testing
 

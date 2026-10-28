@@ -1,7 +1,7 @@
 # Database Zero to Master — implementation plan
 
 **Initial goal:** Integrate the canonical 10-level/40-module/120-lesson path into Taalmo, starting with a complete L0–L1 vertical slice (21 lessons) and 99 explicitly draft lessons.
-**Current publication:** L0–L7: 99 published / 21 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
+**Current publication:** L0–L9M01: 114 published / 6 draft. Original evidence below is release history. Later additions have source/diff review only; executed validation still covers L0–L2M01.
 **Spec:** `curriculum/taalmo-database-zero-to-master/PROMPT_UNTUK_CODEX.md`, blueprint, curriculum Markdown, PostgreSQL fixture. All three source documents were read before implementation.
 **Architecture:** Extend the existing lesson route, Quiz, Workspace and versioned progress repository. Adapt blueprint metadata without changing IDs/order. No auth/router rewrite, external service, arbitrary SQL runner or new product dependency.
 
@@ -346,3 +346,11 @@ Added l8m04l01–l8m04l03 with complete bilingual prose, independent TEMP SQL/re
 Totals: 37 authored modules, 111 published / 9 draft lessons; 114 combined lessons plus three labs (117 activity milestones). Existing publication/mastery gates now expose the L8 level assessment. Registries, locale labels and existing E2E count/first-draft expectations move to l9m01l01 without expanded coverage. Blueprint, School Finance seed, prior lesson versions and progress storage stay unchanged.
 
 Source/diff review only. No tests, audits, SQL, runtime, manual/browser checks, lint, typecheck or build were run. No warehouse pipeline, new store, benchmark, migration or deployment was performed. Next canonical milestone: L9M01 — Capstone: Design the Ledger; all nine L9 lessons remain draft, and executed capstone/drill evidence must not be inferred from prediction exercises.
+
+## L9M01 — Design the Ledger — 28 October 2026
+
+Added three complete bilingual lessons in l9-ledger-design.json. Requirements separate business identity, invariants, workload targets and evidence gaps. A five-table TEMP schema and UML/ERD teach composite merchant/currency references, bounded child cardinality, missing aggregate guards and NOT VALID/VALIDATE migration scope. API snapshots distinguish trust/authorization, payload conflict, unknown commit and incomplete effects while prose specifies atomic posting, balance locks, replay and post-commit delivery.
+
+Totals: 38 authored modules, 114 published / 6 draft lessons. Catalog/messages and existing audit/SQL registries include the new module. Existing E2E expectations only update the count and next draft to l9m02l01; no coverage was added. Prior IDs/versions, blueprint, School Finance seed and progress storage are unchanged. L9 assessment remains gated on the remaining modules.
+
+Source/diff review only; no tests, audits, SQL, runtime, manual/browser checks, lint, typecheck or build. Expected tables and flags are authored inputs/results, not executed ledger, migration, signature, load or concurrency evidence. Next canonical milestone: L9M02.

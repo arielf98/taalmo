@@ -1,0 +1,590 @@
+[
+  {
+    "id": "l9m01l01",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "Capstone ledger",
+      "Invariant pembayaran"
+    ],
+    "hook": "Tim meminta ledger dengan satu juta riwayat dan callback berulang. Apa arti benar ketika respons timeout, request diduplikasi, atau riwayat dibaca saat saldo berubah?",
+    "objectives": [
+      "Pisahkan kebutuhan fungsional, invariant dan target terukur.",
+      "Hubungkan tiap requirement ke guard, oracle dan evidence yang dapat ditinjau.",
+      "Pertahankan status unknown tanpa mengklaim capstone sudah dijalankan."
+    ],
+    "sections": [
+      {
+        "title": "Mulai dari kontrak bisnis",
+        "paragraphs": [
+          "Ledger latihan memindahkan nilai antara dua akun milik merchant yang sama, dalam IDR satuan rupiah bulat. Satu transfer posted menghasilkan tepat dua entry bertanda berlawanan pada akun berbeda, jumlah nol, serta satu event outbox dan satu audit posting. Ini model transfer internal, bukan seluruh akuntansi gateway. Top-up, biaya, refund dan konversi mata uang membutuhkan kontrak tambahan; jangan menyelundupkannya sebagai variasi transfer yang belum didefinisikan.",
+          "Identitas bisnis adalah pasangan merchant_id dan business_key yang tetap selama retry atau redelivery dari operasi yang sama. Delivery ID, koneksi HTTP dan nomor urut percobaan bukan identitas efek uang. Payload canonical mencakup merchant, akun sumber, akun tujuan, amount dan currency. Key sama dengan payload sama mengembalikan hasil tersimpan; key sama dengan payload berbeda adalah konflik yang tidak boleh menulis ulang transfer pertama."
+        ]
+      },
+      {
+        "title": "Target bukan invariant",
+        "paragraphs": [
+          "Kebutuhan fungsional menjelaskan perilaku: transfer, riwayat terurut stabil, duplicate replay dan pencarian hasil lewat key. Invariant menjelaskan keadaan yang dilarang, misalnya entry lintas merchant atau debit ganda. Kebutuhan nonfungsional menjelaskan beban dan batas: satu juta riwayat, target 300 request per detik, 5 persen delivery duplikat, durasi, ukuran payload, distribusi akun, concurrency, error budget serta p95. Angka ini rancangan workload, bukan kapasitas terukur website.",
+          "Definisikan saldo awal dan aturan saldo minimum sebelum memilih isolation. Saldo yang dilihat dashboard boleh tertunda jika kontraknya menjelaskan freshness, tetapi keputusan debit harus membaca sumber otoritatif dengan guard atomik. Untuk outcome commit yang tidak diketahui, client mencari hasil memakai key lama. Jangan menyamakan timeout dengan gagal lalu membuat key baru. Akumulasi retry dapat mengubah beban dan menambah efek bila identitas bisnis hilang."
+        ]
+      },
+      {
+        "title": "Oracle dan evidence",
+        "paragraphs": [
+          "Setiap acceptance case memerlukan input, urutan kejadian, hasil bisnis dan query rekonsiliasi. Contoh dua callback bersamaan dengan key sama harus berakhir dengan satu transfer, dua entry yang tepat, satu outbox dan satu audit; respons dapat berbeda selama keduanya menunjuk hasil yang sama. Hitung juga request ditolak, masih pending dan unknown agar efek yang hilang tidak tersembunyi di balik jumlah respons sukses. Jalur gagal memiliki oracle sendiri.",
+          "Tabel berikut adalah kartu requirement authored. Flag true merupakan data contoh, bukan log percobaan kita. SQL hanya memilih tindak lanjut: guard belum ada, oracle belum ada, evidence belum tersedia, kegagalan perlu diselidiki, atau bukti yang tercatat perlu dibaca ruang lingkupnya. Kelengkapan spesifikasi tidak membuktikan implementasi. Dalam player ini Anda memprediksi keputusan dan menyimpan refleksi; kualitas spesifikasi dan satu juta baris riwayat tidak dibuat atau dinilai otomatis."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Kartu requirement Payment Ledger dalam TEMP; seluruh flag merupakan input authored.",
+      "setupSql": "CREATE TEMP TABLE lesson_requirements (\n  requirement_id INTEGER PRIMARY KEY,\n  requirement TEXT NOT NULL,\n  guard_defined BOOLEAN,\n  oracle_defined BOOLEAN,\n  run_passed BOOLEAN\n);\nINSERT INTO pg_temp.lesson_requirements VALUES\n (1, 'one_effect_per_business_key', true, true, NULL),\n (2, 'no_cross_merchant_entry', false, true, NULL),\n (3, 'history_p95_budget', true, false, NULL),\n (4, 'balanced_posted_transfer', true, true, false),\n (5, 'outbox_pairing', true, true, true);",
+      "sql": "SELECT requirement_id, requirement,\n       CASE\n         WHEN guard_defined IS NOT TRUE THEN 'define_guard'\n         WHEN oracle_defined IS NOT TRUE THEN 'define_oracle'\n         WHEN run_passed IS NULL THEN 'evidence_missing'\n         WHEN run_passed IS FALSE THEN 'investigate_failure'\n         ELSE 'inspect_recorded_evidence'\n       END AS next_action\nFROM pg_temp.lesson_requirements ORDER BY requirement_id;",
+      "columns": [
+        "requirement_id",
+        "requirement",
+        "next_action"
+      ],
+      "rows": [
+        [
+          "1",
+          "one_effect_per_business_key",
+          "evidence_missing"
+        ],
+        [
+          "2",
+          "no_cross_merchant_entry",
+          "define_guard"
+        ],
+        [
+          "3",
+          "history_p95_budget",
+          "define_oracle"
+        ],
+        [
+          "4",
+          "balanced_posted_transfer",
+          "investigate_failure"
+        ],
+        [
+          "5",
+          "outbox_pairing",
+          "inspect_recorded_evidence"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Guard dan oracle diperiksa sebelum hasil run. Baris kelima tetap memerlukan artefak, versi dan scope; flag true tidak cukup menjadi bukti operasional."
+    },
+    "checks": [
+      {
+        "id": "l9m01l01-check-1",
+        "question": "Mana invariant untuk transfer internal ini?",
+        "options": [
+          "Target 300 request/detik sudah tercapai.",
+          "Setiap transfer posted mempunyai dua entry pada akun berbeda dengan jumlah nol dalam satu merchant/currency.",
+          "Semua halaman harus berwarna sama."
+        ],
+        "answer": 1,
+        "explanation": "Invariant membatasi keadaan bisnis yang sah; target throughput membutuhkan pengukuran terpisah.",
+        "feedback": [
+          "Belum tepat. Target beban bukan bukti atau invariant.",
+          "Benar. Nyatakan grain dan scope nilai yang harus dilindungi.",
+          "Belum tepat. Preferensi visual tidak menjaga integritas uang."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l9m01l01-check-2",
+        "question": "Respons hilang sesudah COMMIT mungkin berhasil. Apa kontrak retry?",
+        "options": [
+          "Cari hasil memakai business key yang sama; jangan membuat efek baru sebelum rekonsiliasi.",
+          "Buat key baru agar server tidak mengenali duplicate.",
+          "Anggap transaksi pasti rollback."
+        ],
+        "answer": 0,
+        "explanation": "Koneksi gagal tidak menyatakan outcome transaksi. Identitas tetap memungkinkan rekonsiliasi.",
+        "feedback": [
+          "Benar. Unknown harus tetap terlihat sampai hasil ditemukan.",
+          "Belum tepat. Key baru berisiko menggandakan debit.",
+          "Belum tepat. Commit dapat terjadi sebelum respons hilang."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi tindak lanjut kartu requirement, kemudian tulis spesifikasi workload dan lima acceptance case ledger.",
+      "setup": "Tidak ada load generator atau database berjalan. Refleksi merupakan rancangan yang perlu review manusia, bukan pengujian capstone.",
+      "starterSql": "SELECT * FROM pg_temp.lesson_requirements ORDER BY requirement_id;",
+      "variants": [
+        {
+          "id": "l9m01l01-variant-1",
+          "question": "Guard ada, tetapi oracle p95 belum didefinisikan. Apa hasil kartu 3?",
+          "options": [
+            "inspect_recorded_evidence",
+            "evidence_missing",
+            "define_oracle"
+          ],
+          "answer": 2,
+          "explanation": "Tanpa batas dan populasi pengukuran yang jelas, pass/fail tidak dapat ditafsirkan.",
+          "feedback": [
+            "Belum tepat. Belum ada definisi bukti yang harus dibaca.",
+            "Belum tepat. Lengkapi definisi oracle terlebih dahulu.",
+            "Benar. Tetapkan percentile, batas, durasi dan failure accounting."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l9m01l01-variant-2",
+          "question": "Kartu 4 punya guard/oracle tetapi run_passed=false. Apa tindakan?",
+          "options": [
+            "Ganti false ke true untuk meluluskan modul.",
+            "investigate_failure: cari transfer dan interleaving yang melanggar oracle.",
+            "Naikkan target RPS saja."
+          ],
+          "answer": 1,
+          "explanation": "Kegagalan integritas perlu investigasi sebelum interpretasi kinerja.",
+          "feedback": [
+            "Belum tepat. Mengubah input tidak memperbaiki sistem.",
+            "Benar. Temukan sebab dan rencanakan evidence ulang.",
+            "Belum tepat. Throughput tidak menutup kegagalan invariant."
+          ],
+          "critical": true
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l9m01l01-edge-1",
+          "question": "Business key sama, amount berbeda. Bolehkah dianggap duplicate sukses?",
+          "options": [
+            "Tidak; konflik payload harus ditolak atau dikarantina tanpa menimpa hasil pertama.",
+            "Boleh; key sama berarti semua field dapat diabaikan.",
+            "Boleh jika amount kedua lebih kecil."
+          ],
+          "answer": 0,
+          "explanation": "Idempotency mencakup kesamaan intent, bukan hanya keberadaan string key.",
+          "feedback": [
+            "Benar. Lindungi hasil pertama dan buat konflik terlihat.",
+            "Belum tepat. Payload berbeda adalah intent berbeda.",
+            "Belum tepat. Besaran lebih kecil tetap konflik."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l9m01l01-edge-2",
+          "question": "Kartu 5 bertanda true tetapi artefak run tidak tersedia. Apa kesimpulan?",
+          "options": [
+            "Production sudah aman.",
+            "Seluruh scope keamanan terbukti.",
+            "Hanya input authored; minta artefak, versi, scope dan oracle sebelum klaim operasional."
+          ],
+          "answer": 2,
+          "explanation": "Label evidence harus dapat dilacak ke pelaksanaan yang relevan.",
+          "feedback": [
+            "Belum tepat. Fixture bukan izin production.",
+            "Belum tepat. Satu kartu tidak membuktikan keamanan.",
+            "Benar. Lengkapi provenance, bukan mengganti unknown dengan asumsi."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Tulis dahulu keadaan bisnis yang dilarang, baru pilih teknologi.",
+        "Satu requirement membutuhkan guard dan cara mengamati pelanggaran.",
+        "NULL outcome tetap unknown; true authored tetap memerlukan evidence scope."
+      ],
+      "solutionSql": "SELECT requirement_id, requirement,\n       CASE\n         WHEN guard_defined IS NOT TRUE THEN 'define_guard'\n         WHEN oracle_defined IS NOT TRUE THEN 'define_oracle'\n         WHEN run_passed IS NULL THEN 'evidence_missing'\n         WHEN run_passed IS FALSE THEN 'investigate_failure'\n         ELSE 'inspect_recorded_evidence'\n       END AS next_action\nFROM pg_temp.lesson_requirements ORDER BY requirement_id;",
+      "solutionExplanation": "Reference mengurutkan gap spesifikasi dan bukti. Ia tidak memproses pembayaran, menghasilkan satu juta baris atau menjalankan acceptance cases. Gunakan hasilnya sebagai daftar tindak lanjut yang dapat ditinjau.",
+      "critical": true
+    },
+    "reflection": "Tulis kontrak transfer, scope key/payload, aturan saldo, target workload dan lima acceptance case termasuk duplicate serentak, payload conflict, merchant salah, dana kurang serta commit unknown; sebutkan evidence yang belum ada."
+  },
+  {
+    "id": "l9m01l02",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "Capstone ledger",
+      "Migrasi ledger"
+    ],
+    "hook": "Diagram terlihat lengkap dengan PK dan FK, tetapi t02 hanya mempunyai satu debit tanpa credit. Mengapa schema masih menerima keadaan yang belum layak disebut posted?",
+    "objectives": [
+      "Petakan transfer, entry, outbox dan audit ke key serta foreign key yang benar.",
+      "Bedakan shape yang dijaga DDL dari validasi lintas baris dan otorisasi.",
+      "Rencanakan migrasi kompatibel dan validasi data lama sebelum cutover."
+    ],
+    "sections": [
+      {
+        "title": "Baca struktur sebelum menulis writer",
+        "paragraphs": [
+          "Tabel accounts menyatakan akun pada merchant dan currency tertentu. Transfers menyimpan business key dalam merchant, currency dan fingerprint payload; string toy pada fixture bukan hash kriptografis atau verifikasi signature. Entries mempunyai primary key merchant, business key dan line_no. Dua foreign key composite memastikan entry menunjuk transfer serta akun pada merchant dan currency yang sama. Akun 30 milik merchant 2 tidak dapat dipakai entry merchant 1.",
+          "Outbox dan audit masing-masing memakai satu baris per transfer pada contoh ini. FK menjaga parent ada dan PK membatasi paling banyak satu child, tetapi tidak memaksa parent mempunyai child. Diagram menampilkan relasi transfer ke outbox/audit sebagai 1 ke 0..1, transfer ke entry 1 ke 0..2, dan akun ke entry 1 ke 0..N. Audit tersebut hanya marker posting dengan actor, bukan seluruh riwayat akses atau log keamanan yang tahan manipulasi."
+        ]
+      },
+      {
+        "title": "Constraint lokal dan aturan agregat",
+        "paragraphs": [
+          "CHECK membatasi line_no menjadi 1 atau 2 dan amount menjadi integer bukan nol dalam rentang contoh. NOT NULL menjaga field wajib. Semua itu belum mengharuskan dua entry hadir, menggunakan akun berbeda, menjumlah nol, atau sesuai amount pada intent asli. Report paired_shape hanya menilai bentuk serta pairing marker. Ia belum membandingkan intent dan izin debit, belum menghitung saldo, dan tidak memasang constraint agregat yang otomatis berlaku pada commit.",
+          "Writer terkontrol harus memvalidasi intent, mengambil lock yang diperlukan, membentuk kedua entry beserta outbox/audit dan melakukan commit bersama. Role aplikasi tidak boleh mempunyai jalur tulis alternatif yang melewati aturan ini. Koreksi entry posted dilakukan melalui transaksi pembalik beridentitas baru sesuai kontrak bisnis, bukan UPDATE atau DELETE sejarah. DDL TEMP di halaman ini tidak memasang role, prosedur writer, trigger deferred, append-only policy atau aturan anti-overdraft tersebut."
+        ]
+      },
+      {
+        "title": "Migrasi adalah perubahan protokol",
+        "paragraphs": [
+          "Untuk sistem yang sudah berisi data, inventarisasi key lama, duplicate, currency dan writer aktif sebelum menambah constraint. Expand menambahkan struktur yang kompatibel dengan versi lama dan baru; backfill berjalan bertahap dengan checkpoint serta rekonsiliasi per identitas. Jangan mengarang fingerprint intent yang field aslinya sudah hilang. Jika data tidak bisa dibuktikan, karantina dan selesaikan sumbernya. Cutover membutuhkan validasi serta pemilik keputusan, kemudian contract menghapus jalur lama setelah aman.",
+          "Reference menambahkan CHECK business_key tidak kosong menggunakan NOT VALID lalu VALIDATE pada TEMP transfers. NOT VALID menunda pemeriksaan data lama untuk CHECK/FK yang mendukungnya; baris baru atau yang diubah tetap diperiksa. Ini bukan cara menunda UNIQUE dan bukan jaminan tanpa lock. Rencanakan lock timeout, monitoring, cancel dan roll-forward kompatibel; rollback aplikasi tidak selalu boleh menghapus schema yang sudah dipakai data baru. Script contoh tidak membuktikan migrasi online berhasil."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Lima tabel TEMP Payment Ledger; t02 sengaja belum lengkap untuk menunjukkan batas DDL.",
+      "setupSql": "CREATE TEMP TABLE lesson_ledger_accounts (\n merchant_id INTEGER NOT NULL, account_id INTEGER NOT NULL,\n currency TEXT NOT NULL CHECK (currency = 'IDR'),\n PRIMARY KEY (merchant_id, account_id, currency)\n);\nCREATE TEMP TABLE lesson_ledger_transfers (\n merchant_id INTEGER NOT NULL, business_key TEXT NOT NULL,\n currency TEXT NOT NULL CHECK (currency = 'IDR'),\n payload_fingerprint TEXT NOT NULL,\n PRIMARY KEY (merchant_id, business_key),\n UNIQUE (merchant_id, business_key, currency)\n);\nCREATE TEMP TABLE lesson_ledger_entries (\n merchant_id INTEGER NOT NULL, business_key TEXT NOT NULL,\n line_no INTEGER NOT NULL CHECK (line_no IN (1, 2)),\n account_id INTEGER NOT NULL, currency TEXT NOT NULL,\n amount BIGINT NOT NULL CHECK (amount BETWEEN -1000000000000 AND 1000000000000 AND amount <> 0),\n PRIMARY KEY (merchant_id, business_key, line_no),\n FOREIGN KEY (merchant_id, business_key, currency)\n REFERENCES pg_temp.lesson_ledger_transfers (merchant_id, business_key, currency),\n FOREIGN KEY (merchant_id, account_id, currency)\n REFERENCES pg_temp.lesson_ledger_accounts (merchant_id, account_id, currency)\n);\nCREATE TEMP TABLE lesson_ledger_outbox (\n merchant_id INTEGER NOT NULL, business_key TEXT NOT NULL,\n event_kind TEXT NOT NULL CHECK (event_kind = 'transfer_posted'),\n PRIMARY KEY (merchant_id, business_key),\n FOREIGN KEY (merchant_id, business_key)\n REFERENCES pg_temp.lesson_ledger_transfers (merchant_id, business_key)\n);\nCREATE TEMP TABLE lesson_ledger_audit (\n merchant_id INTEGER NOT NULL, business_key TEXT NOT NULL,\n actor_id TEXT NOT NULL, action TEXT NOT NULL CHECK (action = 'post'),\n PRIMARY KEY (merchant_id, business_key),\n FOREIGN KEY (merchant_id, business_key)\n REFERENCES pg_temp.lesson_ledger_transfers (merchant_id, business_key)\n);\nINSERT INTO pg_temp.lesson_ledger_accounts VALUES\n (1, 10, 'IDR'), (1, 20, 'IDR'), (2, 30, 'IDR');\nINSERT INTO pg_temp.lesson_ledger_transfers VALUES\n (1, 't01', 'IDR', 'toy:10:20:7000:IDR'),\n (1, 't02', 'IDR', 'toy:10:20:5000:IDR');\nINSERT INTO pg_temp.lesson_ledger_entries VALUES\n (1, 't01', 1, 10, 'IDR', -7000), (1, 't01', 2, 20, 'IDR', 7000),\n (1, 't02', 1, 10, 'IDR', -5000);\nINSERT INTO pg_temp.lesson_ledger_outbox VALUES (1, 't01', 'transfer_posted');\nINSERT INTO pg_temp.lesson_ledger_audit VALUES (1, 't01', 'service-a', 'post');",
+      "sql": "SELECT t.business_key,\n       (SELECT COUNT(*) FROM pg_temp.lesson_ledger_entries e\n        WHERE (e.merchant_id, e.business_key) = (t.merchant_id, t.business_key)) AS entries,\n       (SELECT SUM(e.amount) FROM pg_temp.lesson_ledger_entries e\n        WHERE (e.merchant_id, e.business_key) = (t.merchant_id, t.business_key)) AS net,\n       CASE WHEN\n         (SELECT COUNT(*) = 2 AND COUNT(DISTINCT e.account_id) = 2\n                 AND COUNT(*) FILTER (WHERE e.amount < 0) = 1\n                 AND COUNT(*) FILTER (WHERE e.amount > 0) = 1 AND SUM(e.amount) = 0\n          FROM pg_temp.lesson_ledger_entries e\n          WHERE (e.merchant_id, e.business_key) = (t.merchant_id, t.business_key))\n         AND EXISTS (SELECT 1 FROM pg_temp.lesson_ledger_outbox o\n          WHERE (o.merchant_id, o.business_key) = (t.merchant_id, t.business_key))\n         AND EXISTS (SELECT 1 FROM pg_temp.lesson_ledger_audit a\n          WHERE (a.merchant_id, a.business_key) = (t.merchant_id, t.business_key))\n       THEN 'paired_shape' ELSE 'incomplete_or_invalid' END AS structural_review\nFROM pg_temp.lesson_ledger_transfers t ORDER BY t.business_key;",
+      "columns": [
+        "business_key",
+        "entries",
+        "net",
+        "structural_review"
+      ],
+      "rows": [
+        [
+          "t01",
+          "2",
+          "0",
+          "paired_shape"
+        ],
+        [
+          "t02",
+          "1",
+          "-5000",
+          "incomplete_or_invalid"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Subquery per transfer mencegah perkalian entry dengan child lain. t01 lolos bentuk saja; t02 diterima DDL tetapi tidak boleh dinyatakan posted oleh writer."
+    },
+    "checks": [
+      {
+        "id": "l9m01l02-check-1",
+        "question": "Mengapa FK entry tidak cukup menjaga transfer seimbang?",
+        "options": [
+          "FK hanya menjaga referensi; dua entry, tanda, intent dan jumlah membutuhkan aturan tambahan.",
+          "FK otomatis menghitung SUM seluruh entry.",
+          "PK mengisi credit yang hilang."
+        ],
+        "answer": 0,
+        "explanation": "Referential integrity tidak sama dengan aggregate business integrity.",
+        "feedback": [
+          "Benar. Writer dan batas privilege harus menjaga aturan sisanya.",
+          "Belum tepat. FK tidak menghitung agregat.",
+          "Belum tepat. PK menolak duplicate, bukan menambah baris."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l9m01l02-check-2",
+        "question": "Apa arti ADD CHECK NOT VALID pada tabel lama?",
+        "options": [
+          "Semua write bebas melanggar sampai VALIDATE.",
+          "UNIQUE juga selalu bisa NOT VALID.",
+          "Data lama belum dipindai; write baru/perubahan tetap diperiksa dan validasi lama direncanakan."
+        ],
+        "answer": 2,
+        "explanation": "Pisahkan enforcement write baru dari verifikasi seluruh baris yang sudah ada.",
+        "feedback": [
+          "Belum tepat. NOT VALID bukan menonaktifkan CHECK baru.",
+          "Belum tepat. Jangan menggeneralisasi fitur CHECK/FK ke UNIQUE.",
+          "Benar. Pertimbangkan lock dan data lama juga."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi hasil rekonsiliasi struktur dan dampak migrasi CHECK. Tulis daftar guard yang belum dipasang.",
+      "setup": "Schema baru hanya TEMP. Tidak ada migration production, role atau writer yang dioperasikan.",
+      "starterSql": "SELECT merchant_id, business_key, line_no, account_id, amount FROM pg_temp.lesson_ledger_entries ORDER BY business_key, line_no;",
+      "variants": [
+        {
+          "id": "l9m01l02-variant-1",
+          "question": "t02 mempunyai satu entry -5000. Apa report-nya?",
+          "options": [
+            "paired_shape karena ada PK.",
+            "entries=1, net=-5000, incomplete_or_invalid.",
+            "Dua entry otomatis dibentuk SELECT."
+          ],
+          "answer": 1,
+          "explanation": "Report membaca keadaan yang ada; query tidak melengkapi transfer.",
+          "feedback": [
+            "Belum tepat. Identitas unik tidak membuktikan completeness.",
+            "Benar. Debit tunggal harus ditindaklanjuti.",
+            "Belum tepat. SELECT ini read-only."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l9m01l02-variant-2",
+          "question": "Backfill menemukan intent lama tanpa akun tujuan. Bolehkah menebak fingerprint?",
+          "options": [
+            "Boleh agar migration cepat.",
+            "Isi string random dan klaim idempotent.",
+            "Karantina gap dan rekonsiliasi sumber; jangan mengarang identitas intent."
+          ],
+          "answer": 2,
+          "explanation": "Fingerprint hanya bermakna bila berasal dari intent canonical yang dapat dipertanggungjawabkan.",
+          "feedback": [
+            "Belum tepat. Kecepatan tidak membenarkan data karangan.",
+            "Belum tepat. Random tidak membuktikan kesamaan payload.",
+            "Benar. Pertahankan unknown sebagai pekerjaan migrasi."
+          ],
+          "critical": true
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l9m01l02-edge-1",
+          "question": "Entry merchant 1 merujuk akun 30 yang hanya ada pada merchant 2. Apa yang menjaga scope?",
+          "options": [
+            "Composite FK (merchant_id, account_id, currency) menolak dengan 23503.",
+            "FK account_id saja pasti cukup.",
+            "Warna diagram memisahkan tenant."
+          ],
+          "answer": 0,
+          "explanation": "Identitas dan referensi harus membawa merchant serta currency bersama-sama.",
+          "feedback": [
+            "Benar. Ini rejection yang diharapkan dari DDL, belum dieksekusi.",
+            "Belum tepat. ID lokal dapat berulang lintas merchant.",
+            "Belum tepat. Visual tidak memasang guard."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l9m01l02-edge-2",
+          "question": "Dua entry bernilai -7000 dan +7000 pada akun yang sama. Apakah net zero cukup?",
+          "options": [
+            "Cukup untuk transfer apa pun.",
+            "Tidak; report menuntut dua akun berbeda, dan intent/otorisasi tetap perlu diperiksa.",
+            "Hapus salah satu entry agar valid."
+          ],
+          "answer": 1,
+          "explanation": "Jumlah nol hanya satu bagian dari kontrak transfer.",
+          "feedback": [
+            "Belum tepat. Perpindahan ke akun berbeda adalah requirement.",
+            "Benar. Validasi shape dan intent saling melengkapi.",
+            "Belum tepat. Satu entry justru tidak seimbang."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Ikuti semua kolom composite FK, bukan hanya nama akun.",
+        "COUNT, distinct akun, tanda dan SUM diperiksa per transfer.",
+        "NOT VALID menunda scan lama; rencanakan VALIDATE dan writer kompatibel."
+      ],
+      "solutionSql": "ALTER TABLE pg_temp.lesson_ledger_transfers ADD CONSTRAINT ledger_business_key_nonempty CHECK (length(btrim(business_key)) > 0) NOT VALID;\nALTER TABLE pg_temp.lesson_ledger_transfers VALIDATE CONSTRAINT ledger_business_key_nonempty;\nSELECT t.business_key,\n       (SELECT COUNT(*) FROM pg_temp.lesson_ledger_entries e\n        WHERE (e.merchant_id, e.business_key) = (t.merchant_id, t.business_key)) AS entries,\n       (SELECT SUM(e.amount) FROM pg_temp.lesson_ledger_entries e\n        WHERE (e.merchant_id, e.business_key) = (t.merchant_id, t.business_key)) AS net,\n       CASE WHEN\n         (SELECT COUNT(*) = 2 AND COUNT(DISTINCT e.account_id) = 2\n                 AND COUNT(*) FILTER (WHERE e.amount < 0) = 1\n                 AND COUNT(*) FILTER (WHERE e.amount > 0) = 1 AND SUM(e.amount) = 0\n          FROM pg_temp.lesson_ledger_entries e\n          WHERE (e.merchant_id, e.business_key) = (t.merchant_id, t.business_key))\n         AND EXISTS (SELECT 1 FROM pg_temp.lesson_ledger_outbox o\n          WHERE (o.merchant_id, o.business_key) = (t.merchant_id, t.business_key))\n         AND EXISTS (SELECT 1 FROM pg_temp.lesson_ledger_audit a\n          WHERE (a.merchant_id, a.business_key) = (t.merchant_id, t.business_key))\n       THEN 'paired_shape' ELSE 'incomplete_or_invalid' END AS structural_review\nFROM pg_temp.lesson_ledger_transfers t ORDER BY t.business_key;",
+      "solutionExplanation": "Reference memigrasikan CHECK lokal pada fixture bersih, lalu membaca report struktur. Ia tidak memperbaiki t02, memasang aggregate guard, membuktikan intent, mencegah overdraft atau menguji migrasi concurrent. Proposal production perlu protokol writer dan privilege yang ditinjau.",
+      "critical": true
+    },
+    "reflection": "Jelaskan jaminan PK/FK/CHECK, aturan yang masih menjadi tanggung jawab writer, serta langkah expand/backfill/validate/cutover/contract dan recovery ketika data lama tidak lengkap."
+  },
+  {
+    "id": "l9m01l03",
+    "version": "1.0.0",
+    "difficulty": "intermediate",
+    "tags": [
+      "Capstone ledger",
+      "Batas API"
+    ],
+    "hook": "Debit berhasil tetapi outbox ditulis pada transaksi berikutnya dan koneksi putus di antaranya. Bisakah consumer mengetahui uang sudah berpindah, dan bagaimana retry menghindari debit kedua?",
+    "objectives": [
+      "Rancang satu batas commit untuk semua efek lokal transfer.",
+      "Pisahkan input tidak tepercaya, duplicate, konflik dan unknown outcome.",
+      "Jelaskan protokol saldo, retry serta pengiriman outbox setelah commit."
+    ],
+    "sections": [
+      {
+        "title": "Sebelum transaksi",
+        "paragraphs": [
+          "Pseudo API menerima intent melalui koneksi yang dapat terputus. Validasi bentuk dan batas amount, currency, akun berbeda, business key dan ukuran payload di trust boundary. Untuk callback provider, verifikasi signature sesuai kontrak provider atas byte yang tepat, identitas merchant serta replay policy; field signature_valid pada fixture hanyalah input authored. Identitas merchant harus berasal dari kredensial terverifikasi, bukan dipercaya karena muncul dalam JSON. Lakukan otorisasi operasi dan akun untuk principal tersebut.",
+          "Bentuk representasi canonical intent yang stabil dan bandingkan field bermakna; whitespace atau urutan field transport tidak harus menjadi konflik. Simpan versi canonicalization agar deploy baru tidak mengubah arti key lama. Contoh toy fingerprint bukan algoritme keamanan. Tetapkan juga key provider dan scope merchant bila callback mewakili payment eksternal. Delivery ID hanya membantu audit penerimaan; satu efek bisnis tetap memakai identitas yang sama meskipun dikirim berkali-kali."
+        ]
+      },
+      {
+        "title": "Di dalam batas atomik",
+        "paragraphs": [
+          "Mulai transaksi lokal lalu klaim pasangan merchant dan business key melalui uniqueness. Pada READ COMMITTED, INSERT ON CONFLICT DO NOTHING dapat menunggu transaksi pesaing; bila tidak mendapat RETURNING, baca record pemenang pada statement berikutnya dan cocokkan intent. Jangan memakai CTE satu snapshot untuk menganggap baris konflik pasti terlihat. Jika record tidak ditemukan atau isolation berbeda menghasilkan abort, gunakan bounded retry seluruh transaksi dengan key yang sama; tidak boleh meneruskan setengah operasi.",
+          "Untuk intent baru, lock akun dalam urutan identitas konsisten. Semua writer yang mengubah saldo wajib mengikuti protokol lock yang sama, memeriksa saldo otoritatif setelah lock dan menjaga batas minimum. Jika ada balance cache, update bersama ledger dalam transaksi ini. Bentuk debit, credit, record hasil replay, outbox dan audit posting, periksa count write serta seluruh invariant, lalu commit. Kegagalan salah satu efek harus menggagalkan seluruh unit; FK dan net zero saja tidak membuktikan dana tersedia."
+        ]
+      },
+      {
+        "title": "Setelah commit dan saat unknown",
+        "paragraphs": [
+          "Kirim respons sukses hanya setelah outcome commit diketahui. Jika koneksi hilang saat commit, catat unknown dan lakukan lookup terotorisasi pada sumber otoritatif memakai business key yang sama. Read replica tertinggal tidak membuktikan efek tidak ada. Jangan mengulang panggilan provider dengan identitas baru untuk menyelesaikan ketidakpastian lokal. Deadlock atau serialization failure yang jelas rollback dapat diulang sebagai seluruh transaksi dengan batas attempt, backoff dan deadline; network timeout perlu rekonsiliasi outcome terlebih dahulu.",
+          "Worker memublikasikan outbox sesudah commit dan dapat mengirim ulang setelah crash sebelum acknowledgment. Consumer membutuhkan dedup durable dan idempotency pada efek eksternal; transaksi database tidak membuat email atau gateway menjadi exactly-once. Tabel decision di bawah merupakan snapshot attempt independen, bukan schedule concurrent atau implementasi API. effects_match mencakup kecocokan intent dan seluruh efek menurut oracle yang diasumsikan; boolean authored tersebut bukan query verifikasi ledger nyata."
+        ]
+      }
+    ],
+    "worked": {
+      "dataset": "Snapshot attempt API authored dalam TEMP; tidak ada signature, endpoint, worker atau provider yang dijalankan.",
+      "setupSql": "CREATE TEMP TABLE lesson_api_attempts (\n attempt_id INTEGER PRIMARY KEY, merchant_id INTEGER NOT NULL,\n business_key TEXT NOT NULL, signature_valid BOOLEAN,\n authorized BOOLEAN, stored_payload TEXT, incoming_payload TEXT NOT NULL,\n commit_known BOOLEAN, effects_match BOOLEAN\n);\nINSERT INTO pg_temp.lesson_api_attempts VALUES\n (1, 1, 'pay-a', true, true, 'toy:10:20:7000:IDR', 'toy:10:20:7000:IDR', true, true),\n (2, 1, 'pay-a', true, true, 'toy:10:20:7000:IDR', 'toy:10:20:9000:IDR', true, true),\n (3, 1, 'pay-b', true, true, NULL, 'toy:10:20:3000:IDR', NULL, NULL),\n (4, 1, 'pay-c', false, true, NULL, 'toy:10:20:1000:IDR', false, false),\n (5, 1, 'pay-d', true, true, 'toy:10:20:4000:IDR', 'toy:10:20:4000:IDR', true, false);",
+      "sql": "SELECT attempt_id, business_key,\n CASE WHEN signature_valid IS NOT TRUE OR authorized IS NOT TRUE THEN 'reject_untrusted'\n      WHEN stored_payload IS NOT NULL AND stored_payload IS DISTINCT FROM incoming_payload THEN 'payload_conflict'\n      WHEN commit_known IS NOT TRUE THEN 'reconcile_same_key'\n      WHEN effects_match IS NOT TRUE THEN 'investigate_incomplete_effects'\n      ELSE 'return_recorded_result' END AS action\nFROM pg_temp.lesson_api_attempts ORDER BY attempt_id;",
+      "columns": [
+        "attempt_id",
+        "business_key",
+        "action"
+      ],
+      "rows": [
+        [
+          "1",
+          "pay-a",
+          "return_recorded_result"
+        ],
+        [
+          "2",
+          "pay-a",
+          "payload_conflict"
+        ],
+        [
+          "3",
+          "pay-b",
+          "reconcile_same_key"
+        ],
+        [
+          "4",
+          "pay-c",
+          "reject_untrusted"
+        ],
+        [
+          "5",
+          "pay-d",
+          "investigate_incomplete_effects"
+        ]
+      ],
+      "ordered": true,
+      "explanation": "Trust gate mendahului replay; konflik payload mendahului pengembalian hasil. Unknown commit tidak menjadi sukses atau gagal, dan efek tidak cocok perlu investigasi."
+    },
+    "checks": [
+      {
+        "id": "l9m01l03-check-1",
+        "question": "Apa yang harus commit bersama pada transfer baru?",
+        "options": [
+          "Debit dahulu; credit dan audit bisa menyusul tanpa rekonsiliasi.",
+          "Kirim email sebelum memulai transaksi.",
+          "Intent/hasil replay, debit-credit, perubahan saldo bila ada, outbox dan audit posting."
+        ],
+        "answer": 2,
+        "explanation": "Batas atomik mengikuti invariant lokal, bukan batas endpoint atau nama tabel.",
+        "feedback": [
+          "Belum tepat. Crash dapat meninggalkan efek parsial.",
+          "Belum tepat. Side effect eksternal tidak ikut rollback.",
+          "Benar. Publikasi outbox terjadi terpisah setelah commit."
+        ],
+        "critical": true
+      },
+      {
+        "id": "l9m01l03-check-2",
+        "question": "ON CONFLICT DO NOTHING tidak mengembalikan baris di READ COMMITTED. Bagaimana membaca pemenang?",
+        "options": [
+          "Asumsikan row pasti terlihat pada snapshot CTE yang sama.",
+          "Baca di statement berikutnya, cocokkan payload dan tangani record belum ditemukan dengan bounded retry.",
+          "Langsung buat debit baru tanpa record."
+        ],
+        "answer": 1,
+        "explanation": "Visibility statement dan conflict detection bukan hal yang sama.",
+        "feedback": [
+          "Belum tepat. Snapshot statement dapat mendahului commit pesaing.",
+          "Benar. Jangan mengubah konflik menjadi efek kedua.",
+          "Belum tepat. Itu melewati klaim idempotency."
+        ],
+        "critical": true
+      }
+    ],
+    "activity": {
+      "kind": "prediction",
+      "prompt": "Prediksi tindakan API untuk lima snapshot. Rancang pseudo API beserta jalur duplicate dan reconciliation, tanpa menjalankannya.",
+      "setup": "Setiap baris dibaca independen; tidak ada mutasi akun atau endpoint live.",
+      "starterSql": "SELECT * FROM pg_temp.lesson_api_attempts ORDER BY attempt_id;",
+      "variants": [
+        {
+          "id": "l9m01l03-variant-1",
+          "question": "pay-a dikirim ulang dengan payload sama dan effects_match=true. Apa tindakan?",
+          "options": [
+            "return_recorded_result tanpa entry baru.",
+            "Tulis ulang ledger agar timestamp baru.",
+            "Buat key lain untuk replay."
+          ],
+          "answer": 0,
+          "explanation": "Replay mengembalikan hasil bisnis tersimpan, bukan membuat posting ulang.",
+          "feedback": [
+            "Benar. Kunci bisnis melindungi efek lokal yang sama.",
+            "Belum tepat. Replay tidak mengubah sejarah.",
+            "Belum tepat. Key lain kehilangan identitas efek."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l9m01l03-variant-2",
+          "question": "pay-d diketahui commit tetapi efek tidak cocok. Apa tindakan?",
+          "options": [
+            "Kembalikan sukses karena record ada.",
+            "Hapus record untuk mengulang dari nol.",
+            "investigate_incomplete_effects; jangan menambah debit secara buta."
+          ],
+          "answer": 2,
+          "explanation": "Keberadaan marker bukan bukti seluruh invariant dan intent cocok.",
+          "feedback": [
+            "Belum tepat. Perlu kelengkapan efek.",
+            "Belum tepat. Menghapus evidence menyulitkan rekonsiliasi.",
+            "Benar. Pertahankan bukti dan isolasi masalah."
+          ],
+          "critical": true
+        }
+      ],
+      "edgeCases": [
+        {
+          "id": "l9m01l03-edge-1",
+          "question": "Signature valid tetapi principal tidak berhak memakai merchant. Apa gate-nya?",
+          "options": [
+            "Replay selalu melewati otorisasi.",
+            "reject_untrusted karena authorized bukan true.",
+            "Signature mengganti seluruh authorization."
+          ],
+          "answer": 1,
+          "explanation": "Autentikasi pesan tidak otomatis memberi hak pada akun atau merchant.",
+          "feedback": [
+            "Belum tepat. Lookup hasil pun membutuhkan otorisasi.",
+            "Benar. Trust dan hak operasi keduanya wajib.",
+            "Belum tepat. Identitas dan izin adalah pemeriksaan berbeda."
+          ],
+          "critical": true
+        },
+        {
+          "id": "l9m01l03-edge-2",
+          "question": "Worker crash setelah publish tetapi sebelum ack. Apakah outbox membuat delivery exactly-once?",
+          "options": [
+            "Tidak; redelivery mungkin, consumer dan efek eksternal perlu dedup/idempotency sendiri.",
+            "Ya; satu row outbox menjamin satu pengiriman.",
+            "Ya; COMMIT membatalkan pesan yang terlanjur terkirim."
+          ],
+          "answer": 0,
+          "explanation": "Atomic outbox menjamin pencatatan intent bersama transaksi, bukan pengiriman satu kali.",
+          "feedback": [
+            "Benar. Akui batas transaksi lokal.",
+            "Belum tepat. Retry transport dapat mengirim ulang.",
+            "Belum tepat. Efek eksternal tidak ditarik oleh commit lokal."
+          ],
+          "critical": true
+        }
+      ],
+      "hints": [
+        "Periksa trust dan otorisasi sebelum membaca hasil replay.",
+        "Satu commit memuat seluruh efek lokal; worker berada sesudahnya.",
+        "Unknown mencari key lama pada sumber otoritatif, bukan menghasilkan intent baru."
+      ],
+      "solutionSql": "SELECT attempt_id, business_key,\n CASE WHEN signature_valid IS NOT TRUE OR authorized IS NOT TRUE THEN 'reject_untrusted'\n      WHEN stored_payload IS NOT NULL AND stored_payload IS DISTINCT FROM incoming_payload THEN 'payload_conflict'\n      WHEN commit_known IS NOT TRUE THEN 'reconcile_same_key'\n      WHEN effects_match IS NOT TRUE THEN 'investigate_incomplete_effects'\n      ELSE 'return_recorded_result' END AS action\nFROM pg_temp.lesson_api_attempts ORDER BY attempt_id;",
+      "solutionExplanation": "Reference hanyalah classifier snapshot authored. Ia tidak mengklaim key, lock akun, memvalidasi signature, melakukan posting atau menjalankan worker. Pseudo API nyata harus menjaga semua jalur write, hasil commit, bounded retry dan privilege yang dijelaskan.",
+      "critical": true
+    },
+    "reflection": "Tulis pseudo API dari validasi ke commit, replay dan unknown lookup; jelaskan lock saldo, konflik payload, error rollback yang dapat diulang serta crash worker yang menyebabkan redelivery."
+  }
+]

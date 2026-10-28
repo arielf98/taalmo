@@ -68,7 +68,7 @@ export function DatabaseModelDiagram({ diagram }: { diagram: ModelDiagram }) {
                 <code aria-hidden="true">{relation.foreignKey}</code>
                 <div className={styles.relationshipLine} aria-hidden="true">
                   <span>1</span>
-                  <span>0..N</span>
+                  <span>{relation.childCardinality ?? "0..N"}</span>
                 </div>
               </div>
               <DatabaseSchemaTable table={relation.child} prefix="pg_temp" />

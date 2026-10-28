@@ -13,13 +13,13 @@
 
 ## Database Engineering — database curriculum
 
-The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L8 provide 111 published bilingual lessons; 9 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
+The unified path `/learn/database-engineering` registers 10 levels, 40 modules and 120 canonical IDs. L0–L9M01 provide 114 published bilingual lessons; 6 remain draft. Worked results, concept checks, practice variants/edge cases, hints, reflection and versioned progress use the existing player. Only L0–L2M01 have historical executed SQL evidence; later additions have source/diff review only. Practice predicts authored outcomes; the website does not execute learner SQL.
 
-## Recommended next milestone: L9M01 authoring
+## Recommended next milestone: L9M02 authoring
 
-L8 is fully authored and its existing level assessment is available under the usual mastery requirements. OLTP/OLAP reconciliation, data-model selection and ADR gates remain prediction/design exercises. No pipeline, new store, benchmark, migration or deployment was executed.
+L9M01 is authored: requirements/invariants, schema/constraints/migration reasoning and API transaction boundaries. Its ERD distinguishes 0..2 entries and 0..1 outbox/audit markers from required atomic posting. The TEMP schema and decision tables are teaching artifacts, not an implemented ledger API, migration or concurrency proof.
 
-Continue with L9M01 — Capstone: Design the Ledger: requirements/invariants, schema/constraints/migrations and API transaction boundaries. Keep prediction/design learning distinct from executed capstone evidence; do not claim unperformed load, concurrency, recovery or security drills. Preserve canonical IDs, content versions, fixture boundaries and learner progress. Follow AGENTS.md: source/diff review only, no tests/audits/SQL/runtime/browser/manual checks, lint, typecheck or build; commit, push and continue.
+Continue with L9M02 — Capstone: Load and Failure Testing. Teach the proposed 300 requests/second workload with 5% duplicate deliveries, correctness-first performance comparison and recovery evidence through the existing prediction fallback. Do not claim executed load, tuning, restore or failure drills. Follow AGENTS.md: source/diff review only; commit, push and continue.
 
 ## Later learning improvements
 

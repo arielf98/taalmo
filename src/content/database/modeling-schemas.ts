@@ -1,4 +1,5 @@
 import { typesConstraintsLessonSchemas } from "./types-constraints-schemas";
+import { ledgerDesignLessonSchemas } from "./ledger-design-schemas";
 import type { SchemaTable } from "./schema";
 
 export interface ModelDiagram {
@@ -9,6 +10,7 @@ export interface ModelDiagram {
     child: SchemaTable;
     foreignKey: string;
     description: string;
+    childCardinality?: "0..1" | "0..2";
   }[];
 }
 
@@ -326,6 +328,7 @@ const cacheItems: SchemaTable = {
 
 export const databaseLessonSchemas: Partial<Record<string, ModelDiagram>> = {
   ...typesConstraintsLessonSchemas,
+  ...ledgerDesignLessonSchemas,
   l8m02l03: {
     title: "Tenant · identitas composite dan referensi UML/ERD",
     note: "Semua kolom NOT NULL. PK invoice adalah (tenant_id, invoice_id); PK payment adalah (tenant_id, payment_id). Dua kolom FK payment bersama-sama menunjuk satu invoice pada tenant yang sama. Relasi ini menjaga referensi, bukan otorisasi read atau batas total payment.",
