@@ -1,8 +1,8 @@
 # Matematika untuk Cybersecurity — kurikulum dan task pelajar
 
-Status 8 November 2026: **L0 lengkap: 12 lesson bilingual, empat checkpoint/task modul, dan dua set assessment L0 × 13 soal. Sebanyak 108 lesson L1–L9 masih blueprint/draft**. Review source/diff saja; runtime belum diverifikasi.
+Status 8 November 2026: **15 lesson bilingual terbit: L0 lengkap (12 lesson, empat checkpoint/task modul, dua set assessment × 13 soal) dan L1M01 (3 lesson, checkpoint/task modul). Sebanyak 105 lesson berikutnya masih blueprint/draft**. Review source/diff saja; runtime belum diverifikasi.
 
-Target: 10 level × 4 modul × 3 lesson = **120 lesson**, 40 transfer task, 40 checkpoint modul, 10 assessment level, dan satu capstone portofolio. L0M01–L0M04 masing-masing sudah memiliki task/rubrik serta dua set checkpoint modul; assessment L0 tersedia, assessment L1–L9 dan capstone belum terbit. Jumlah keseluruhan adalah target authoring, bukan klaim konten sudah selesai. Kedalaman boleh menambah lesson; tidak boleh dikurangi untuk mempertahankan angka.
+Target: 10 level × 4 modul × 3 lesson = **120 lesson**, 40 transfer task, 40 checkpoint modul, 10 assessment level, dan satu capstone portofolio. L0M01–L0M04 dan L1M01 masing-masing sudah memiliki task/rubrik serta dua set checkpoint modul; assessment L0 tersedia, assessment L1–L9 dan capstone belum terbit. Jumlah keseluruhan adalah target authoring, bukan klaim konten sudah selesai. Kedalaman boleh menambah lesson; tidak boleh dikurangi untuk mempertahankan angka.
 
 [Kebutuhan/desain](../../docs/superpowers/specs/2026-11-07-cybersecurity-math-design.md) · [Task implementasi](../../docs/cybersecurity-math-tasks.md)
 
@@ -29,11 +29,13 @@ Tujuan: dapat menghitung tanpa takut simbol, menjaga unit, dan menerangkan jawab
 
 Assessment L0: worksheet numerasi minimal sepuluh item mencakup seluruh modul, unit wajib, dan dua kasus “per objek vs total”. Salah unit merupakan item kritis.
 
-Implementasi saat ini: dua set masing-masing 13 soal, setiap set mencakup seluruh 12 lesson serta satu kasus pembanding tambahan per akun vs total, dengan nol, sisa kelompok, unit waktu/byte, dan pangkat sebagai pemeriksaan kritis. Semua modul wajib lulus, seluruh item wajib dijawab, nilai ≥85%, dan semua critical benar. Kelulusan formatif terpisah dari review empat task tertulis; L1 tetap draft.
+Implementasi saat ini: dua set masing-masing 13 soal, setiap set mencakup seluruh 12 lesson serta satu kasus pembanding tambahan per akun vs total, dengan nol, sisa kelompok, unit waktu/byte, dan pangkat sebagai pemeriksaan kritis. Semua modul wajib lulus, seluruh item wajib dijawab, nilai ≥85%, dan semua critical benar. Kelulusan formatif terpisah dari review empat task tertulis; L1M01 terbuka untuk progres resmi setelah assessment ini lulus.
 
 ## L1 — aljabar dan pertumbuhan
 
 Prasyarat: L0. Tujuan: memodelkan hubungan dan menilai asumsi ruang pencarian.
+
+Status: L1M01 telah authored/published dengan tiga lesson, dua set checkpoint lesson/modul, visual substitusi/missing-addend serta budget, hint, feedback, task/rubrik. L1M02–M04 dan assessment L1 belum terbit.
 
 | Modul | Tiga lesson berurutan | Transfer task dan syarat jawaban |
 | --- | --- | --- |

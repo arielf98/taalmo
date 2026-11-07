@@ -7,6 +7,7 @@ import { Button } from "./ui/button";
 import styles from "./cybersecurity-math.module.css";
 import { MathMeasurementVisual } from "./cybersecurity-math-measurements";
 import { MathNumeracyVisual } from "./cybersecurity-math-numeracy";
+import { MathBudgetVisual } from "./cybersecurity-math-budget";
 
 export function MathQuestionCard({ question, answer, onAnswer }: {
   question: MathQuestion; answer?: MathAnswer; onAnswer: (value: MathAnswer | undefined) => void;
@@ -63,6 +64,7 @@ export function MathVisual({ activity, value, onChange }: {
   const [a, b] = value;
   if (activity.kind === "ratio" || activity.kind === "rate" || activity.kind === "bytes") return <MathMeasurementVisual activity={activity} value={value} onChange={onChange} />;
   if (activity.kind === "distance" || activity.kind === "rounding" || activity.kind === "powers") return <MathNumeracyVisual activity={activity} value={value} onChange={onChange} />;
+  if (activity.kind === "budget") return <MathBudgetVisual activity={activity} value={value} onChange={onChange} />;
   const division = activity.kind === "division";
   const count = activity.kind === "count";
   const fraction = activity.kind === "fraction";
@@ -70,9 +72,9 @@ export function MathVisual({ activity, value, onChange }: {
   const bounds = mathVisualBounds[activity.kind];
   const groups = fraction || change ? [] : count ? [a, b] : division ? [...Array.from({ length: Math.floor(a / b) }, () => b), a % b] : Array.from({ length: a }, () => b);
   const total = count ? a + b : division ? a : a * b;
-  const labels = locale === "id"
+  const labels = activity.inputLabels?.map((label) => label[locale]) ?? (locale === "id"
     ? (change ? ["Persentase awal", "Persentase akhir"] : fraction ? ["Bagian terpilih", "Banyak bagian sama besar per utuh"] : count ? ["Kelompok pertama", "Kelompok kedua"] : division ? ["Jumlah kejadian", "Ukuran kelompok"] : ["Jumlah akun", "Percobaan per akun"])
-    : (change ? ["Initial percentage", "Final percentage"] : fraction ? ["Selected parts", "Equal parts per whole"] : count ? ["First group", "Second group"] : division ? ["Event count", "Group size"] : ["Number of accounts", "Attempts per account"]);
+    : (change ? ["Initial percentage", "Final percentage"] : fraction ? ["Selected parts", "Equal parts per whole"] : count ? ["First group", "Second group"] : division ? ["Event count", "Group size"] : ["Number of accounts", "Attempts per account"]));
   const title = locale === "id" ? "Eksplorasi dengan angka kecil" : "Explore with small numbers";
   return (
     <section className={styles.visual} aria-label={title}>
@@ -107,7 +109,7 @@ export function MathVisual({ activity, value, onChange }: {
         <tbody>
           <tr><th scope="row">{labels[0]}</th><td>{a}</td></tr>
           <tr><th scope="row">{labels[1]}</th><td>{b}</td></tr>
-          <tr><th scope="row">{change ? (locale === "id" ? "Selisih poin persentase" : "Percentage-point difference") : fraction ? (locale === "id" ? "Bagian per utuh (desimal)" : "Parts per whole (decimal)") : division ? (locale === "id" ? "Kelompok penuh" : "Full groups") : (locale === "id" ? "Total kejadian" : "Total events")}</th><td>{change ? b - a : fraction ? (a / b).toLocaleString(locale, { maximumFractionDigits: 4 }) : division ? Math.floor(a / b) : total}</td></tr>
+          <tr><th scope="row">{change ? (locale === "id" ? "Selisih poin persentase" : "Percentage-point difference") : fraction ? (locale === "id" ? "Bagian per utuh (desimal)" : "Parts per whole (decimal)") : division ? (locale === "id" ? "Kelompok penuh" : "Full groups") : activity.inputLabels ? "Total" : (locale === "id" ? "Total kejadian" : "Total events")}</th><td>{change ? b - a : fraction ? (a / b).toLocaleString(locale, { maximumFractionDigits: 4 }) : division ? Math.floor(a / b) : total}</td></tr>
           {division && <tr><th scope="row">{locale === "id" ? "Kejadian tersisa" : "Remaining events"}</th><td>{a % b}</td></tr>}
           {change && <tr><th scope="row">{locale === "id" ? "Perubahan relatif terhadap awal" : "Relative change from initial"}</th><td>{a === 0 ? (locale === "id" ? "Tidak terdefinisi: pembagi nol" : "Undefined: zero denominator") : `${(100 * (b - a) / a).toLocaleString(locale, { maximumFractionDigits: 2 })}%`}</td></tr>}
         </tbody>

@@ -2,9 +2,9 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import { mathLessonHref, mathLessons, mathModules, mathPathHref, mathQuestions, mathRecordKey, mathTitle, type MathLesson } from "@/content/cybersecurity-math/catalog";
+import { mathLessonHref, mathLessons, mathLevels, mathModules, mathPathHref, mathQuestions, mathRecordKey, mathTitle, type MathLesson } from "@/content/cybersecurity-math/catalog";
 import { useLocale } from "@/lib/locale";
-import { mathAttemptComplete, mathLessonPassed, mathLessonUnlocked, mathModuleUnlocked, newMathAttempt, type MathRecord } from "@/lib/cybersecurity-math";
+import { mathAttemptComplete, mathLessonPassed, mathLessonUnlocked, mathLevelPassed, mathModulePassed, mathModuleUnlocked, newMathAttempt, type MathRecord } from "@/lib/cybersecurity-math";
 import { useMathProgress } from "@/lib/cybersecurity-math-progress";
 import { Badge, Workspace } from "./shell";
 import { Button } from "./ui/button";
@@ -46,15 +46,18 @@ export function CybersecurityMathPlayer({ lesson }: { lesson: MathLesson }) {
   const next = mathLessons[mathLessons.findIndex((item) => item.id === lesson.id) + 1];
   const previousModule = mathModules[mathModules.findIndex((module) => module.id === lesson.moduleId) - 1];
   const missingModuleCheckpoint = !mathModuleUnlocked(lesson.moduleId, progress) && previousModule;
+  const previousLevel = mathLevels[mathLevels.findIndex((level) => level.id === lesson.levelId) - 1];
+  const missingLevelAssessment = previousLevel && !mathLevelPassed(previousLevel.id, progress);
+  const nextNeedsLevel = next?.levelId !== lesson.levelId && mathModulePassed(lesson.moduleId, progress) && !mathLevelPassed(lesson.levelId, progress);
   return <Workspace>
     <div className={styles.page} lang={locale}>
       <div className="breadcrumb"><Link href={mathPathHref}>{mathTitle[locale]}</Link><span> / {lesson.moduleId.toUpperCase()}</span></div>
-      <div className="page-heading"><div><Badge>{locale === "id" ? "MULAI DARI NOL · L0" : "START FROM ZERO · L0"}</Badge><h1>{lesson.title[locale]}</h1><p>{content.objective[locale]}</p></div></div>
+      <div className="page-heading"><div><Badge>{locale === "id" ? "BELAJAR BERTAHAP" : "GUIDED LEARNING"} · {lesson.levelId.replace("cm-", "").toUpperCase()}</Badge><h1>{lesson.title[locale]}</h1><p>{content.objective[locale]}</p></div></div>
       <MathStorageNotice />
       {!unlocked && <div className={styles.notice}>
         <strong>{locale === "id" ? "Mode preview: progres belum dicatat. " : "Preview mode: progress is not recorded. "}</strong>
         {locale === "id" ? "Kamu boleh membaca dan mencoba. Selesaikan prasyarat sebelum memulai percobaan resmi. Jawaban preview tidak menjadi kelulusan otomatis." : "You may read and explore. Complete the prerequisite before starting an official attempt. Preview answers do not become completion records."}
-        {missingModuleCheckpoint ? <p><Link className={styles.link} href={`${mathPathHref}#checkpoint-${missingModuleCheckpoint.id}`}>{locale === "id" ? "Prasyarat: checkpoint modul " : "Prerequisite: module checkpoint "}{missingModuleCheckpoint.title[locale]}</Link></p> : previous?.content && <p><Link className={styles.link} href={mathLessonHref(previous.id)}>{locale === "id" ? "Prasyarat: " : "Prerequisite: "}{previous.title[locale]}</Link></p>}
+        {missingLevelAssessment ? <p><Link className={styles.link} href={`${mathPathHref}#assessment-${previousLevel.id}`}>{locale === "id" ? "Prasyarat: assessment " : "Prerequisite: assessment "}{previousLevel.title[locale]}</Link></p> : missingModuleCheckpoint ? <p><Link className={styles.link} href={`${mathPathHref}#checkpoint-${missingModuleCheckpoint.id}`}>{locale === "id" ? "Prasyarat: checkpoint modul " : "Prerequisite: module checkpoint "}{missingModuleCheckpoint.title[locale]}</Link></p> : previous?.content && <p><Link className={styles.link} href={mathLessonHref(previous.id)}>{locale === "id" ? "Prasyarat: " : "Prerequisite: "}{previous.title[locale]}</Link></p>}
       </div>}
       {completed && <p className={styles.notice}>{locale === "id" ? "Checkpoint lesson sudah selesai. Kamu boleh mengulang; kelulusan sebelumnya tetap tersimpan. Ini progres formatif, bukan sertifikasi." : "This lesson checkpoint is complete. You can retake it; the earlier completion stays saved. This is formative progress, not certification."}</p>}
       <nav className={styles.steps} aria-label={locale === "id" ? "Langkah lesson" : "Lesson steps"}>
@@ -111,7 +114,7 @@ export function CybersecurityMathPlayer({ lesson }: { lesson: MathLesson }) {
       </div>
       {completed && (next?.content && mathLessonUnlocked(next.id, progress)
         ? <Button asChild><Link href={mathLessonHref(next.id)}>{locale === "id" ? "Lanjutkan: " : "Continue: "}{next.title[locale]}<ArrowRight size={16} /></Link></Button>
-        : <Button asChild><Link href={`${mathPathHref}#checkpoint-${lesson.moduleId}`}>{locale === "id" ? "Lanjutkan ke checkpoint modul" : "Continue to the module checkpoint"}<ArrowRight size={16} /></Link></Button>)}
+        : <Button asChild><Link href={nextNeedsLevel ? `${mathPathHref}#assessment-${lesson.levelId}` : `${mathPathHref}#checkpoint-${lesson.moduleId}`}>{nextNeedsLevel ? (locale === "id" ? "Lanjutkan ke assessment level" : "Continue to the level assessment") : (locale === "id" ? "Lanjutkan ke checkpoint modul" : "Continue to the module checkpoint")}<ArrowRight size={16} /></Link></Button>)}
       {unlocked && <Button variant="ghost" onClick={() => restart(lesson.id)}>{locale === "id" ? "Mulai ulang seluruh lesson; kelulusan tetap tersimpan" : "Restart the whole lesson; earned completion stays saved"}</Button>}
       <p className={styles.muted}>{locale === "id" ? "Progres hanya di browser dan perangkat ini. Menghapus penyimpanan menghapus progres. Simpan salinan catatan penting di luar browser; perubahan bersamaan di beberapa tab dapat saling menimpa." : "Progress stays in this browser on this device. Clearing storage deletes it. Keep important notes outside the browser; simultaneous changes in multiple tabs can overwrite each other."}</p>
     </div>

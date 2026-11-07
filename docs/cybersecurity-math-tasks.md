@@ -1,6 +1,6 @@
 # Backlog — menu Matematika untuk Cybersecurity
 
-Diperbarui 8 November 2026. Status: **CM-01 dan CM-02a–CM-02c diimplementasikan; L0 lengkap; CM-03a dan seterusnya belum selesai**.
+Diperbarui 8 November 2026. Status: **CM-01, CM-02a–CM-02c dan CM-03a diimplementasikan; L0 lengkap dan L1M01 terbit; CM-03b dan seterusnya belum selesai**.
 
 [Kebutuhan/desain](superpowers/specs/2026-11-07-cybersecurity-math-design.md) · [Kurikulum dan task pelajar](../curriculum/cybersecurity-math/README.md)
 
@@ -57,7 +57,7 @@ Penerimaan: masing-masing subtask memenuhi definisi modul selesai dan punya comm
 
 Dependency: CM-02; kerjakan/commit/push tiap modul sebelum berikutnya.
 
-- [ ] CM-03a: `cm-l1m01` — variabel, persamaan, pertidaksamaan, budget integer.
+- [x] CM-03a: `cm-l1m01` — tiga lesson bilingual variabel/substitusi, persamaan dua sisi, pertidaksamaan/budget integer, visual dan dua set checkpoint lesson/modul serta task/rubrik. Navigasi antarlevel mengarah ke assessment L0 bila perlu.
 - [ ] CM-03b: `cm-l1m02` — fungsi, domain, grafik, komposisi/inverse.
 - [ ] CM-03c: `cm-l1m03` — pangkat, linear vs eksponensial, ruang pilihan.
 - [ ] CM-03d: `cm-l1m04` — log₂, worst/average search, asumsi distribusi; assessment L1.
@@ -173,11 +173,11 @@ Penerimaan: seluruh materi disepakati selesai di-author tanpa menyamakan source 
 | Kebutuhan, kurikulum, learner task, backlog | Ditulis; builder review selesai dan desain disetujui |
 | Persetujuan desain detail | Disetujui 7 November 2026 |
 | Menu/routing/player/progres matematika | CM-01 diimplementasikan, source/diff review |
-| Lesson matematika published | 12/120 target; seluruh L0 lengkap, 108 draft |
+| Lesson matematika published | 15/120 target; L0 lengkap dan L1M01 terbit, 105 draft |
 | Assessment level matematika | Dua set L0 × 13 soal tersedia; L1–L9 belum terbit |
 | Pengujian/runtime/build/lint/typecheck | Tidak dilakukan sesuai AGENTS.md |
 | Review capstone oleh manusia | Belum ada peserta/artefak/review |
 
 Commit `9d96ed4` (dokumen) dan `1e6f108` (CM-01) sudah dipush ke origin/main setelah izin eksplisit pengguna. Pengguna juga mengizinkan push seluruh commit roadmap matematika berikutnya ke arielf98/taalmo branch main.
 
-CM-02a dipush sebagai `28eba62`, CM-02b sebagai `d55524a`. Berikutnya CM-03a/L1M01: variabel, persamaan, pertidaksamaan dan budget integer. L1–L9 serta capstone tetap belum selesai; L0 selesai authored tanpa klaim runtime terverifikasi.
+CM-02a dipush sebagai `28eba62`, CM-02b sebagai `d55524a`, CM-02c/L0 lengkap sebagai `89f5ce2`. Berikutnya CM-03b/L1M02: input/output/domain/range, fungsi linear dan grafik, komposisi/inverse sederhana. Sisa L1, L2–L9 serta capstone belum selesai; materi authored tidak diklaim terverifikasi runtime.

@@ -1,6 +1,6 @@
 # Kebutuhan dan desain — Matematika untuk Cybersecurity
 
-Dibuat 7 November, diperbarui 8 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-02c diimplementasikan; L0 lengkap dengan review source/diff**.
+Dibuat 7 November, diperbarui 8 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-03a diimplementasikan; L0 lengkap dan L1M01 terbit dengan review source/diff**.
 
 Pengguna memilih **jalur lengkap bertahap** dan pada 7 November 2026 menyetujui dokumen desain ini serta memulai implementasi menu dan tiga lesson L0M01. Pengguna juga mengizinkan push dokumen ke GitHub arielf98/taalmo branch main. Ukuran kurikulum, aturan penilaian, dan keputusan teknis di bawah merupakan usulan perancang yang tercakup dalam persetujuan desain.
 
@@ -250,3 +250,9 @@ Status kini **9 lesson published, 111 draft**; L0M04, assessment L0, dan level l
 L0M04 menambah tiga lesson bilingual negatif/jarak absolut, estimasi/pembulatan, serta pangkat dengan worked example, latihan/edge/hint, dua set checkpoint dan task/rubrik. Input signed memakai slider keyboard dan bounds yang sesuai; rounding nonnegatif memakai halfway naik, dan 0^0 dikecualikan. Seluruh L0 kini **12 lesson published, 108 draft**, empat checkpoint/task modul, serta assessment L0 dua set × 13 soal yang mencakup semua lesson dan pembanding per-akun/total serta memeriksa unit/nol/pangkat.
 
 Assessment level memerlukan seluruh modul lulus, semua jawaban terisi, nilai aktual ≥85%, dan semua critical benar. ID/version, parsing flag/evidence, snapshot kelulusan, riwayat bantuan/set, solusi dan retake mengikuti model yang sama; grade level tidak disamakan dengan persentase aktivitas. L1 tetap draft, walaupun engine sekarang memiliki gate antarlevel berdasarkan assessment yang benar-benar terdaftar. Tidak ada sertifikasi atau review task otomatis. Berikutnya CM-03a/L1M01; evidence tetap source/diff, tanpa pemeriksaan runtime.
+
+## 17. Lanjutan CM-03a — L1M01
+
+Tiga lesson variabel/substitusi, persamaan dua sisi, dan pertidaksamaan/budget integer diterbitkan, lengkap dengan worked example, dua variasi/edge case, hint/feedback, dua set checkpoint lesson/modul serta task/rubrik. Label visual penjumlahan menjelaskan x dan konstanta; model budget 40+3x menunjukkan batas integer dan biaya tetap, termasuk kasus tidak ada solusi layak. Header dan navigasi mengikuti level serta membedakan assessment L0 dari checkpoint modul sebagai prasyarat.
+
+Status kini **15 lesson published, 105 draft**, lima checkpoint/task modul, dan assessment L0 dua set × 13 soal. L1M01 memerlukan L0 lulus; assessment L1 tetap belum terbit sampai semua modul lengkap. Berikutnya CM-03b/L1M02. Evidence source/diff saja; tidak ada test, browser/manual check, lint, typecheck, build atau eksekusi contoh.
