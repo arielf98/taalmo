@@ -1,7 +1,11 @@
-import { copy, type Copy } from "./types";
+import { copy, type Copy, type MathQuestion } from "./types";
 import { foundation, foundationModuleChecks } from "./foundation";
 import { fractions, fractionsModuleChecks, fractionsTask } from "./fractions";
-const authored = { ...foundation, ...fractions };
+import { measurements, measurementsModuleChecks, measurementsTask } from "./measurements";
+const authored = { ...foundation, ...fractions, ...measurements };
+const authoredModuleChecks: Partial<Record<string, [MathQuestion[], MathQuestion[]]>> = {
+  "cm-l0m01": foundationModuleChecks, "cm-l0m02": fractionsModuleChecks, "cm-l0m03": measurementsModuleChecks,
+};
 
 export const mathPathHref = "/learn/cybersecurity-math";
 export const mathVersion = "1.0.0";
@@ -88,7 +92,7 @@ export const mathLevels = outlines.map((level, levelIndex) => ({
     const id = `cm-l${levelIndex}m${String(moduleIndex + 1).padStart(2, "0")}`;
     return {
       id, title: module.title, levelId: `cm-l${levelIndex}`,
-      checks: id === "cm-l0m01" ? foundationModuleChecks : id === "cm-l0m02" ? fractionsModuleChecks : undefined,
+      checks: authoredModuleChecks[id],
       lessons: module.lessons.map((title, lessonIndex) => {
         const lessonId = `${id}l${String(lessonIndex + 1).padStart(2, "0")}`;
         return { id: lessonId, title, moduleId: id, levelId: `cm-l${levelIndex}`, content: authored[lessonId] };
@@ -113,8 +117,9 @@ export const foundationTask = copy(
   "Four accounts each receive six attempts. Make a per-account table; calculate 24 initial attempts, 28 after four extra in total, and 40 after four extra per account. Explain the units, show one empty-group example, then explain how many groups of size five are needed to process 28 events. Write your steps, result, assumptions, and limits: a count of attempts alone does not prove an attack.",
 );
 
-export const mathModuleTasks: Partial<Record<string, Copy>> = { "cm-l0m01": foundationTask, "cm-l0m02": fractionsTask };
+export const mathModuleTasks: Partial<Record<string, Copy>> = { "cm-l0m01": foundationTask, "cm-l0m02": fractionsTask, "cm-l0m03": measurementsTask };
 export const mathModuleCheckDescriptions: Partial<Record<string, Copy>> = {
   "cm-l0m01": copy("Lulus tiga lesson dahulu. Jawab lima soal; perlu nilai minimal 80% dan semua soal kritis benar. Soal kritis mencakup nol, tambahan total, dan urutan operasi.", "Complete all three lessons first. Answer five questions; you need at least 80% and every critical question correct. Critical questions cover zero, additions to totals, and operation order."),
   "cm-l0m02": copy("Lulus tiga lesson dan checkpoint modul sebelumnya dahulu. Jawab lima soal, perlu minimal 80% dan semua soal kritis benar. Bedakan pecahan, angka persen, desimal, poin persentase, dan perubahan relatif.", "Complete the three lessons and the previous module checkpoint first. Answer five questions, requiring at least 80% and every critical question correct. Distinguish fractions, percentage numbers, decimals, percentage points, and relative change."),
+  "cm-l0m03": copy("Selesaikan prasyarat dan tiga lesson modul ini. Lima soal memerlukan ≥80% dan seluruh soal kritis benar: waktu, detik/menit, kB/KiB, dan bit/byte. Unit tujuan dinyatakan pada tiap soal.", "Complete prerequisites and all three lessons. Five questions require ≥80% and every critical item correct: duration, seconds/minutes, kB/KiB, and bits/bytes. Each question states its target unit."),
 };

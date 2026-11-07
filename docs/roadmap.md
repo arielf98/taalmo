@@ -36,7 +36,9 @@ Rilis CM-01 mengimplementasikan player enam langkah, visual kelompok/garis bilan
 
 CM-01 disimpan/push sebagai `1e6f108`. L0M02/CM-02a kemudian menambahkan tiga lesson pecahan, desimal/persentase, dan poin vs perubahan relatif, dengan visual bagian sama besar/rate, jawaban pecahan eksak serta desimal koma/titik, dua set checkpoint dan task/rubrik. UI checkpoint dipakai oleh kedua modul; navigasi mengarahkan peserta ke checkpoint modul yang masih wajib sebelum melanjutkan. Validasi restore mengikuti batas input yang sama; hasil visual yang dibulatkan ditandai pendekatan, dan baseline nol tidak dibagi.
 
-**Status authoring: 6 lesson published, 114 draft.** Assessment L0, level lanjutan, dan capstone belum terbit. Berikutnya CM-02b/L0M03: rasio/laju/unit, kemudian L0M04 dan L1–L9 per modul lengkap. Source/diff review termasuk reviewer terpisah; tidak menjalankan test, browser/manual check, lint, typecheck, build, atau contoh. Tidak ada merge/deploy.
+L0M03/CM-02b menambahkan tiga lesson rasio senilai, laju/waktu, serta bit/byte/kB/KiB. Tabel interaktif memperlihatkan scaling kedua besaran, waktu dari target/laju hipotetis, dan konversi unit; zero rate dan zero work dibedakan tanpa pembagian nol. Semua lesson/modul bilingual memiliki latihan/edge cases/hints, dua set checkpoint, task dan rubrik; tidak mengklaim rate sebagai benchmark.
+
+**Status authoring: 9 lesson published, 111 draft.** Assessment L0, level lanjutan, dan capstone belum terbit. Berikutnya CM-02c/L0M04 beserta assessment L0, lalu L1–L9 per modul lengkap. Source/diff review termasuk reviewer terpisah; tidak menjalankan test, browser/manual check, lint, typecheck, build, atau contoh. Tidak ada merge/deploy.
 
 ## Later learning improvements
 

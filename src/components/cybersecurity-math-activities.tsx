@@ -5,6 +5,7 @@ import { mathAnswer, mathAnswerCorrect, mathFraction } from "@/lib/cybersecurity
 import { mathVisualBounds, type MathAnswer, type MathLessonContent, type MathQuestion } from "@/content/cybersecurity-math/types";
 import { Button } from "./ui/button";
 import styles from "./cybersecurity-math.module.css";
+import { MathMeasurementVisual } from "./cybersecurity-math-measurements";
 
 export function MathQuestionCard({ question, answer, onAnswer }: {
   question: MathQuestion; answer?: MathAnswer; onAnswer: (value: MathAnswer | undefined) => void;
@@ -40,6 +41,7 @@ export function MathQuestionCard({ question, answer, onAnswer }: {
         </label>}
         <Button type="submit">{locale === "id" ? "Periksa jawaban" : "Check answer"}</Button>
       </form>
+      {!fraction && question.decimalPlaces === undefined && <p className={styles.muted}>{locale === "id" ? "Ketik angka bulat tanpa pemisah ribuan atau unit, misalnya 1234. Titik/koma pada tampilan jumlah bukan bagian jawaban integer." : "Type an integer without thousands separators or units, for example 1234. Grouping commas/points in displayed counts are not part of an integer answer."}</p>}
       <div aria-live="polite">
         {error && <p id={`${fieldId}-error`} role="alert">{fraction ? (locale === "id" ? "Isi pembilang bulat −10.000 sampai 10.000 dan penyebut bulat 1 sampai 10.000; penyebut nol ditolak." : "Enter an integer numerator from −10,000 to 10,000 and denominator from 1 to 10,000; zero denominators are rejected.") : (locale === "id" ? "Masukkan angka −1.000.000 sampai 1.000.000 sesuai jenis jawaban. Untuk desimal boleh memakai koma/titik, maksimal 4 angka di belakangnya. Kolom kosong bukan nol." : "Enter a number from −1,000,000 to 1,000,000 of the requested type. Decimals allow a comma or point and up to 4 decimal places. Empty is not zero.")}</p>}
         {question.decimalPlaces !== undefined && <p className={styles.muted}>{locale === "id" ? `Bulatkan hingga ${question.decimalPlaces} angka desimal; toleransi ±${0.5 * 10 ** -question.decimalPlaces}.` : `Round to ${question.decimalPlaces} decimal places; tolerance ±${0.5 * 10 ** -question.decimalPlaces}.`}</p>}
@@ -58,6 +60,7 @@ export function MathVisual({ activity, value, onChange }: {
 }) {
   const { locale } = useLocale();
   const [a, b] = value;
+  if (activity.kind === "ratio" || activity.kind === "rate" || activity.kind === "bytes") return <MathMeasurementVisual activity={activity} value={value} onChange={onChange} />;
   const division = activity.kind === "division";
   const count = activity.kind === "count";
   const fraction = activity.kind === "fraction";

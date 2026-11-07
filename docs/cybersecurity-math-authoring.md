@@ -2,9 +2,9 @@
 
 ## Sumber dan batas publikasi
 
-Blueprint ada di [kurikulum](../curriculum/cybersecurity-math/README.md), kontrak produk di [desain](superpowers/specs/2026-11-07-cybersecurity-math-design.md), dan urutan kerja di [backlog](cybersecurity-math-tasks.md). L0M01–L0M02 sudah authored: 6 lesson, masing-masing modul dengan 2 × 5 soal dan task/rubrik. Level assessment belum authored; 114 lesson target lain tetap draft.
+Blueprint ada di [kurikulum](../curriculum/cybersecurity-math/README.md), kontrak produk di [desain](superpowers/specs/2026-11-07-cybersecurity-math-design.md), dan urutan kerja di [backlog](cybersecurity-math-tasks.md). L0M01–L0M03 sudah authored: 9 lesson, masing-masing modul dengan 2 × 5 soal dan task/rubrik. Level assessment belum authored; 111 lesson target lain tetap draft.
 
-`src/content/cybersecurity-math/catalog.ts` adalah metadata bilingual seluruh target; `foundation.ts` dan `fractions.ts` masing-masing memuat tiga lesson lengkap dan dua set soal modul; `types.ts` mendefinisikan kontrak konten. Publikasi diturunkan dari keberadaan konten lengkap, bukan flag yang diisi untuk stub. Karena itu, jangan memasukkan objek konten parsial ke map authored. Route `[lessonId]` hanya menghasilkan static params untuk konten terbit dan menolak draft/ID tidak dikenal.
+`src/content/cybersecurity-math/catalog.ts` adalah metadata bilingual seluruh target; `foundation.ts`, `fractions.ts`, dan `measurements.ts` masing-masing memuat tiga lesson lengkap dan dua set soal modul; `types.ts` mendefinisikan kontrak konten. Publikasi diturunkan dari keberadaan konten lengkap, bukan flag yang diisi untuk stub. Karena itu, jangan memasukkan objek konten parsial ke map authored. Route `[lessonId]` hanya menghasilkan static params untuk konten terbit dan menolak draft/ID tidak dikenal.
 
 `Copy` menyimpan pasangan teks `{ id, en }` yang dipilih dengan preferensi `useLocale` yang sama dengan aplikasi. UI menggunakan pasangan bilingual langsung; satu label menu memakai kamus `messages.ts`. Penggantian locale tidak mengganti ID atau isi angka contoh. Saat menerjemahkan, pertahankan angka, set soal, urutan pilihan, asumsi, dan makna feedback.
 
@@ -17,6 +17,8 @@ Visual yang sudah tersedia: `count` (dua kelompok dijumlahkan), `groups` (kelomp
 Rentang visual bersama berada di `mathVisualBounds`: count/groups 0–8; division total 0–24 dan divisor 1–8; fraction bagian terpilih 0–8 dan penyebut 1–8; perubahan rate awal/akhir 0–100. Baseline nol menampilkan relatif tidak terdefinisi. Desimal visual dibulatkan sampai 4 angka, persen 2 angka; tanda ≈ dan penjelasan membedakannya dari nilai eksak.
 
 Jawaban numerik dibatasi ±1.000.000; integer tetap integer, desimal koma/titik maksimal 4 angka di belakang separator dan tanpa pemisah ribuan/ekspresi. Jawaban pecahan disimpan sebagai `{numerator, denominator}`, numerator integer ±10.000 dan denominator integer 1–10.000; perkalian silang maksimal 100.000.000 tetap exact safe integer. Parser restore memakai batas yang sama. Kolom kosong, denominator nol, NaN/Infinity dan ekspresi ditolak. Soal bertanda negatif memakai keyboard teks agar minus tersedia di ponsel. Belum ada parser ekspresi atau bigint.
+
+L0M03 menambahkan jenis `ratio`, `rate`, dan `bytes`, dirender komponen khusus `MathMeasurementVisual`. Bounds ratio: 1–8 akun dan 0–24 catatan awal; rate: 0–100 kejadian/detik dan 0–2.000 target; bytes: jumlah 0–8, unit index B/kB/KiB 0–2. Satu-satunya select menyimpan index tervalidasi. Target nol tidak perlu pemrosesan; rate nol dengan target positif tidak memiliki waktu penyelesaian dalam model. Tabel/hasil live menyebut satuan, pembulatan dan batas hipotesis. Konversi unit mengikuti [referensi NIST tentang binary prefixes](https://physics.nist.gov/cuu/Units/binary.html), ditinjau 7 November 2026; tidak menggunakan angka throughput nyata.
 
 ## Progres dan penilaian
 

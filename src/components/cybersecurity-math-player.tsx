@@ -65,7 +65,7 @@ export function CybersecurityMathPlayer({ lesson }: { lesson: MathLesson }) {
         {record.step === 0 && <><p>{content.hook[locale]}</p><p className={styles.muted}>{locale === "id" ? "Prediksi awal tidak mengurangi nilai. Kesalahan membantu kita menemukan bagian yang perlu dijelaskan." : "Your initial prediction does not reduce your score. Mistakes help us find what needs explaining."}</p>{question(content.prediction)}</>}
         {record.step === 1 && <>
           <MathVisual activity={content.exploration} value={record.exploration} onChange={(value) => patch({ exploration: value, answers: { [content.exploration.question.id]: undefined } })} />
-          {targetReached ? question(content.exploration.question) : <p className={styles.notice}>{locale === "id" ? "Atur kedua angka sesuai instruksi untuk membuka pertanyaan pengamatan." : "Set both numbers as instructed to open the observation question."}</p>}
+          {targetReached ? question(content.exploration.question) : <p className={styles.notice}>{locale === "id" ? "Atur kontrol sesuai instruksi untuk membuka pertanyaan pengamatan." : "Set the controls as instructed to open the observation question."}</p>}
         </>}
         {record.step === 2 && <>
           {content.explanation.map((paragraph, index) => <p key={index}>{paragraph[locale]}</p>)}

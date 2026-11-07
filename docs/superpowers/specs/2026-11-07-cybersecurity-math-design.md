@@ -1,6 +1,6 @@
 # Kebutuhan dan desain — Matematika untuk Cybersecurity
 
-Tanggal: 7 November 2026. Status: **desain disetujui pengguna; CM-01 dan CM-02a diimplementasikan dengan review source/diff**.
+Tanggal: 7 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-02b diimplementasikan dengan review source/diff**.
 
 Pengguna memilih **jalur lengkap bertahap** dan pada 7 November 2026 menyetujui dokumen desain ini serta memulai implementasi menu dan tiga lesson L0M01. Pengguna juga mengizinkan push dokumen ke GitHub arielf98/taalmo branch main. Ukuran kurikulum, aturan penilaian, dan keputusan teknis di bawah merupakan usulan perancang yang tercakup dalam persetujuan desain.
 
@@ -238,3 +238,9 @@ Kode hanya memakai grader integer dan tiga jenis visual yang diperlukan L0M01. P
 Setelah rilis CM-01 `1e6f108` dipush, L0M02 menambahkan tiga lesson bilingual pecahan, desimal/persentase, dan perubahan relatif vs poin persentase. Status terkini **6 lesson terbit, 114 draft**. Terdapat dua task/rubrik modul dan dua set checkpoint per lesson/modul. Grader kini mendukung pasangan pecahan exact dengan penyebut positif serta desimal koma/titik yang dibatasi dan diberi toleransi eksplisit. Visual pecahan/persentase memiliki tabel, tanda pendekatan untuk pembulatan, dan proteksi baseline nol. Progress ID/versi L0M01 tetap sama; seluruh penilaian tetap formatif.
 
 Navigasi akhir lesson menuju checkpoint modul yang belum lulus sebelum masuk modul berikutnya; preview menyebut checkpoint modul sebagai prasyarat bila itulah yang belum selesai. Review terpisah terhadap source/diff mencakup kompatibilitas jawaban lama, penyebut/input desimal, pembulatan, baseline nol, navigasi serta pengumuman visual. Tidak ada test atau eksekusi runtime. Pekerjaan berikutnya CM-02b/L0M03; assessment L0 dan materi sesudah L0M02 tetap belum terbit.
+
+## 15. Lanjutan CM-02b — L0M03
+
+Tiga lesson rasio/laju/unit ditambahkan dengan tabel eksplorasi bersatuan, dua variasi latihan dan edge case tiap lesson, tiga hint, feedback, worked steps, transfer/refleksi, serta dua set checkpoint lesson/modul dan task/rubrik. Perhitungan rate memakai model konstan hipotetis, bukan benchmark. Zero work dibedakan dari zero rate dengan target positif. Unit bytes memakai definisi eksplisit dan select yang tervalidasi; progress/storage kontrak lama dipertahankan.
+
+Status kini **9 lesson published, 111 draft**; L0M04, assessment L0, dan level lanjutan belum terbit. Berikutnya CM-02c. Review tetap source/diff saja tanpa test, browser/manual check, lint, typecheck, build, audit, atau mengeksekusi contoh.

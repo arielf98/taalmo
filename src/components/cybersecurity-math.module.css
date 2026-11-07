@@ -23,7 +23,7 @@
 .question p { margin: 0; }
 .question form { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
 .question label, .controls label, .writing { display: grid; gap: 8px; font-size: 14px; font-weight: 600; }
-.question input, .controls input, .writing textarea { font: inherit; color: inherit; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 10px 12px; }
+.question input, .controls input, .controls select, .writing textarea { font: inherit; color: inherit; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 10px 12px; }
 .question input, .controls input { width: 130px; max-width: 100%; }
 .writing textarea { width: 100%; min-height: 140px; resize: vertical; font-weight: 400; line-height: 1.7; }
 .feedback { padding: 12px; border-left: 3px solid var(--mint); background: var(--surface); line-height: 1.7; }

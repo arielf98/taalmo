@@ -1,8 +1,8 @@
 # Matematika untuk Cybersecurity — kurikulum dan task pelajar
 
-Status 7 November 2026: **L0M01–L0M02 diimplementasikan dengan enam lesson bilingual; 114 lesson berikutnya masih blueprint/draft**. Review source/diff saja; runtime belum diverifikasi.
+Status 7 November 2026: **L0M01–L0M03 diimplementasikan dengan sembilan lesson bilingual; 111 lesson berikutnya masih blueprint/draft**. Review source/diff saja; runtime belum diverifikasi.
 
-Target: 10 level × 4 modul × 3 lesson = **120 lesson**, 40 transfer task, 40 checkpoint modul, 10 assessment level, dan satu capstone portofolio. L0M01 dan L0M02 masing-masing sudah memiliki task/rubrik serta dua set checkpoint modul; assessment level dan capstone belum terbit. Jumlah keseluruhan adalah target authoring, bukan klaim konten sudah selesai. Kedalaman boleh menambah lesson; tidak boleh dikurangi untuk mempertahankan angka.
+Target: 10 level × 4 modul × 3 lesson = **120 lesson**, 40 transfer task, 40 checkpoint modul, 10 assessment level, dan satu capstone portofolio. L0M01–L0M03 masing-masing sudah memiliki task/rubrik serta dua set checkpoint modul; assessment level dan capstone belum terbit. Jumlah keseluruhan adalah target authoring, bukan klaim konten sudah selesai. Kedalaman boleh menambah lesson; tidak boleh dikurangi untuk mempertahankan angka.
 
 [Kebutuhan/desain](../../docs/superpowers/specs/2026-11-07-cybersecurity-math-design.md) · [Task implementasi](../../docs/cybersecurity-math-tasks.md)
 
