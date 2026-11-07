@@ -14,11 +14,15 @@ import {
   ChevronRight,
   Database,
   Check,
+  ShieldCheck,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { pathHref } from "@/content/lessons";
 import { databaseEngineeringProgress } from "@/lib/curriculum";
 import { useProgress } from "@/lib/progress";
+import { mathPathHref } from "@/content/cybersecurity-math/catalog";
+import { mathSummary } from "@/lib/cybersecurity-math";
+import { useMathProgress } from "@/lib/cybersecurity-math-progress";
 const themeSubscribe = (fn: () => void) => {
   window.addEventListener("taalmo-theme", fn);
   return () => window.removeEventListener("taalmo-theme", fn);
@@ -100,6 +104,12 @@ export function Header() {
             {t("Learn")}
           </Link>
           <Link
+            className={pathname.startsWith(mathPathHref) ? "active" : ""}
+            href={mathPathHref}
+          >
+            {t("Cybersecurity Math")}
+          </Link>
+          <Link
             className={pathname.startsWith("/challenges") ? "active" : ""}
             href="/challenges"
           >
@@ -138,9 +148,13 @@ export function Workspace({
   const path = usePathname();
   const { progress } = useProgress();
   const pathProgress = databaseEngineeringProgress(progress);
+  const { progress: mathProgress } = useMathProgress();
+  const math = mathSummary(mathProgress);
+  const mathActive = path.startsWith(mathPathHref);
   const links = [
     { href: "/dashboard", label: "My learning", icon: LayoutGrid },
     { href: pathHref, label: "Database Engineering", icon: Database },
+    { href: mathPathHref, label: "Cybersecurity Math", icon: ShieldCheck },
     { href: "/challenges", label: "Challenges", icon: FlaskConical },
   ];
   return (
@@ -152,7 +166,7 @@ export function Workspace({
           <nav aria-label={t("Workspace")}>
             {links.map((l) => (
               <Link
-                className={path === l.href ? "selected" : ""}
+                className={(path === l.href || (l.href === mathPathHref && mathActive)) ? "selected" : ""}
                 key={l.href}
                 href={l.href}
               >
@@ -163,22 +177,22 @@ export function Workspace({
           </nav>
           <div className="sidebar-section">
             <div className="eyebrow muted">{t("CURRENT PATH")}</div>
-            <Link className="sidebar-path" href={pathHref}>
-              <Database size={19} />
-              <span>{t("Database Engineering")}</span>
+            <Link className="sidebar-path" href={mathActive ? mathPathHref : pathHref}>
+              {mathActive ? <ShieldCheck size={19} /> : <Database size={19} />}
+              <span>{t(mathActive ? "Cybersecurity Math" : "Database Engineering")}</span>
               <ChevronRight size={14} />
             </Link>
             <div className="progress-track">
               <span
                 style={{
-                  width: `${pathProgress.percent}%`,
+                  width: `${mathActive ? math.percent : pathProgress.percent}%`,
                 }}
               />
             </div>
             <small>
               {t("{0} of {1} milestones complete", [
-                pathProgress.completedMilestones,
-                pathProgress.totalMilestones,
+                mathActive ? math.completed : pathProgress.completedMilestones,
+                mathActive ? math.total : pathProgress.totalMilestones,
               ])}
             </small>
           </div>

@@ -42,6 +42,7 @@ import englishLoadFailure from "./messages/en-database-load-failure.json" with {
 import englishDefense from "./messages/en-database-defense.json" with { type: "json" };
 export type Locale = "en" | "id";
 const indonesian: Record<string, string> = {
+  "Cybersecurity Math": "Matematika Cybersecurity",
   ...interfaceMessages,
   ...learningMessages,
   ...commonMessages,

@@ -1,0 +1,50 @@
+.page { display: grid; gap: 24px; min-width: 0; }
+.page :global(.button) { white-space: normal; height: auto; min-height: 42px; max-width: 100%; text-align: center; }
+.card { padding: clamp(18px, 3vw, 30px); display: grid; gap: 16px; min-width: 0; }
+.card h2, .card h3, .card p { margin: 0; }
+.card p, .card li { line-height: 1.75; }
+.card h2 { font-size: 24px; }
+.muted { color: var(--muted); font-size: 14px; }
+.actions, .stats { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.stats { gap: 24px; }
+.stat { display: grid; gap: 4px; }
+.stat strong { font-size: 28px; }
+.levels { display: grid; gap: 16px; }
+.level { border: 1px solid var(--border); border-radius: 16px; padding: 20px; }
+.level > summary { cursor: pointer; font-weight: 750; line-height: 1.7; }
+.module { padding: 20px 0; border-top: 1px solid var(--border); margin-top: 16px; }
+.module ol { display: grid; gap: 12px; padding-left: 24px; }
+.module li > span { margin-left: 8px; font-size: 12px; color: var(--muted); }
+.module a, .link { text-decoration: underline; text-underline-offset: 4px; }
+.steps { display: flex; flex-wrap: wrap; gap: 8px; }
+.steps button { border: 1px solid var(--border); border-radius: 20px; padding: 8px 12px; background: var(--surface); color: inherit; cursor: pointer; }
+.steps button[aria-current="step"] { background: var(--mint); color: #172d35; }
+.question { display: grid; gap: 12px; padding: 18px; border: 1px solid var(--border); border-radius: 14px; }
+.question p { margin: 0; }
+.question form { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.question label, .controls label, .writing { display: grid; gap: 8px; font-size: 14px; font-weight: 600; }
+.question input, .controls input, .writing textarea { font: inherit; color: inherit; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 10px 12px; }
+.question input, .controls input { width: 130px; max-width: 100%; }
+.writing textarea { width: 100%; min-height: 140px; resize: vertical; font-weight: 400; line-height: 1.7; }
+.feedback { padding: 12px; border-left: 3px solid var(--mint); background: var(--surface); line-height: 1.7; }
+.warning { border-left-color: #bd7925; }
+.visual { border: 1px solid var(--border); border-radius: 16px; padding: 20px; display: grid; gap: 20px; }
+.controls { display: flex; flex-wrap: wrap; gap: 20px; }
+.groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(95px, 1fr)); gap: 10px; }
+.group { border: 1px solid var(--border); padding: 10px; border-radius: 10px; display: flex; flex-wrap: wrap; gap: 5px; align-content: start; min-height: 70px; }
+.group small { flex: 0 0 100%; }
+.dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--mint); border: 1px solid currentColor; }
+.numberline { display: flex; flex-wrap: wrap; gap: 6px; }
+.numberline span { border: 1px solid var(--border); padding: 4px 7px; border-radius: 6px; }
+.numberline [data-active="true"] { background: var(--mint); color: #172d35; font-weight: 700; }
+.visual table { width: 100%; border-collapse: collapse; text-align: left; }
+.visual th, .visual td { padding: 8px; border-bottom: 1px solid var(--border); }
+.result { font-size: 24px; font-weight: 750; }
+.notice { border-left: 4px solid #bd7925; padding: 16px; background: var(--surface); border-radius: 8px; line-height: 1.7; }
+@media (max-width: 760px) {
+  .question form { align-items: stretch; }
+  .steps { gap: 6px; }
+  .steps button { font-size: 12px; }
+  .card h2 { font-size: 21px; }
+  .level { padding: 14px; }
+}

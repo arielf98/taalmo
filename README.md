@@ -32,10 +32,24 @@ Aktivitas saat ini memakai prediksi deterministik, **belum menjalankan SQL pengg
 
 Lihat [rencana dan evidence](docs/database-path-implementation.md), [panduan authoring dan validasi](docs/database-path-authoring.md), serta [status authoring dan gap evidence](docs/database-path-remaining.md).
 
+## Matematika untuk Cybersecurity
+
+Menu **Cybersecurity Math / Matematika Cybersecurity** di header, sidebar, dan kartu dashboard menuju `/learn/cybersecurity-math`. Jalur memiliki peta **10 level, 40 modul, dan 120 lesson target** dari numerasi sampai expert track matematika kriptografi. Saat ini **tiga lesson L0M01 terbit**: menghitung kejadian, perkalian sebagai kelompok, dan pembagian/sisa/urutan operasi. Sebanyak 117 lesson lain masih **Direncanakan**, tanpa tautan lesson kosong.
+
+Pola belajar: prediksi → visual yang bisa diubah → penjelasan dan worked example → dua variasi latihan serta kasus batas → penerapan/refleksi → checkpoint. Lesson dan kontrol tersedia dalam Indonesia–Inggris. Angka latihan seluruhnya fiktif; pembelajaran matematika ini tidak menjalankan serangan, menguji target, atau menghasilkan kriptografi produksi.
+
+L0M01 menyediakan visual kelompok, garis bilangan, serta quotient/remainder dengan tabel setara; jawaban angka, tiga hint, dua set checkpoint lesson, checkpoint modul ≥80% dengan semua soal kritis benar, dan task tertulis berubrik. Lesson memerlukan pengamatan dan latihan benar, refleksi terisi, serta seluruh soal checkpoint benar tanpa membuka solusi checkpoint pada percobaan itu. Catatan transfer opsional dan tidak dinilai otomatis. Riwayat bantuan/soal yang pernah dilihat ditampilkan. Retake tetap tersedia dan mempertahankan snapshot kelulusan sebelumnya.
+
+Lesson terbit boleh dibaca sebagai preview sebelum prasyarat lulus; preview tidak menulis jawaban, resume, atau kelulusan resmi. Assessment L0 belum terbit karena tiga modul berikutnya belum ditulis. Task teks berstatus draf/siap direview; teks terisi atau checkpoint otomatis tidak membuktikan argumen benar maupun review independen. Expert track, capstone, dan seluruh materi setelah L0M01 masih direncanakan.
+
+Progres matematika memakai key browser **`taalmo.cybersecurity-math.progress.v1`**, terpisah dari `taalmo.progress.v1` milik database/lab. Resume menyimpan langkah dan jawaban yang sudah diperiksa; teks angka yang belum diperiksa perlu dimasukkan ulang setelah refresh. Kegagalan write menampilkan pemberitahuan dan mempertahankan pekerjaan dalam memori tab; refresh/penutupan tab dapat menghilangkan pekerjaan itu. Perubahan serentak di beberapa tab bisa saling menimpa; salin catatan penting ke luar browser. Tidak ada akun, sinkronisasi perangkat, tutor AI, atau layanan review manusia.
+
+Lihat [kebutuhan/desain yang disetujui](docs/superpowers/specs/2026-11-07-cybersecurity-math-design.md), [kurikulum dan task pelajar](curriculum/cybersecurity-math/README.md), [backlog implementasi](docs/cybersecurity-math-tasks.md), serta [panduan authoring](docs/cybersecurity-math-authoring.md). Review implementasi melalui source/diff saja; test, browser/manual check, lint, typecheck, build, dan contoh komputasi tidak dijalankan sesuai AGENTS.md.
+
 ## Fitur yang tersedia
 
 - Landing page dengan preview simulator yang bisa dijalankan.
-- Dashboard, satu learning path Database Engineering, progres, aktivitas, dan rekomendasi belajar.
+- Dashboard, jalur Database Engineering dan Matematika Cybersecurity, progres terpisah, aktivitas transaksi, dan rekomendasi belajar.
 - Ringkasan `/sandbox` untuk memilih tiga lab, melihat mode yang telah dijelajahi serta status checkpoint lab, dan membuka lesson atau simulator. Menu Sandbox mengarah ke ringkasan ini.
 - Lesson Lost Update, Duplicate Payment Callback, dan Deadlock, masing-masing dengan contoh interleaving dan checkpoint.
 - Lab Deadlock: wait-for graph, mode urutan lock berlawanan/konsisten, pilihan transaksi korban, rollback perubahan pending, dan satu retry penuh.

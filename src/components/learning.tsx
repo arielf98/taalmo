@@ -25,6 +25,7 @@ import { Button } from "./ui/button";
 import { Quiz } from "./quiz";
 import { DatabaseEngineeringCourseCard } from "./database-learning";
 import { databaseEngineeringProgress } from "@/lib/curriculum";
+import { CybersecurityMathCourseCard } from "./cybersecurity-math";
 
 export function Dashboard() {
   const { t, locale } = useLocale();
@@ -70,6 +71,7 @@ export function Dashboard() {
         </span>
       </div>
       <DatabaseEngineeringCourseCard />
+      <CybersecurityMathCourseCard />
       <section className="continue-card">
         <div>
           <Badge>

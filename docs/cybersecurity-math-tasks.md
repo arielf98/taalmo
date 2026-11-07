@@ -1,10 +1,10 @@
 # Backlog — menu Matematika untuk Cybersecurity
 
-Tanggal: 7 November 2026. Status: **perencanaan; belum ada menu atau lesson matematika yang diimplementasikan**.
+Tanggal: 7 November 2026. Status: **CM-00 disetujui; CM-01 diimplementasikan; CM-02 dan seterusnya belum selesai**.
 
 [Kebutuhan/desain](superpowers/specs/2026-11-07-cybersecurity-math-design.md) · [Kurikulum dan task pelajar](../curriculum/cybersecurity-math/README.md)
 
-Dokumen ini berisi task pengembangan; task yang dikerjakan **pelajar** terdapat per modul dalam kurikulum. Pilihan jalur lengkap bertahap sudah diberikan pengguna. Detail desain menunggu persetujuan sebelum kode produk dibuat.
+Dokumen ini berisi task pengembangan; task yang dikerjakan **pelajar** terdapat per modul dalam kurikulum. Pengguna memilih jalur lengkap bertahap dan menyetujui dokumen desain serta mulai implementasi menu/tiga lesson L0M01 pada 7 November 2026.
 
 ## Aturan pengerjaan dan definisi selesai
 
@@ -21,7 +21,7 @@ Satu modul selesai hanya jika tiga lesson bilingual, visual/interaksi, worked ex
 - [x] Tulis blueprint 120 lesson, 40 learner task, rubrik, dan storyboard pemula.
 - [x] Tulis backlog terurut beserta penerimaan dan dependency.
 - [x] Selesaikan builder review; pertegas batas expert, preview di luar urutan, serta retake tanpa jalan buntu.
-- [ ] Persetujuan pengguna atas dokumen desain.
+- [x] Persetujuan pengguna atas dokumen desain.
 
 Penerimaan: AC02–AC05 tercakup dalam dokumen; implementer tidak harus menebak jalur, bentuk materi, batas tutor AI, atau cara melindungi progres database. Commit dokumentasi tidak berarti implementasi disetujui atau menu tersedia.
 
@@ -29,17 +29,17 @@ Penerimaan: AC02–AC05 tercakup dalam dokumen; implementer tidak harus menebak 
 
 Dependency: CM-00 disetujui. Satu unit rilis meliputi fondasi dan **L0M01 lengkap**; jangan berhenti pada kartu kosong.
 
-- [ ] Baca panduan Next.js lokal yang relevan sebelum menulis routing/komponen.
-- [ ] Definisikan katalog matematika, namespace `cm-…`, versi, status publikasi, prasyarat, dan tipe konten yang tidak membawa field SQL.
-- [ ] Daftarkan seluruh target sebagai metadata draft; publish hanya lesson yang kontennya lengkap.
-- [ ] Implementasikan `/learn/cybersecurity-math` dan route lesson; guard 404 untuk ID tidak dikenal/draft.
-- [ ] Tambah satu menu header/sidebar serta kartu dashboard, active state turunan dan CURRENT PATH kontekstual.
-- [ ] Buat player langkah pendek: prediksi, eksplorasi, penjelasan, contoh, latihan, hint, transfer, refleksi, checkpoint, dan resume; preview terkunci tidak menulis progres resmi.
-- [ ] Buat penyimpanan terpisah, parser input/storage tervalidasi, penanganan gagal simpan, status bantuan, serta snapshot kelulusan.
-- [ ] Gunakan ulang Button/Badge/Quiz/Workspace dan pola locale/tema yang sesuai; tidak menambah dependency.
-- [ ] Tulis seluruh tiga lesson `cm-l0m01l01`–`l03`, task dan checkpoint modul, dua set soal, visual kelompok/garis bilangan, serta Indonesia–Inggris.
-- [ ] Review seluruh caller/link, parser/write path, markup, CSS mobile, perhitungan tertulis, dan pasangan terjemahan melalui source/diff.
-- [ ] Perbarui README, arsitektur, roadmap, jumlah published/draft, dan batas evidence; commit dan push.
+- [x] Baca panduan Next.js lokal yang relevan sebelum menulis routing/komponen.
+- [x] Definisikan katalog matematika, namespace `cm-…`, versi, status publikasi, prasyarat, dan tipe konten yang tidak membawa field SQL.
+- [x] Daftarkan seluruh target sebagai metadata draft; publish hanya lesson yang kontennya lengkap.
+- [x] Implementasikan `/learn/cybersecurity-math` dan route lesson; guard 404 untuk ID tidak dikenal/draft.
+- [x] Tambah satu menu header/sidebar serta kartu dashboard, active state turunan dan CURRENT PATH kontekstual.
+- [x] Buat player langkah pendek: prediksi, eksplorasi, penjelasan, contoh, latihan, hint, transfer, refleksi, checkpoint, dan resume; preview terkunci tidak menulis progres resmi.
+- [x] Buat penyimpanan terpisah, parser input/storage tervalidasi, penanganan gagal simpan, status bantuan, serta snapshot kelulusan.
+- [x] Gunakan ulang Button/Badge/Workspace dan pola locale/tema yang sesuai; numeric question khusus karena Quiz lama memakai pilihan, tanpa menambah dependency.
+- [x] Tulis seluruh tiga lesson `cm-l0m01l01`–`l03`, task dan checkpoint modul, dua set soal, visual kelompok/garis bilangan, serta Indonesia–Inggris.
+- [x] Review seluruh caller/link, parser/write path, markup, CSS mobile, perhitungan tertulis, dan pasangan terjemahan melalui source/diff; reviewer terpisah dan perbaikan temuan penting.
+- [x] Perbarui README, arsitektur, roadmap, jumlah published/draft, dan batas evidence. Commit/push mengikuti aturan delivery; lihat Git history dan laporan akhir untuk hasilnya.
 
 Penerimaan: AC01–AC12 untuk scope fondasi; jumlah published tiga dan draft 117 jika blueprint belum berubah. `taalmo.progress.v1` tidak ditulis oleh jalur matematika. Checkpoint terbit terpisah dari task teks siap direview. Tidak mengklaim rilis sudah diuji pada browser.
 
@@ -170,11 +170,11 @@ Penerimaan: seluruh materi disepakati selesai di-author tanpa menyamakan source 
 | Bagian | Status |
 | --- | --- |
 | Pilihan pengguna | Jalur lengkap bertahap |
-| Kebutuhan, kurikulum, learner task, backlog | Ditulis; builder review selesai dan klarifikasi dimasukkan |
-| Persetujuan desain detail | Menunggu |
-| Menu/routing/player/progres matematika | Belum diimplementasikan |
-| Lesson matematika published | 0/120 target |
+| Kebutuhan, kurikulum, learner task, backlog | Ditulis; builder review selesai dan desain disetujui |
+| Persetujuan desain detail | Disetujui 7 November 2026 |
+| Menu/routing/player/progres matematika | CM-01 diimplementasikan, source/diff review |
+| Lesson matematika published | 3/120 target; L0M01 lengkap, 117 draft |
 | Pengujian/runtime/build/lint/typecheck | Tidak dilakukan sesuai AGENTS.md |
 | Review capstone oleh manusia | Belum ada peserta/artefak/review |
 
-Langkah kode berikutnya setelah desain disetujui: rencana implementasi CM-01 yang terfokus, lalu rilis fondasi beserta tiga lesson L0M01 lengkap. Tahap dokumen tidak boleh dilaporkan sebagai menu baru yang sudah selesai.
+Langkah kode berikutnya: CM-02a/L0M02, pecahan dan persentase. Perlu visual pecahan serta grader desimal/pecahan yang sesuai sebelum tiga lesson berikutnya dapat diterbitkan. Sisa L0, L1–L9, assessment level, dan capstone tetap belum selesai.

@@ -1,8 +1,8 @@
 # Kebutuhan dan desain — Matematika untuk Cybersecurity
 
-Tanggal: 7 November 2026. Status: **draf desain untuk persetujuan; belum diimplementasikan**.
+Tanggal: 7 November 2026. Status: **desain disetujui pengguna; CM-01 diimplementasikan dengan review source/diff**.
 
-Pengguna memilih **jalur lengkap bertahap**: kebutuhan dan task sampai tingkat expert, kemudian implementasi per level dengan lesson interaktif yang lengkap. Ukuran kurikulum, aturan penilaian, dan keputusan teknis di bawah merupakan usulan perancang; belum merupakan persetujuan pengguna atas desain ini.
+Pengguna memilih **jalur lengkap bertahap** dan pada 7 November 2026 menyetujui dokumen desain ini serta memulai implementasi menu dan tiga lesson L0M01. Pengguna juga mengizinkan push dokumen ke GitHub arielf98/taalmo branch main. Ukuran kurikulum, aturan penilaian, dan keputusan teknis di bawah merupakan usulan perancang yang tercakup dalam persetujuan desain.
 
 Dokumen pendamping:
 
@@ -34,7 +34,7 @@ Hasil yang dituju:
 | Ubah player database menjadi mesin semua mata pelajaran | Satu engine untuk seluruh kursus | Refactor besar pada SQL, assessment, parser, dan progres yang sudah dipakai; belum diperlukan |
 | Halaman daftar materi dan kuis saja | Cepat untuk katalog | Tidak memenuhi cara mengajar visual dan eksplorasi yang diminta |
 
-Pilihan pengguna: **jalur lengkap bertahap**. Usulan teknis perancang: player matematika terfokus, tanpa refactor mesin database. Desain spesifik ini menunggu persetujuan.
+Pilihan pengguna: **jalur lengkap bertahap**. Usulan teknis perancang yang disetujui: player matematika terfokus, tanpa refactor mesin database.
 
 Brilliant saat ditinjau juga menawarkan tutor AI dan pembelajaran adaptif. Kesamaan yang diusulkan di sini adalah **pola mengajar interaktif dengan soal/feedback yang ditulis sebelumnya**, bukan kesetaraan fitur tutor AI. Tutor percakapan, API berbayar, akun, leaderboard, monetisasi, dan sinkronisasi perangkat tidak termasuk versi ini. Jika tutor AI termasuk maksud pengguna, cakupan dan kebutuhan privasinya harus disepakati terpisah.
 
@@ -214,7 +214,7 @@ Ditinjau 7 November 2026. Referensi dipakai untuk arah pedagogi/cakupan, bukan d
 - [Boneh–Shoup — A Graduate Course in Applied Cryptography](https://toc.cryptobook.us/): rujukan cakupan kriptografi simetris/publik, signatures, ECC, lattice, dan protokol; tidak berarti peserta pemula langsung siap membaca buku graduate.
 - [NIST FIPS 203](https://csrc.nist.gov/pubs/fips/203/final): sumber primer ML-KEM dan hubungan dengan Module Learning with Errors. Halaman resmi memiliki catatan potensi pembaruan; authoring L9 wajib membaca publikasi serta errata terkini sebelum menulis detail standar.
 
-Review dokumen ini mencakup kebutuhan dan pembacaan sumber aplikasi. Belum ada menu baru, lesson matematika terbit, perhitungan yang dieksekusi, hasil test, atau bukti runtime.
+Pada review desain awal, menu dan lesson matematika belum diimplementasikan. Status rilis sesudah persetujuan dicatat pada bagian 13; tidak ada perhitungan yang dieksekusi, hasil test, atau bukti runtime.
 
 ## 12. Hasil builder review
 
@@ -223,4 +223,12 @@ Review oleh subagent pembaca desain menemukan dua batas yang perlu dibuat tegas;
 1. **Batas expert:** lingkup awal adalah matematika cybersecurity dengan pendalaman kriptografi, bukan seluruh matematika riset keamanan. Bagian 1 dan 5 menyatakan hasil, materi lanjutan, serta topik di luar cakupan secara eksplisit. Penambahan calculus/optimisasi mendalam, matematika ML, atau side-channel riset memerlukan perluasan desain; tidak diasumsikan sudah disepakati.
 2. **Belajar di luar urutan:** akses baca/interaksi preview diizinkan, tetapi penyimpanan checkpoint/resume resmi menunggu prasyarat; tidak ada kelulusan tertunda. Aturan ini ditambahkan pada bagian 5.
 
-Review juga menegaskan bahwa dua set soal tidak boleh menghasilkan jalan buntu setelah solusi pernah dibuka; aturan retake di bagian 4–5 mempertahankan akses belajar dan menyimpan provenance bantuan. Builder review selesai; persetujuan pengguna atas desain detail masih menunggu.
+Review juga menegaskan bahwa dua set soal tidak boleh menghasilkan jalan buntu setelah solusi pernah dibuka; aturan retake di bagian 4–5 mempertahankan akses belajar dan menyimpan provenance bantuan. Builder review selesai; pengguna kemudian menyetujui desain dan memulai implementasi.
+
+## 13. Status implementasi CM-01
+
+Menu header/sidebar, kartu dashboard, CURRENT PATH kontekstual, route jalur/lesson, peta target bilingual, player, progres terpisah, dan tiga lesson L0M01 telah diimplementasikan. Tiga lesson terbit dan 117 target lain tetap draft. Lesson memiliki visual bermakna beserta tabel, worked example, dua variasi dan edge case, hint/feedback, transfer/refleksi, serta dua set checkpoint. Terdapat dua set checkpoint modul, task/rubrik dan penyimpanan draf modul. Belum ada assessment level, materi L0M02–L9, atau capstone terbit.
+
+Review source oleh reviewer terpisah menghasilkan perbaikan parser fail-closed, histori versi pasif, sinkronisasi field jawaban, provenance bantuan/set soal, pemisahan preview/resmi, feedback antara, dan wrapping tombol. Keputusan penilaian diperjelas: draf transfer tidak wajib diisi untuk progres otomatis; refleksi tetap wajib, sesuai pemisahan task teks dari checkpoint. Parser dan masterynya tidak menilai kebenaran teks refleksi.
+
+Kode hanya memakai grader integer dan tiga jenis visual yang diperlukan L0M01. Pecahan/desimal, bigint, visual modular, serta assessment level belum dibuat karena harus mengikuti modul yang membutuhkannya. Bukti saat ini source/diff review saja, tanpa test, manual/browser check, lint, typecheck, build, atau contoh yang dieksekusi. Tidak ada merge/deploy.

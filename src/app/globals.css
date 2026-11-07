@@ -321,6 +321,7 @@ p {
   gap: 24px;
 }
 .site-header nav {
+  flex-wrap: wrap;
   display: flex;
   gap: 33px;
   margin-left: 80px;

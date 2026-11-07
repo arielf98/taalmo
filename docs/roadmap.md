@@ -28,11 +28,13 @@ The compact overview uses the existing labs/lessons catalog and read-only browse
 
 Review scope is source/diff only. No tests, manual/browser checks, lint, typecheck or build were run. The next optional item, accessibility/browser coverage, requires explicit authorization to execute checks under AGENTS.md. Further product changes below still need concrete scope.
 
-## Cybersecurity Math — rancangan 7 November 2026
+## Cybersecurity Math — rilis fondasi 7 November 2026
 
-Pengguna memilih jalur lengkap bertahap untuk matematika cybersecurity dari pemula sampai expert track, dengan pengajaran visual/interaktif, task pelajar, dan dokumen kebutuhan. [Draf kebutuhan/desain](superpowers/specs/2026-11-07-cybersecurity-math-design.md), [kurikulum 10 level/40 modul/120 lesson target](../curriculum/cybersecurity-math/README.md), serta [backlog implementasi](cybersecurity-math-tasks.md) sudah disusun. Detail desain menunggu persetujuan; belum ada menu, player, progres, atau lesson matematika yang diimplementasikan/published.
+Pengguna menyetujui desain jalur lengkap bertahap untuk matematika cybersecurity dari pemula sampai expert track. [Kebutuhan/desain](superpowers/specs/2026-11-07-cybersecurity-math-design.md), [kurikulum 10 level/40 modul/120 lesson target](../curriculum/cybersecurity-math/README.md), dan [backlog implementasi](cybersecurity-math-tasks.md) tersedia. Commit dokumen awal `9d96ed4` sudah dipush. Menu header/sidebar dan kartu dashboard kini menuju `/learn/cybersecurity-math`; CURRENT PATH menampilkan progres jalur aktif.
 
-Usulan rilis pertama: menu/kartu/rute khusus, progres terpisah dari database, player matematika, serta tiga lesson L0M01 bilingual yang lengkap. Lanjut per modul sampai L9; target authoring tidak disamakan dengan jumlah materi terbit atau bukti keahlian expert. Source/diff review saja; tidak menjalankan test, browser/manual check, lint, typecheck, build, atau contoh.
+Rilis CM-01 mengimplementasikan player enam langkah, visual kelompok/garis bilangan/quotient-remainder beserta tabel setara, tiga lesson L0M01 bilingual, dua variasi latihan plus edge case per lesson, hint/feedback, dua set checkpoint lesson/modul, task/rubrik, resume dan progres lokal terpisah dari database. Parser memvalidasi evidence aktif dan mempertahankan JSON versi lama secara pasif; preview terkunci tidak menulis progres resmi, retake mempertahankan snapshot kelulusan, dan kegagalan write memakai fallback memori dengan pemberitahuan.
+
+**Status authoring: 3 lesson published, 117 draft.** Assessment L0, level lanjutan, dan capstone belum terbit. Berikutnya CM-02a/L0M02: pecahan dan persentase, dengan visual/validasi jawaban yang sesuai, kemudian modul L0 lainnya dan L1–L9 per modul lengkap. Source/diff review termasuk reviewer terpisah; tidak menjalankan test, browser/manual check, lint, typecheck, build, atau contoh. Tidak ada merge/deploy.
 
 ## Later learning improvements
 
