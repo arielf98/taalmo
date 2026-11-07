@@ -20,7 +20,7 @@ export interface MathLessonContent {
   objective: Copy;
   prediction: MathQuestion;
   exploration: {
-    kind: "count" | "groups" | "division" | "fraction" | "percentage-change" | "ratio" | "rate" | "bytes";
+    kind: "count" | "groups" | "division" | "fraction" | "percentage-change" | "ratio" | "rate" | "bytes" | "distance" | "rounding" | "powers";
     initial: [number, number];
     target: [number, number];
     instruction: Copy;
@@ -39,4 +39,5 @@ export const mathVisualBounds: Record<MathLessonContent["exploration"]["kind"], 
   count: [[0, 8], [0, 8]], groups: [[0, 8], [0, 8]], division: [[0, 24], [1, 8]],
   fraction: [[0, 8], [1, 8]], "percentage-change": [[0, 100], [0, 100]],
   ratio: [[1, 8], [0, 24]], rate: [[0, 100], [0, 2000]], bytes: [[0, 8], [0, 2]],
+  distance: [[-10, 10], [-10, 10]], rounding: [[0, 2000], [0, 2]], powers: [[0, 10], [0, 10]],
 };

@@ -6,6 +6,7 @@ import { mathVisualBounds, type MathAnswer, type MathLessonContent, type MathQue
 import { Button } from "./ui/button";
 import styles from "./cybersecurity-math.module.css";
 import { MathMeasurementVisual } from "./cybersecurity-math-measurements";
+import { MathNumeracyVisual } from "./cybersecurity-math-numeracy";
 
 export function MathQuestionCard({ question, answer, onAnswer }: {
   question: MathQuestion; answer?: MathAnswer; onAnswer: (value: MathAnswer | undefined) => void;
@@ -30,7 +31,7 @@ export function MathQuestionCard({ question, answer, onAnswer }: {
         if (value !== null) { onAnswer(value); setDraft(null); }
       }}>
         <label htmlFor={fieldId}>
-          {fraction ? (locale === "id" ? "Pembilang" : "Numerator") : question.decimalPlaces !== undefined ? (locale === "id" ? "Jawaban desimal" : "Decimal answer") : (locale === "id" ? "Jawaban angka bulat" : "Whole-number answer")}
+          {fraction ? (locale === "id" ? "Pembilang" : "Numerator") : question.decimalPlaces !== undefined ? (locale === "id" ? "Jawaban desimal" : "Decimal answer") : (locale === "id" ? "Jawaban angka bulat" : "Integer answer")}
           <input id={fieldId} inputMode={typeof question.answer === "number" && question.answer < 0 ? "text" : question.decimalPlaces !== undefined ? "decimal" : "numeric"} autoComplete="off" maxLength={13} value={input}
             aria-invalid={error}
             aria-describedby={error ? `${fieldId}-error` : undefined}
@@ -61,6 +62,7 @@ export function MathVisual({ activity, value, onChange }: {
   const { locale } = useLocale();
   const [a, b] = value;
   if (activity.kind === "ratio" || activity.kind === "rate" || activity.kind === "bytes") return <MathMeasurementVisual activity={activity} value={value} onChange={onChange} />;
+  if (activity.kind === "distance" || activity.kind === "rounding" || activity.kind === "powers") return <MathNumeracyVisual activity={activity} value={value} onChange={onChange} />;
   const division = activity.kind === "division";
   const count = activity.kind === "count";
   const fraction = activity.kind === "fraction";

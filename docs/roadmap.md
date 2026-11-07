@@ -38,7 +38,9 @@ CM-01 disimpan/push sebagai `1e6f108`. L0M02/CM-02a kemudian menambahkan tiga le
 
 L0M03/CM-02b menambahkan tiga lesson rasio senilai, laju/waktu, serta bit/byte/kB/KiB. Tabel interaktif memperlihatkan scaling kedua besaran, waktu dari target/laju hipotetis, dan konversi unit; zero rate dan zero work dibedakan tanpa pembagian nol. Semua lesson/modul bilingual memiliki latihan/edge cases/hints, dua set checkpoint, task dan rubrik; tidak mengklaim rate sebagai benchmark.
 
-**Status authoring: 9 lesson published, 111 draft.** Assessment L0, level lanjutan, dan capstone belum terbit. Berikutnya CM-02c/L0M04 beserta assessment L0, lalu L1–L9 per modul lengkap. Source/diff review termasuk reviewer terpisah; tidak menjalankan test, browser/manual check, lint, typecheck, build, atau contoh. Tidak ada merge/deploy.
+L0M03 dipush sebagai `d55524a`. CM-02c (8 November 2026) kemudian menambahkan L0M04: negatif/jarak absolut, pembulatan/estimasi, pangkat. Slider dan SVG garis bilangan, tabel batas bawah/terdekat/atas, dan perkalian faktor berulang mengajar konsep dengan input terbatas. Parser menerima posisi negatif hanya pada bounds yang sesuai. Dua set assessment L0 × 13 soal terpisah mencakup keempat modul plus pembanding per-akun/total; seluruh checkpoint modul, semua jawaban, nilai ≥85% dan semua critical wajib. Record level memakai ID versioned, menyimpan snapshot/riwayat bantuan, dan membuka progres resmi level berikutnya hanya setelah assessment lulus; tidak mempublikasikan L1 draft.
+
+**Status authoring: L0 lengkap, 12 lesson published, 108 draft.** Assessment L0 tersedia; L1–L9 dan capstone belum terbit. Berikutnya CM-03a/L1M01 (variabel/persamaan/pertidaksamaan dan budget). Source/diff review termasuk reviewer terpisah; tidak menjalankan test, browser/manual check, lint, typecheck, build, atau contoh. Tidak ada merge/deploy.
 
 ## Later learning improvements
 

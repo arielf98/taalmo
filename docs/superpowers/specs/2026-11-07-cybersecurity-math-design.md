@@ -1,6 +1,6 @@
 # Kebutuhan dan desain — Matematika untuk Cybersecurity
 
-Tanggal: 7 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-02b diimplementasikan dengan review source/diff**.
+Dibuat 7 November, diperbarui 8 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-02c diimplementasikan; L0 lengkap dengan review source/diff**.
 
 Pengguna memilih **jalur lengkap bertahap** dan pada 7 November 2026 menyetujui dokumen desain ini serta memulai implementasi menu dan tiga lesson L0M01. Pengguna juga mengizinkan push dokumen ke GitHub arielf98/taalmo branch main. Ukuran kurikulum, aturan penilaian, dan keputusan teknis di bawah merupakan usulan perancang yang tercakup dalam persetujuan desain.
 
@@ -244,3 +244,9 @@ Navigasi akhir lesson menuju checkpoint modul yang belum lulus sebelum masuk mod
 Tiga lesson rasio/laju/unit ditambahkan dengan tabel eksplorasi bersatuan, dua variasi latihan dan edge case tiap lesson, tiga hint, feedback, worked steps, transfer/refleksi, serta dua set checkpoint lesson/modul dan task/rubrik. Perhitungan rate memakai model konstan hipotetis, bukan benchmark. Zero work dibedakan dari zero rate dengan target positif. Unit bytes memakai definisi eksplisit dan select yang tervalidasi; progress/storage kontrak lama dipertahankan.
 
 Status kini **9 lesson published, 111 draft**; L0M04, assessment L0, dan level lanjutan belum terbit. Berikutnya CM-02c. Review tetap source/diff saja tanpa test, browser/manual check, lint, typecheck, build, audit, atau mengeksekusi contoh.
+
+## 16. Lanjutan CM-02c — L0 selesai
+
+L0M04 menambah tiga lesson bilingual negatif/jarak absolut, estimasi/pembulatan, serta pangkat dengan worked example, latihan/edge/hint, dua set checkpoint dan task/rubrik. Input signed memakai slider keyboard dan bounds yang sesuai; rounding nonnegatif memakai halfway naik, dan 0^0 dikecualikan. Seluruh L0 kini **12 lesson published, 108 draft**, empat checkpoint/task modul, serta assessment L0 dua set × 13 soal yang mencakup semua lesson dan pembanding per-akun/total serta memeriksa unit/nol/pangkat.
+
+Assessment level memerlukan seluruh modul lulus, semua jawaban terisi, nilai aktual ≥85%, dan semua critical benar. ID/version, parsing flag/evidence, snapshot kelulusan, riwayat bantuan/set, solusi dan retake mengikuti model yang sama; grade level tidak disamakan dengan persentase aktivitas. L1 tetap draft, walaupun engine sekarang memiliki gate antarlevel berdasarkan assessment yang benar-benar terdaftar. Tidak ada sertifikasi atau review task otomatis. Berikutnya CM-03a/L1M01; evidence tetap source/diff, tanpa pemeriksaan runtime.

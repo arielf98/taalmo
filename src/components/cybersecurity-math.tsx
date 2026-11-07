@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import { useLocale } from "@/lib/locale";
 import { mathModuleTasks, mathModuleCheckDescriptions, mathModules, mathLevels, mathLessonHref, mathPathHref, mathQuestions, mathRecordKey, mathTitle } from "@/content/cybersecurity-math/catalog";
-import { mathAttemptComplete, mathLessonPassed, mathLessonUnlocked, mathModulePassed, mathQuestionCorrect, mathSummary, newMathAttempt } from "@/lib/cybersecurity-math";
+import { mathAttemptComplete, mathLessonPassed, mathLessonUnlocked, mathLevelPassed, mathModulePassed, mathQuestionCorrect, mathSummary, newMathAttempt } from "@/lib/cybersecurity-math";
 import { useMathProgress } from "@/lib/cybersecurity-math-progress";
 import { Badge, Workspace } from "./shell";
 import { Button } from "./ui/button";
@@ -38,6 +38,8 @@ function MathModuleCheckpoint({ id }: { id: string }) {
   const draft = progress.tasks[id] ?? { text: "", ready: false };
   const nextModule = mathModules[mathModules.findIndex((item) => item.id === id) + 1];
   const nextLesson = nextModule?.lessons.find((lesson) => lesson.content);
+  const level = mathLevels.find((item) => item.id === module.levelId)!;
+  const levelReady = !!level.checks && level.modules.every((item) => mathModulePassed(item.id, progress));
   return <section className={`card ${styles.card}`} id={`checkpoint-${id}`}>
     <Badge>{locale === "id" ? "CHECKPOINT MODUL" : "MODULE CHECKPOINT"} · {id.toUpperCase()}</Badge>
     <h2>{module.title[locale]}</h2>
@@ -56,7 +58,8 @@ function MathModuleCheckpoint({ id }: { id: string }) {
       {record.solutionOpen && <div className={styles.notice}><p>{locale === "id" ? "Solusi dibuka; pilih Coba set lain sebelum menyelesaikan checkpoint." : "Solutions are open; choose Try the other set before completing the checkpoint."}</p><ol>{questions.map((question) => <li key={question.id}>{question.solution[locale]}</li>)}</ol></div>}
       <p aria-live="polite">{locale === "id" ? `Jawaban benar: ${questions.filter((question) => mathQuestionCorrect(question, record)).length} / ${questions.length}.` : `Correct answers: ${questions.filter((question) => mathQuestionCorrect(question, record)).length} / ${questions.length}.`}</p>
     </>}
-    {passed && <><p className={styles.feedback} role="status">{locale === "id" ? "Checkpoint modul selesai. Kelulusan formatif tetap tersimpan saat kamu mengulang. Assessment L0 menunggu empat modul lengkap." : "Module checkpoint complete. Formative completion stays saved when you retake it. The L0 assessment awaits all four complete modules."}</p>
+    {passed && <><p className={styles.feedback} role="status">{locale === "id" ? "Checkpoint modul selesai. Kelulusan formatif tetap tersimpan saat kamu mengulang. Assessment level memerlukan seluruh checkpoint modul lulus." : "Module checkpoint complete. Formative completion stays saved when you retake it. A level assessment requires every module checkpoint to be passed."}</p>
+      {levelReady && <Link className={styles.link} href={`#assessment-${level.id}`}>{locale === "id" ? "Buka assessment level" : "Open level assessment"} {level.id.toUpperCase()}</Link>}
       {nextLesson ? <Link className={styles.link} href={mathLessonHref(nextLesson.id)}>{locale === "id" ? "Lanjutkan: " : "Continue: "}{nextLesson.title[locale]}</Link> : <p className={styles.muted}>{locale === "id" ? "Modul berikutnya masih direncanakan; belum ada lesson lanjutan yang dapat diluncurkan." : "The next module is still planned; there are no further published lessons to launch."}</p>}
     </>}
     <h3>{locale === "id" ? "Task pelajar" : "Learner task"} · {module.title[locale]}</h3>
@@ -67,6 +70,33 @@ function MathModuleCheckpoint({ id }: { id: string }) {
       <label><input type="checkbox" checked={draft.ready} disabled={!draft.text.trim()} onChange={(event) => task(id, draft.text, event.target.checked)} /> {locale === "id" ? "Saya sudah mengecek rubrik; siap direview manusia" : "I have checked the rubric; ready for human review"}</label>
       <p role="status">{draft.ready ? (locale === "id" ? "Siap direview — belum direview independen." : "Ready for review — not independently reviewed.") : draft.text.trim() ? (locale === "id" ? "Status: draf, belum dinilai." : "Status: draft, not graded.") : (locale === "id" ? "Status: belum dikerjakan." : "Status: not started.")}</p>
     </> : <p className={styles.muted}>{locale === "id" ? "Baca task kapan saja. Penyimpanan draf modul terbuka setelah checkpoint modul lulus; kamu juga boleh menulis catatan di luar aplikasi." : "Read the task at any time. Saving a module draft opens after its checkpoint is passed; you may also keep notes outside the app."}</p>}
+  </section>;
+}
+
+function MathLevelAssessment({ id }: { id: string }) {
+  const { locale } = useLocale();
+  const { progress, update, finish, restart } = useMathProgress();
+  const level = mathLevels.find((item) => item.id === id)!;
+  const unlocked = level.modules.every((module) => mathModulePassed(module.id, progress));
+  const record = progress.records[mathRecordKey(id)] ?? newMathAttempt(id);
+  const questions = mathQuestions(id, record.attempt);
+  const correct = questions.filter((question) => mathQuestionCorrect(question, record)).length;
+  const remainingCritical = questions.filter((question) => question.critical && !mathQuestionCorrect(question, record)).length;
+  const passed = mathLevelPassed(id, progress);
+  return <section className={`card ${styles.card}`} id={`assessment-${id}`}>
+    <Badge>{locale === "id" ? "ASSESSMENT LEVEL" : "LEVEL ASSESSMENT"} · {id.toUpperCase()}</Badge>
+    <h2>{level.title[locale]}</h2>
+    <p>{locale === "id" ? `${questions.length} soal mencakup seluruh modul. Jawab semuanya; perlu nilai ≥85% dan semua soal kritis benar. Unit, nol, per akun/total, dan pangkat tidak boleh tertukar. Ini assessment formatif lokal, bukan sertifikasi.` : `${questions.length} questions cover all modules. Answer all of them; you need ≥85% and every critical item correct. Keep units, zero, per-account/total counts, and powers distinct. This is a local formative assessment, not certification.`}</p>
+    {!unlocked ? <div className={styles.notice}><p>{locale === "id" ? "Selesaikan seluruh checkpoint modul berikut dahulu:" : "Complete all of these module checkpoints first:"}</p><ul>{level.modules.filter((module) => !mathModulePassed(module.id, progress)).map((module) => <li key={module.id}><a className={styles.link} href={`#checkpoint-${module.id}`}>{module.title[locale]}</a></li>)}</ul></div> : <>
+      <p className={styles.muted}>{locale === "id" ? `Set ${record.attempt % 2 + 1} · Percobaan ${record.attempt + 1}` : `Set ${record.attempt % 2 + 1} · Attempt ${record.attempt + 1}`}
+        {record.seenSets.includes(record.attempt % 2) && (locale === "id" ? " · Soal pernah dilihat" : " · Previously seen questions")}
+        {record.helped && (locale === "id" ? " · Bantuan sebelumnya tercatat" : " · Prior assistance recorded")}</p>
+      {questions.map((question) => <MathQuestionCard key={`${question.id}-${record.attempt}`} question={question} answer={record.answers[question.id]} onAnswer={(value) => update(id, { answers: { [question.id]: value }, viewedSets: [...new Set([...record.viewedSets, record.attempt % 2])] })} />)}
+      <p aria-live="polite">{locale === "id" ? `${correct}/${questions.length} benar (${Math.round(100 * correct / questions.length)}% dibulatkan); ${remainingCritical} soal kritis belum benar.` : `${correct}/${questions.length} correct (${Math.round(100 * correct / questions.length)}% rounded); ${remainingCritical} critical items not yet correct.`}</p>
+      <div className={styles.actions}><Button disabled={!mathAttemptComplete(id, record)} onClick={() => finish(id)}>{locale === "id" ? "Selesaikan assessment level" : "Complete level assessment"}</Button><Button variant="outline" onClick={() => update(id, { solutionOpen: true, helped: true })}>{locale === "id" ? "Pelajari solusi" : "Study solutions"}</Button><Button variant="ghost" onClick={() => restart(id)}>{locale === "id" ? "Ulangi dengan set lain" : "Retake with the other set"}</Button></div>
+      {record.solutionOpen && <div className={styles.notice}><p>{locale === "id" ? "Solusi terbuka; ulangi dengan set lain sebelum menyelesaikan assessment. Kelulusan sebelumnya tetap tersimpan." : "Solutions are open; retake with the other set before completing the assessment. Earlier earned completion remains saved."}</p><ol>{questions.map((question) => <li key={question.id}>{question.solution[locale]}</li>)}</ol></div>}
+    </>}
+    {passed && <p className={styles.feedback} role="status">{locale === "id" ? "Assessment level selesai. Fondasi numerasi telah melewati checkpoint formatif; bukan bukti keahlian cybersecurity. Level berikutnya belum terbit; task tertulis tetap memerlukan review manusia." : "Level assessment complete. Numeracy foundations have passed formative checkpoints; this does not establish cybersecurity expertise. The next level is not published; written tasks still need human review."}</p>}
   </section>;
 }
 
@@ -91,7 +121,7 @@ export function CybersecurityMathPath() {
       </section>
       <section className={styles.levels} aria-label={locale === "id" ? "Peta kurikulum" : "Curriculum map"}>
         {mathLevels.map((level, levelIndex) => <details key={level.id} className={styles.level} open={levelIndex === 0}>
-          <summary>L{levelIndex} · {level.title[locale]} · {level.modules.flatMap((module) => module.lessons).filter((lesson) => lesson.content).length} / 12 {locale === "id" ? "terbit" : "published"}</summary>
+          <summary>L{levelIndex} · {level.title[locale]} · {level.modules.flatMap((module) => module.lessons).filter((lesson) => lesson.content).length} / 12 {locale === "id" ? "terbit" : "published"}{mathLevelPassed(level.id, progress) && (locale === "id" ? " · Assessment selesai" : " · Assessment complete")}</summary>
           <p>{level.context[locale]}</p>
           <p className={styles.muted}>{levelIndex === 0 ? (locale === "id" ? "Mulai dari nol. Pelajari jumlah kejadian sebelum menilai pola keamanannya." : "Start from zero. Understand event counts before judging their security meaning.") : (locale === "id" ? `Prasyarat progres resmi: assessment L${levelIndex - 1} dan modul sebelumnya. Level ini masih direncanakan.` : `Official progress requires the L${levelIndex - 1} assessment and preceding modules. This level is still planned.`)}</p>
           {level.modules.map((module, moduleIndex) => <section key={module.id} className={styles.module}>
@@ -105,6 +135,7 @@ export function CybersecurityMathPath() {
         </details>)}
       </section>
       {mathModules.filter((module) => module.checks).map((module) => <MathModuleCheckpoint key={module.id} id={module.id} />)}
+      {mathLevels.filter((level) => level.checks).map((level) => <MathLevelAssessment key={level.id} id={level.id} />)}
       <MathStorageNotice />
       <section className={`card ${styles.card}`}>
         <h2>{locale === "id" ? "Ke mana jalur ini menuju?" : "Where does this path lead?"}</h2>

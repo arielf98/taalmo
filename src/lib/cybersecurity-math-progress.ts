@@ -2,7 +2,7 @@
 import { useMemo, useSyncExternalStore } from "react";
 import { mathRecordKey } from "@/content/cybersecurity-math/catalog";
 import { emptyMathProgress, mathAttemptComplete, mathLessonUnlocked, mathModuleUnlocked, mathModulePassed, mathLessonPassed, newMathAttempt, parseMathProgress, type MathProgress, type MathRecord } from "./cybersecurity-math";
-import { mathLessons, mathModules } from "@/content/cybersecurity-math/catalog";
+import { mathLessons, mathLevels, mathModules } from "@/content/cybersecurity-math/catalog";
 
 const key = "taalmo.cybersecurity-math.progress.v1";
 let fallback: string | undefined;
@@ -31,7 +31,9 @@ function save(progress: MathProgress) {
 function canWrite(id: string, progress: MathProgress) {
   if (mathLessons.some((lesson) => lesson.id === id && lesson.content)) return mathLessonUnlocked(id, progress);
   const module = mathModules.find((item) => item.id === id && item.checks);
-  return !!module && mathModuleUnlocked(id, progress) && module.lessons.every((lesson) => mathLessonPassed(lesson.id, progress));
+  if (module) return mathModuleUnlocked(id, progress) && module.lessons.every((lesson) => mathLessonPassed(lesson.id, progress));
+  const level = mathLevels.find((item) => item.id === id && item.checks);
+  return !!level && level.modules.every((item) => mathModulePassed(item.id, progress));
 }
 
 export function useMathProgress() {

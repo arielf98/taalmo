@@ -33,10 +33,10 @@
 
 ## Task 2 — CM-02c / L0M04 and L0 assessment
 
-- [ ] Author negative/absolute-distance, estimation/rounding, and powers lessons with complete interactions and 2×5 module checkpoints.
-- [ ] Add two authored L0 assessments of at least ten items covering all modules, with explicit units and critical zero/per-object/unit checks.
-- [ ] Support level record IDs, ≥85% grade, module prerequisites, preserved snapshots and informative next-step/level gating; publish no L1 stub.
-- [ ] Fresh source/diff review, documentation, scoped commit and push.
+- [x] Author negative/absolute-distance, estimation/rounding, and powers lessons with complete interactions and 2×5 module checkpoints.
+- [x] Add two authored L0 assessments of 13 items covering all modules, with explicit units, two per-account/total cases and critical zero/unit checks.
+- [x] Support level record IDs, ≥85% grade, module prerequisites, preserved snapshots and informative next-step/level gating; publish no L1 stub.
+- [x] Fresh source/diff review and corrections; documentation updated. Delivery follows staged-diff review and scoped commit/push; Git history records results.
 
 ## Ledger
 
@@ -44,3 +44,7 @@
 - Existing user authorization covers all math-roadmap commits to arielf98/taalmo main; do not ask again.
 - Ruling: no test/worktree/setup scripts; source/diff review on current authorized branch takes precedence over skill defaults.
 - Task 1 source review complete: no critical arithmetic/storage issue found; corrected one important input-format issue and included small teaching/accessibility corrections. No tests or runtime checks performed. Nine lessons published, 111 draft; continue Task 2 after commit/push.
+- Task 1 committed/pushed as `d55524a`.
+- Task 2 source review complete: fixed range label association, repeated prerequisite traversal, required per-account/total contrast, integer terminology, exact-count vs measured-value wording, and the written power comparison. Existing lesson/module keys unchanged; level IDs extend the same parser/repository.
+- Ruling: the last passed module proves all earlier modules because the catalog's prerequisite order is linear; evaluate that chain once per module rather than recursively rechecking its prior modules for every lesson. No claim of runtime performance validation.
+- Outcome: L0 authored/published with 12 lessons, four tasks/module checkpoints and two 13-item level assessments; 108 lessons remain draft. Next CM-03a/L1M01. No test, build or runtime command executed.

@@ -1,4 +1,4 @@
-import { mathLessons, mathModules, mathQuestions, mathRecordKey, mathVersion } from "@/content/cybersecurity-math/catalog";
+import { mathLessons, mathLevels, mathModules, mathQuestions, mathRecordKey, mathVersion } from "@/content/cybersecurity-math/catalog";
 import { mathVisualBounds, type MathAnswer, type MathQuestion } from "@/content/cybersecurity-math/types";
 
 export interface MathAttempt {
@@ -39,7 +39,7 @@ const object = (value: unknown): Record<string, unknown> | null =>
   value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 const integer = (value: unknown, max: number) => typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= max;
 const knownId = (id: string) => mathLessons.some((lesson) => lesson.id === id && lesson.content)
-  || mathModules.some((module) => module.id === id && module.checks);
+  || mathModules.some((module) => module.id === id && module.checks) || mathLevels.some((level) => level.id === id && level.checks);
 export function questionsInRecord(id: string, attempt: number): MathQuestion[] {
   const content = mathLessons.find((lesson) => lesson.id === id)?.content;
   return [...(content ? [content.prediction, content.exploration.question, ...content.practice] : []), ...mathQuestions(id, attempt)];
@@ -70,7 +70,7 @@ function parseAttempt(id: string, value: unknown): MathAttempt | null {
   const initial = content?.exploration.initial ?? [0, 0];
   const position = Array.isArray(raw.exploration) ? raw.exploration : [];
   const bounds = mathVisualBounds[content?.exploration.kind ?? "count"];
-  const validPosition = position.length === 2 && bounds.every(([min, max], index) => integer(position[index], max) && position[index] >= min);
+  const validPosition = position.length === 2 && bounds.every(([min, max], index) => typeof position[index] === "number" && Number.isInteger(position[index]) && position[index] >= min && position[index] <= max);
   return {
     attempt, answers,
     step: integer(raw.step, 5) ? raw.step as number : 0,
@@ -91,12 +91,12 @@ export function parseMathProgress(value: string): MathProgress {
     if (!raw) return emptyMathProgress();
     const records: MathProgress["records"] = {};
     const history: MathProgress["history"] = {};
-    const historicalKey = /^cm-l[0-9]m[0-9]{2}(?:l[0-9]{2})?@[0-9]+\.[0-9]+\.[0-9]+$/;
+    const historicalKey = /^cm-l[0-9](?:m[0-9]{2}(?:l[0-9]{2})?)?@[0-9]+\.[0-9]+\.[0-9]+$/;
     for (const [key, record] of Object.entries(object(raw.history) ?? {})) {
       if (historicalKey.test(key) && object(record)) history[key] = record;
     }
     for (const [key, value] of Object.entries(object(raw.records) ?? {})) {
-      const match = /^(cm-l[0-9]m[0-9]{2}(?:l[0-9]{2})?)@([0-9]+\.[0-9]+\.[0-9]+)$/.exec(key);
+      const match = /^(cm-l[0-9](?:m[0-9]{2}(?:l[0-9]{2})?)?)@([0-9]+\.[0-9]+\.[0-9]+)$/.exec(key);
       if (!match) continue;
       if (match[2] !== mathVersion) { if (object(value)) history[key] = value; continue; }
       if (!knownId(match[1])) continue;
@@ -138,7 +138,7 @@ export function mathAttemptComplete(id: string, record: MathAttempt): boolean {
   const correct = questions.filter((question) => mathQuestionCorrect(question, record)).length;
   const critical = questions.every((question) => !question.critical || mathQuestionCorrect(question, record));
   const content = mathLessons.find((lesson) => lesson.id === id)?.content;
-  if (!content) return allAnswered && critical && correct / questions.length >= 0.8;
+  if (!content) return allAnswered && critical && correct / questions.length >= (mathLevels.some((level) => level.id === id) ? 0.85 : 0.8);
   return allAnswered && correct === questions.length
     && content.practice.every((question) => mathQuestionCorrect(question, record))
     && content.exploration.target.every((value, index) => value === record.exploration[index])
@@ -152,8 +152,8 @@ function recordPassed(id: string, progress: MathProgress): boolean {
 }
 export function mathModulePassed(id: string, progress: MathProgress): boolean {
   const module = mathModules.find((item) => item.id === id);
-  return !!module?.checks && module.lessons.every((lesson) => mathLessonPassed(lesson.id, progress))
-    && mathModuleUnlocked(id, progress) && recordPassed(id, progress);
+  return !!module?.checks && mathModuleUnlocked(id, progress)
+    && module.lessons.every((lesson) => !!lesson.content && recordPassed(lesson.id, progress)) && recordPassed(id, progress);
 }
 export function mathModuleUnlocked(id: string, progress: MathProgress): boolean {
   const index = mathModules.findIndex((module) => module.id === id);
@@ -161,10 +161,15 @@ export function mathModuleUnlocked(id: string, progress: MathProgress): boolean 
   if (index === 0) return true;
   const previous = mathModules[index - 1];
   if (previous.levelId !== mathModules[index].levelId) {
-    // shortcut: cross-level progress stays closed until authored level assessments are implemented.
-    return false;
+    return mathLevelPassed(previous.levelId, progress);
   }
   return mathModulePassed(previous.id, progress);
+}
+export function mathLevelPassed(id: string, progress: MathProgress): boolean {
+  const level = mathLevels.find((item) => item.id === id);
+  const lastModule = level?.modules.at(-1);
+  // Linear module prerequisites make the final module prove the entire preceding chain.
+  return !!level?.checks && !!lastModule && mathModulePassed(lastModule.id, progress) && recordPassed(id, progress);
 }
 export function mathLessonUnlocked(id: string, progress: MathProgress): boolean {
   const lesson = mathLessons.find((item) => item.id === id);

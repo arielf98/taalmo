@@ -34,7 +34,7 @@ Lihat [rencana dan evidence](docs/database-path-implementation.md), [panduan aut
 
 ## Matematika untuk Cybersecurity
 
-Menu **Cybersecurity Math / Matematika Cybersecurity** di header, sidebar, dan kartu dashboard menuju `/learn/cybersecurity-math`. Jalur memiliki peta **10 level, 40 modul, dan 120 lesson target** dari numerasi sampai expert track matematika kriptografi. Saat ini **sembilan lesson L0M01–L0M03 terbit**: operasi dasar, pecahan/persentase, serta rasio/laju/unit. Sebanyak 111 lesson lain masih **Direncanakan**, tanpa tautan lesson kosong.
+Menu **Cybersecurity Math / Matematika Cybersecurity** di header, sidebar, dan kartu dashboard menuju `/learn/cybersecurity-math`. Jalur memiliki peta **10 level, 40 modul, dan 120 lesson target** dari numerasi sampai expert track matematika kriptografi. Saat ini **seluruh L0 terbit: 12 lesson dalam 4 modul**, dari operasi dasar hingga negatif/jarak, estimasi, dan pangkat. Sebanyak 108 lesson L1–L9 masih **Direncanakan**, tanpa tautan lesson kosong.
 
 Pola belajar: prediksi → visual yang bisa diubah → penjelasan dan worked example → dua variasi latihan serta kasus batas → penerapan/refleksi → checkpoint. Lesson dan kontrol tersedia dalam Indonesia–Inggris. Angka latihan seluruhnya fiktif; pembelajaran matematika ini tidak menjalankan serangan, menguji target, atau menghasilkan kriptografi produksi.
 
@@ -44,7 +44,9 @@ L0M02 menambahkan visual bagian sama besar dan perubahan persentase, jawaban pec
 
 L0M03 menambahkan perbandingan senilai, laju hipotetis dan konversi waktu, serta bit/byte dan kB/KiB. Visual tabel interaktif memisahkan unit dan asumsi; target positif pada laju nol ditandai tidak tercapai, sedangkan target kosong tidak membutuhkan pemrosesan. Setiap lesson/modul tetap memiliki latihan, hint, dua set checkpoint, dan task berubrik.
 
-Lesson terbit boleh dibaca sebagai preview sebelum prasyarat lulus; preview tidak menulis jawaban, resume, atau kelulusan resmi. Assessment L0 belum terbit karena L0M04 belum ditulis. Task teks berstatus draf/siap direview; teks terisi atau checkpoint otomatis tidak membuktikan argumen benar maupun review independen. Expert track, capstone, dan seluruh materi setelah L0M03 masih direncanakan.
+L0M04 mengajarkan negatif dan jarak absolut melalui garis bilangan/slider, pembulatan nonnegatif dengan aturan setengah naik, kisaran estimasi, serta pangkat melalui perkalian berulang. Model mengecualikan 0^0. Empat modul masing-masing mempunyai dua set checkpoint dan task/rubrik. Assessment L0 menyediakan **dua set × 13 soal** lintas semua modul, termasuk pasangan tambahan per akun vs total, memerlukan seluruh checkpoint modul, semua jawaban terisi, nilai ≥85%, dan seluruh soal kritis benar. Retake mempertahankan kelulusan dan mencatat bantuan; membuka solusi mengharuskan percobaan set lain.
+
+Lesson terbit boleh dibaca sebagai preview sebelum prasyarat lulus; preview tidak menulis jawaban, resume, atau kelulusan resmi. Assessment level yang belum ditulis tidak dapat membuka progres level berikutnya; L1 belum terbit walaupun L0 sudah lulus. Task teks berstatus draf/siap direview; teks terisi atau checkpoint otomatis tidak membuktikan argumen benar maupun review independen. Expert track, capstone, dan seluruh L1–L9 masih direncanakan.
 
 Progres matematika memakai key browser **`taalmo.cybersecurity-math.progress.v1`**, terpisah dari `taalmo.progress.v1` milik database/lab. Resume menyimpan langkah dan jawaban yang sudah diperiksa; teks angka yang belum diperiksa perlu dimasukkan ulang setelah refresh. Kegagalan write menampilkan pemberitahuan dan mempertahankan pekerjaan dalam memori tab; refresh/penutupan tab dapat menghilangkan pekerjaan itu. Perubahan serentak di beberapa tab bisa saling menimpa; salin catatan penting ke luar browser. Tidak ada akun, sinkronisasi perangkat, tutor AI, atau layanan review manusia.
 

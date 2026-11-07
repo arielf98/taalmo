@@ -2,10 +2,14 @@ import { copy, type Copy, type MathQuestion } from "./types";
 import { foundation, foundationModuleChecks } from "./foundation";
 import { fractions, fractionsModuleChecks, fractionsTask } from "./fractions";
 import { measurements, measurementsModuleChecks, measurementsTask } from "./measurements";
-const authored = { ...foundation, ...fractions, ...measurements };
+import { numeracy, numeracyModuleChecks, numeracyTask } from "./numeracy";
+import { l0Assessment } from "./l0-assessment";
+const authored = { ...foundation, ...fractions, ...measurements, ...numeracy };
 const authoredModuleChecks: Partial<Record<string, [MathQuestion[], MathQuestion[]]>> = {
   "cm-l0m01": foundationModuleChecks, "cm-l0m02": fractionsModuleChecks, "cm-l0m03": measurementsModuleChecks,
+  "cm-l0m04": numeracyModuleChecks,
 };
+const authoredLevelChecks: Partial<Record<string, [MathQuestion[], MathQuestion[]]>> = { "cm-l0": l0Assessment };
 
 export const mathPathHref = "/learn/cybersecurity-math";
 export const mathVersion = "1.0.0";
@@ -87,7 +91,7 @@ const levelContexts = [
   copy("Tujuan: baca complexity, reduction, lattice, dan KEM secara konseptual. Kegunaan keamanan: memisahkan asumsi post-quantum dari jaminan implementasi, lalu menyusun capstone yang dapat direview.", "Goal: read complexity, reductions, lattices, and KEMs conceptually. Security use: separate post-quantum assumptions from implementation guarantees and build a reviewable capstone."),
 ];
 export const mathLevels = outlines.map((level, levelIndex) => ({
-  id: `cm-l${levelIndex}`, title: level.title, context: levelContexts[levelIndex],
+  id: `cm-l${levelIndex}`, title: level.title, context: levelContexts[levelIndex], checks: authoredLevelChecks[`cm-l${levelIndex}`],
   modules: level.modules.map((module, moduleIndex) => {
     const id = `cm-l${levelIndex}m${String(moduleIndex + 1).padStart(2, "0")}`;
     return {
@@ -109,6 +113,7 @@ export const mathRecordKey = (id: string) => `${id}@${mathVersion}`;
 export function mathQuestions(id: string, attempt = 0) {
   return mathLessons.find((lesson) => lesson.id === id)?.content?.checkpoints[attempt % 2]
     ?? mathModules.find((module) => module.id === id)?.checks?.[attempt % 2]
+    ?? mathLevels.find((level) => level.id === id)?.checks?.[attempt % 2]
     ?? [];
 }
 
@@ -117,9 +122,10 @@ export const foundationTask = copy(
   "Four accounts each receive six attempts. Make a per-account table; calculate 24 initial attempts, 28 after four extra in total, and 40 after four extra per account. Explain the units, show one empty-group example, then explain how many groups of size five are needed to process 28 events. Write your steps, result, assumptions, and limits: a count of attempts alone does not prove an attack.",
 );
 
-export const mathModuleTasks: Partial<Record<string, Copy>> = { "cm-l0m01": foundationTask, "cm-l0m02": fractionsTask, "cm-l0m03": measurementsTask };
+export const mathModuleTasks: Partial<Record<string, Copy>> = { "cm-l0m01": foundationTask, "cm-l0m02": fractionsTask, "cm-l0m03": measurementsTask, "cm-l0m04": numeracyTask };
 export const mathModuleCheckDescriptions: Partial<Record<string, Copy>> = {
   "cm-l0m01": copy("Lulus tiga lesson dahulu. Jawab lima soal; perlu nilai minimal 80% dan semua soal kritis benar. Soal kritis mencakup nol, tambahan total, dan urutan operasi.", "Complete all three lessons first. Answer five questions; you need at least 80% and every critical question correct. Critical questions cover zero, additions to totals, and operation order."),
   "cm-l0m02": copy("Lulus tiga lesson dan checkpoint modul sebelumnya dahulu. Jawab lima soal, perlu minimal 80% dan semua soal kritis benar. Bedakan pecahan, angka persen, desimal, poin persentase, dan perubahan relatif.", "Complete the three lessons and the previous module checkpoint first. Answer five questions, requiring at least 80% and every critical question correct. Distinguish fractions, percentage numbers, decimals, percentage points, and relative change."),
   "cm-l0m03": copy("Selesaikan prasyarat dan tiga lesson modul ini. Lima soal memerlukan ≥80% dan seluruh soal kritis benar: waktu, detik/menit, kB/KiB, dan bit/byte. Unit tujuan dinyatakan pada tiap soal.", "Complete prerequisites and all three lessons. Five questions require ≥80% and every critical item correct: duration, seconds/minutes, kB/KiB, and bits/bytes. Each question states its target unit."),
+  "cm-l0m04": copy("Selesaikan prasyarat dan ketiga lesson. Checkpoint memerlukan ≥80% dan seluruh soal kritis benar: bedakan jarak/perubahan, pembulatan/kapasitas, serta pangkat/perkalian biasa.", "Complete prerequisites and all three lessons. The checkpoint requires ≥80% and all critical items correct: distinguish distance/change, rounding/capacity, and powers/ordinary multiplication."),
 };
