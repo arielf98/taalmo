@@ -28,6 +28,12 @@ The compact overview uses the existing labs/lessons catalog and read-only browse
 
 Review scope is source/diff only. No tests, manual/browser checks, lint, typecheck or build were run. The next optional item, accessibility/browser coverage, requires explicit authorization to execute checks under AGENTS.md. Further product changes below still need concrete scope.
 
+## Cybersecurity Math — rancangan 7 November 2026
+
+Pengguna memilih jalur lengkap bertahap untuk matematika cybersecurity dari pemula sampai expert track, dengan pengajaran visual/interaktif, task pelajar, dan dokumen kebutuhan. [Draf kebutuhan/desain](superpowers/specs/2026-11-07-cybersecurity-math-design.md), [kurikulum 10 level/40 modul/120 lesson target](../curriculum/cybersecurity-math/README.md), serta [backlog implementasi](cybersecurity-math-tasks.md) sudah disusun. Detail desain menunggu persetujuan; belum ada menu, player, progres, atau lesson matematika yang diimplementasikan/published.
+
+Usulan rilis pertama: menu/kartu/rute khusus, progres terpisah dari database, player matematika, serta tiga lesson L0M01 bilingual yang lengkap. Lanjut per modul sampai L9; target authoring tidak disamakan dengan jumlah materi terbit atau bukti keahlian expert. Source/diff review saja; tidak menjalankan test, browser/manual check, lint, typecheck, build, atau contoh.
+
 ## Later learning improvements
 
 - Expand meaningful accessibility checks and Safari/Firefox/mobile browser coverage.
