@@ -42,7 +42,9 @@ L0M03 dipush sebagai `d55524a`. CM-02c (8 November 2026) kemudian menambahkan L0
 
 L0 lengkap dipush sebagai `89f5ce2`. CM-03a menambahkan L1M01 (tiga lesson variabel, persamaan dan pertidaksamaan/budget integer) dengan visual penjumlahan berlabel dan model biaya fiktif 40+3x. Semua unsur lesson, dua set checkpoint lesson/modul dan task/rubrik tersedia. Badge mengikuti level, dan alur L0→L1 mensyaratkan assessment L0; tautan prasyarat tidak memutar pengguna ke modul yang sudah lulus.
 
-**Status authoring: 15 lesson published, 105 draft; L0 lengkap dan L1M01 terbit.** Assessment L0 tersedia; sisa L1, L2–L9 dan capstone belum terbit. Berikutnya CM-03b/L1M02 (fungsi/grafik/komposisi/inverse). Source/diff review termasuk reviewer terpisah; tidak menjalankan test, browser/manual check, lint, typecheck, build, atau contoh. Tidak ada merge/deploy.
+CM-03a dipush sebagai `ee2b95f`. CM-03b menambahkan L1M02 dengan tiga lesson fungsi/domain/range, grafik linear dan kemiringan, serta komposisi/invers. Visual menampilkan domain/range yang eksplisit, sampel waktu integer dengan sumbu/unit dan tabel, serta tahap komposisi dan langkah invers. Input di luar domain, rate nol, fungsi konstan tanpa invers unik, dan reciprocal dibedakan. Dua set checkpoint lesson/modul dan task/rubrik tersedia.
+
+**Status authoring: 18 lesson published, 102 draft; L0 lengkap dan L1M01–M02 terbit.** Assessment L0 tersedia; sisa L1, L2–L9 dan capstone belum terbit. Berikutnya CM-03c/L1M03 (pangkat/pertumbuhan/ruang pilihan string). Source/diff review termasuk reviewer terpisah; tidak menjalankan test, browser/manual check, lint, typecheck, build, atau contoh. Tidak ada merge/deploy.
 
 ## Later learning improvements
 

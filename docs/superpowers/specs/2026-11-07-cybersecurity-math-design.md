@@ -1,6 +1,6 @@
 # Kebutuhan dan desain — Matematika untuk Cybersecurity
 
-Dibuat 7 November, diperbarui 8 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-03a diimplementasikan; L0 lengkap dan L1M01 terbit dengan review source/diff**.
+Dibuat 7 November, diperbarui 8 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-03b diimplementasikan; L0 lengkap dan L1M01–M02 terbit dengan review source/diff**.
 
 Pengguna memilih **jalur lengkap bertahap** dan pada 7 November 2026 menyetujui dokumen desain ini serta memulai implementasi menu dan tiga lesson L0M01. Pengguna juga mengizinkan push dokumen ke GitHub arielf98/taalmo branch main. Ukuran kurikulum, aturan penilaian, dan keputusan teknis di bawah merupakan usulan perancang yang tercakup dalam persetujuan desain.
 
@@ -256,3 +256,9 @@ Assessment level memerlukan seluruh modul lulus, semua jawaban terisi, nilai akt
 Tiga lesson variabel/substitusi, persamaan dua sisi, dan pertidaksamaan/budget integer diterbitkan, lengkap dengan worked example, dua variasi/edge case, hint/feedback, dua set checkpoint lesson/modul serta task/rubrik. Label visual penjumlahan menjelaskan x dan konstanta; model budget 40+3x menunjukkan batas integer dan biaya tetap, termasuk kasus tidak ada solusi layak. Header dan navigasi mengikuti level serta membedakan assessment L0 dari checkpoint modul sebagai prasyarat.
 
 Status kini **15 lesson published, 105 draft**, lima checkpoint/task modul, dan assessment L0 dua set × 13 soal. L1M01 memerlukan L0 lulus; assessment L1 tetap belum terbit sampai semua modul lengkap. Berikutnya CM-03b/L1M02. Evidence source/diff saja; tidak ada test, browser/manual check, lint, typecheck, build atau eksekusi contoh.
+
+## 18. Lanjutan CM-03b — L1M02
+
+Tiga lesson fungsi/domain/range, grafik linear/kemiringan dan komposisi/invers ditambahkan, dengan seluruh tahapan bilingual, dua set checkpoint lesson/modul serta task/rubrik. Tabel fungsi menolak input di luar domain dan membedakan range dari domain. Grafik N(t)=3+mt memperlihatkan nilai awal, rate dan sampel integer bersumbu/unit; garis putus-putus hanya penghubung sampel. Model komposisi f(x)=x+2 dan g(u)=3u menunjukkan kedua urutan, nilai antara dan pembatalan tahap terbalik. Domain integer nonnegatif lebih luas dari rentang kontrol; domain invers adalah range komposisi. Fungsi konstan, invers tidak unik dan perbedaan invers/reciprocal dijelaskan serta dinilai.
+
+Status authoring menjadi **18 lesson published, 102 draft**, enam checkpoint/task modul dan assessment L0 dua set × 13 soal. Tidak ada perubahan ID/version lama, bentuk progres, grading atau route API. Assessment L1 belum terbit. Berikutnya CM-03c/L1M03. Evidence tetap source/diff; runtime belum diverifikasi.

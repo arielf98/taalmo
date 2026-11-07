@@ -8,6 +8,7 @@ import styles from "./cybersecurity-math.module.css";
 import { MathMeasurementVisual } from "./cybersecurity-math-measurements";
 import { MathNumeracyVisual } from "./cybersecurity-math-numeracy";
 import { MathBudgetVisual } from "./cybersecurity-math-budget";
+import { MathFunctionVisual } from "./cybersecurity-math-functions";
 
 export function MathQuestionCard({ question, answer, onAnswer }: {
   question: MathQuestion; answer?: MathAnswer; onAnswer: (value: MathAnswer | undefined) => void;
@@ -65,6 +66,7 @@ export function MathVisual({ activity, value, onChange }: {
   if (activity.kind === "ratio" || activity.kind === "rate" || activity.kind === "bytes") return <MathMeasurementVisual activity={activity} value={value} onChange={onChange} />;
   if (activity.kind === "distance" || activity.kind === "rounding" || activity.kind === "powers") return <MathNumeracyVisual activity={activity} value={value} onChange={onChange} />;
   if (activity.kind === "budget") return <MathBudgetVisual activity={activity} value={value} onChange={onChange} />;
+  if (activity.kind === "function" || activity.kind === "linear" || activity.kind === "composition") return <MathFunctionVisual activity={activity} value={value} onChange={onChange} />;
   const division = activity.kind === "division";
   const count = activity.kind === "count";
   const fraction = activity.kind === "fraction";
