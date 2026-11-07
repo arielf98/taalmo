@@ -1,10 +1,13 @@
 export type Copy = { id: string; en: string };
 export const copy = (id: string, en: string): Copy => ({ id, en });
+export interface FractionAnswer { numerator: number; denominator: number }
+export type MathAnswer = number | FractionAnswer;
 
 export interface MathQuestion {
   id: string;
   prompt: Copy;
-  answer: number;
+  answer: MathAnswer;
+  decimalPlaces?: number;
   solution: Copy;
   feedback: Copy;
   options?: number[];
@@ -17,7 +20,7 @@ export interface MathLessonContent {
   objective: Copy;
   prediction: MathQuestion;
   exploration: {
-    kind: "count" | "groups" | "division";
+    kind: "count" | "groups" | "division" | "fraction" | "percentage-change";
     initial: [number, number];
     target: [number, number];
     instruction: Copy;
@@ -31,3 +34,8 @@ export interface MathLessonContent {
   reflection: Copy;
   checkpoints: [MathQuestion[], MathQuestion[]];
 }
+
+export const mathVisualBounds: Record<MathLessonContent["exploration"]["kind"], [[number, number], [number, number]]> = {
+  count: [[0, 8], [0, 8]], groups: [[0, 8], [0, 8]], division: [[0, 24], [1, 8]],
+  fraction: [[0, 8], [1, 8]], "percentage-change": [[0, 100], [0, 100]],
+};

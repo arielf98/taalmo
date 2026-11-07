@@ -1,6 +1,6 @@
 # Kebutuhan dan desain — Matematika untuk Cybersecurity
 
-Tanggal: 7 November 2026. Status: **desain disetujui pengguna; CM-01 diimplementasikan dengan review source/diff**.
+Tanggal: 7 November 2026. Status: **desain disetujui pengguna; CM-01 dan CM-02a diimplementasikan dengan review source/diff**.
 
 Pengguna memilih **jalur lengkap bertahap** dan pada 7 November 2026 menyetujui dokumen desain ini serta memulai implementasi menu dan tiga lesson L0M01. Pengguna juga mengizinkan push dokumen ke GitHub arielf98/taalmo branch main. Ukuran kurikulum, aturan penilaian, dan keputusan teknis di bawah merupakan usulan perancang yang tercakup dalam persetujuan desain.
 
@@ -232,3 +232,9 @@ Menu header/sidebar, kartu dashboard, CURRENT PATH kontekstual, route jalur/less
 Review source oleh reviewer terpisah menghasilkan perbaikan parser fail-closed, histori versi pasif, sinkronisasi field jawaban, provenance bantuan/set soal, pemisahan preview/resmi, feedback antara, dan wrapping tombol. Keputusan penilaian diperjelas: draf transfer tidak wajib diisi untuk progres otomatis; refleksi tetap wajib, sesuai pemisahan task teks dari checkpoint. Parser dan masterynya tidak menilai kebenaran teks refleksi.
 
 Kode hanya memakai grader integer dan tiga jenis visual yang diperlukan L0M01. Pecahan/desimal, bigint, visual modular, serta assessment level belum dibuat karena harus mengikuti modul yang membutuhkannya. Bukti saat ini source/diff review saja, tanpa test, manual/browser check, lint, typecheck, build, atau contoh yang dieksekusi. Tidak ada merge/deploy.
+
+## 14. Lanjutan CM-02a — L0M02
+
+Setelah rilis CM-01 `1e6f108` dipush, L0M02 menambahkan tiga lesson bilingual pecahan, desimal/persentase, dan perubahan relatif vs poin persentase. Status terkini **6 lesson terbit, 114 draft**. Terdapat dua task/rubrik modul dan dua set checkpoint per lesson/modul. Grader kini mendukung pasangan pecahan exact dengan penyebut positif serta desimal koma/titik yang dibatasi dan diberi toleransi eksplisit. Visual pecahan/persentase memiliki tabel, tanda pendekatan untuk pembulatan, dan proteksi baseline nol. Progress ID/versi L0M01 tetap sama; seluruh penilaian tetap formatif.
+
+Navigasi akhir lesson menuju checkpoint modul yang belum lulus sebelum masuk modul berikutnya; preview menyebut checkpoint modul sebagai prasyarat bila itulah yang belum selesai. Review terpisah terhadap source/diff mencakup kompatibilitas jawaban lama, penyebut/input desimal, pembulatan, baseline nol, navigasi serta pengumuman visual. Tidak ada test atau eksekusi runtime. Pekerjaan berikutnya CM-02b/L0M03; assessment L0 dan materi sesudah L0M02 tetap belum terbit.

@@ -1,5 +1,7 @@
 import { copy, type Copy } from "./types";
 import { foundation, foundationModuleChecks } from "./foundation";
+import { fractions, fractionsModuleChecks, fractionsTask } from "./fractions";
+const authored = { ...foundation, ...fractions };
 
 export const mathPathHref = "/learn/cybersecurity-math";
 export const mathVersion = "1.0.0";
@@ -86,10 +88,10 @@ export const mathLevels = outlines.map((level, levelIndex) => ({
     const id = `cm-l${levelIndex}m${String(moduleIndex + 1).padStart(2, "0")}`;
     return {
       id, title: module.title, levelId: `cm-l${levelIndex}`,
-      checks: id === "cm-l0m01" ? foundationModuleChecks : undefined,
+      checks: id === "cm-l0m01" ? foundationModuleChecks : id === "cm-l0m02" ? fractionsModuleChecks : undefined,
       lessons: module.lessons.map((title, lessonIndex) => {
         const lessonId = `${id}l${String(lessonIndex + 1).padStart(2, "0")}`;
-        return { id: lessonId, title, moduleId: id, levelId: `cm-l${levelIndex}`, content: foundation[lessonId] };
+        return { id: lessonId, title, moduleId: id, levelId: `cm-l${levelIndex}`, content: authored[lessonId] };
       }),
     };
   }),
@@ -110,3 +112,9 @@ export const foundationTask = copy(
   "Empat akun masing-masing menerima enam percobaan. Buat tabel per akun; hitung 24 percobaan awal, 28 jika ditambah empat total, dan 40 jika ditambah empat per akun. Jelaskan perbedaan satuan, tunjukkan satu contoh kelompok kosong, lalu jelaskan berapa kelompok ukuran lima yang dibutuhkan untuk memproses 28 kejadian. Tulis langkah, hasil, asumsi, dan batas kesimpulan: jumlah percobaan belum membuktikan adanya serangan.",
   "Four accounts each receive six attempts. Make a per-account table; calculate 24 initial attempts, 28 after four extra in total, and 40 after four extra per account. Explain the units, show one empty-group example, then explain how many groups of size five are needed to process 28 events. Write your steps, result, assumptions, and limits: a count of attempts alone does not prove an attack.",
 );
+
+export const mathModuleTasks: Partial<Record<string, Copy>> = { "cm-l0m01": foundationTask, "cm-l0m02": fractionsTask };
+export const mathModuleCheckDescriptions: Partial<Record<string, Copy>> = {
+  "cm-l0m01": copy("Lulus tiga lesson dahulu. Jawab lima soal; perlu nilai minimal 80% dan semua soal kritis benar. Soal kritis mencakup nol, tambahan total, dan urutan operasi.", "Complete all three lessons first. Answer five questions; you need at least 80% and every critical question correct. Critical questions cover zero, additions to totals, and operation order."),
+  "cm-l0m02": copy("Lulus tiga lesson dan checkpoint modul sebelumnya dahulu. Jawab lima soal, perlu minimal 80% dan semua soal kritis benar. Bedakan pecahan, angka persen, desimal, poin persentase, dan perubahan relatif.", "Complete the three lessons and the previous module checkpoint first. Answer five questions, requiring at least 80% and every critical question correct. Distinguish fractions, percentage numbers, decimals, percentage points, and relative change."),
+};

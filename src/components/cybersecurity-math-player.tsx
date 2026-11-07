@@ -2,9 +2,9 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import { mathLessonHref, mathLessons, mathPathHref, mathQuestions, mathRecordKey, mathTitle, type MathLesson } from "@/content/cybersecurity-math/catalog";
+import { mathLessonHref, mathLessons, mathModules, mathPathHref, mathQuestions, mathRecordKey, mathTitle, type MathLesson } from "@/content/cybersecurity-math/catalog";
 import { useLocale } from "@/lib/locale";
-import { mathAttemptComplete, mathLessonPassed, mathLessonUnlocked, newMathAttempt, type MathRecord } from "@/lib/cybersecurity-math";
+import { mathAttemptComplete, mathLessonPassed, mathLessonUnlocked, mathModuleUnlocked, newMathAttempt, type MathRecord } from "@/lib/cybersecurity-math";
 import { useMathProgress } from "@/lib/cybersecurity-math-progress";
 import { Badge, Workspace } from "./shell";
 import { Button } from "./ui/button";
@@ -44,6 +44,8 @@ export function CybersecurityMathPlayer({ lesson }: { lesson: MathLesson }) {
   const targetReached = content.exploration.target.every((value, index) => value === record.exploration[index]);
   const previous = mathLessons[mathLessons.findIndex((item) => item.id === lesson.id) - 1];
   const next = mathLessons[mathLessons.findIndex((item) => item.id === lesson.id) + 1];
+  const previousModule = mathModules[mathModules.findIndex((module) => module.id === lesson.moduleId) - 1];
+  const missingModuleCheckpoint = !mathModuleUnlocked(lesson.moduleId, progress) && previousModule;
   return <Workspace>
     <div className={styles.page} lang={locale}>
       <div className="breadcrumb"><Link href={mathPathHref}>{mathTitle[locale]}</Link><span> / {lesson.moduleId.toUpperCase()}</span></div>
@@ -52,7 +54,7 @@ export function CybersecurityMathPlayer({ lesson }: { lesson: MathLesson }) {
       {!unlocked && <div className={styles.notice}>
         <strong>{locale === "id" ? "Mode preview: progres belum dicatat. " : "Preview mode: progress is not recorded. "}</strong>
         {locale === "id" ? "Kamu boleh membaca dan mencoba. Selesaikan prasyarat sebelum memulai percobaan resmi. Jawaban preview tidak menjadi kelulusan otomatis." : "You may read and explore. Complete the prerequisite before starting an official attempt. Preview answers do not become completion records."}
-        {previous?.content && <p><Link className={styles.link} href={mathLessonHref(previous.id)}>{locale === "id" ? "Prasyarat: " : "Prerequisite: "}{previous.title[locale]}</Link></p>}
+        {missingModuleCheckpoint ? <p><Link className={styles.link} href={`${mathPathHref}#checkpoint-${missingModuleCheckpoint.id}`}>{locale === "id" ? "Prasyarat: checkpoint modul " : "Prerequisite: module checkpoint "}{missingModuleCheckpoint.title[locale]}</Link></p> : previous?.content && <p><Link className={styles.link} href={mathLessonHref(previous.id)}>{locale === "id" ? "Prasyarat: " : "Prerequisite: "}{previous.title[locale]}</Link></p>}
       </div>}
       {completed && <p className={styles.notice}>{locale === "id" ? "Checkpoint lesson sudah selesai. Kamu boleh mengulang; kelulusan sebelumnya tetap tersimpan. Ini progres formatif, bukan sertifikasi." : "This lesson checkpoint is complete. You can retake it; the earlier completion stays saved. This is formative progress, not certification."}</p>}
       <nav className={styles.steps} aria-label={locale === "id" ? "Langkah lesson" : "Lesson steps"}>
@@ -107,7 +109,9 @@ export function CybersecurityMathPlayer({ lesson }: { lesson: MathLesson }) {
         <Button disabled={record.step === 5} onClick={() => navigate(record.step + 1)}>{locale === "id" ? "Berikutnya" : "Next"}<ArrowRight size={16} /></Button>
         <Link href={mathPathHref} className={styles.link}>{locale === "id" ? "Kembali ke jalur dan checkpoint modul" : "Back to path and module checkpoint"}</Link>
       </div>
-      {completed && next?.content && <Button asChild><Link href={mathLessonHref(next.id)}>{locale === "id" ? "Lanjutkan: " : "Continue: "}{next.title[locale]}<ArrowRight size={16} /></Link></Button>}
+      {completed && (next?.content && mathLessonUnlocked(next.id, progress)
+        ? <Button asChild><Link href={mathLessonHref(next.id)}>{locale === "id" ? "Lanjutkan: " : "Continue: "}{next.title[locale]}<ArrowRight size={16} /></Link></Button>
+        : <Button asChild><Link href={`${mathPathHref}#checkpoint-${lesson.moduleId}`}>{locale === "id" ? "Lanjutkan ke checkpoint modul" : "Continue to the module checkpoint"}<ArrowRight size={16} /></Link></Button>)}
       {unlocked && <Button variant="ghost" onClick={() => restart(lesson.id)}>{locale === "id" ? "Mulai ulang seluruh lesson; kelulusan tetap tersimpan" : "Restart the whole lesson; earned completion stays saved"}</Button>}
       <p className={styles.muted}>{locale === "id" ? "Progres hanya di browser dan perangkat ini. Menghapus penyimpanan menghapus progres. Simpan salinan catatan penting di luar browser; perubahan bersamaan di beberapa tab dapat saling menimpa." : "Progress stays in this browser on this device. Clearing storage deletes it. Keep important notes outside the browser; simultaneous changes in multiple tabs can overwrite each other."}</p>
     </div>

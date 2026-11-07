@@ -34,7 +34,9 @@ Pengguna menyetujui desain jalur lengkap bertahap untuk matematika cybersecurity
 
 Rilis CM-01 mengimplementasikan player enam langkah, visual kelompok/garis bilangan/quotient-remainder beserta tabel setara, tiga lesson L0M01 bilingual, dua variasi latihan plus edge case per lesson, hint/feedback, dua set checkpoint lesson/modul, task/rubrik, resume dan progres lokal terpisah dari database. Parser memvalidasi evidence aktif dan mempertahankan JSON versi lama secara pasif; preview terkunci tidak menulis progres resmi, retake mempertahankan snapshot kelulusan, dan kegagalan write memakai fallback memori dengan pemberitahuan.
 
-**Status authoring: 3 lesson published, 117 draft.** Assessment L0, level lanjutan, dan capstone belum terbit. Berikutnya CM-02a/L0M02: pecahan dan persentase, dengan visual/validasi jawaban yang sesuai, kemudian modul L0 lainnya dan L1–L9 per modul lengkap. Source/diff review termasuk reviewer terpisah; tidak menjalankan test, browser/manual check, lint, typecheck, build, atau contoh. Tidak ada merge/deploy.
+CM-01 disimpan/push sebagai `1e6f108`. L0M02/CM-02a kemudian menambahkan tiga lesson pecahan, desimal/persentase, dan poin vs perubahan relatif, dengan visual bagian sama besar/rate, jawaban pecahan eksak serta desimal koma/titik, dua set checkpoint dan task/rubrik. UI checkpoint dipakai oleh kedua modul; navigasi mengarahkan peserta ke checkpoint modul yang masih wajib sebelum melanjutkan. Validasi restore mengikuti batas input yang sama; hasil visual yang dibulatkan ditandai pendekatan, dan baseline nol tidak dibagi.
+
+**Status authoring: 6 lesson published, 114 draft.** Assessment L0, level lanjutan, dan capstone belum terbit. Berikutnya CM-02b/L0M03: rasio/laju/unit, kemudian L0M04 dan L1–L9 per modul lengkap. Source/diff review termasuk reviewer terpisah; tidak menjalankan test, browser/manual check, lint, typecheck, build, atau contoh. Tidak ada merge/deploy.
 
 ## Later learning improvements
 

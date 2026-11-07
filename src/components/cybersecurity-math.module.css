@@ -34,6 +34,12 @@
 .group { border: 1px solid var(--border); padding: 10px; border-radius: 10px; display: flex; flex-wrap: wrap; gap: 5px; align-content: start; min-height: 70px; }
 .group small { flex: 0 0 100%; }
 .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--mint); border: 1px solid currentColor; }
+.fractionGrid { display: grid; gap: 4px; }
+.fractionGrid span { border: 1px solid var(--border); padding: 8px; text-align: center; }
+.fractionGrid [data-filled="true"] { background: var(--mint); color: #172d35; }
+.changeBars { display: grid; gap: 12px; }
+.changeBars > div { position: relative; padding: 10px; background: var(--surface-alt); z-index: 0; color: var(--ink); }
+.changeBars span { position: absolute; inset: 0 auto 0 0; background: var(--mint-soft); z-index: -1; }
 .numberline { display: flex; flex-wrap: wrap; gap: 6px; }
 .numberline span { border: 1px solid var(--border); padding: 4px 7px; border-radius: 6px; }
 .numberline [data-active="true"] { background: var(--mint); color: #172d35; font-weight: 700; }

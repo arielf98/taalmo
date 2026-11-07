@@ -1,9 +1,9 @@
 import { mathLessons, mathModules, mathQuestions, mathRecordKey, mathVersion } from "@/content/cybersecurity-math/catalog";
-import type { MathQuestion } from "@/content/cybersecurity-math/types";
+import { mathVisualBounds, type MathAnswer, type MathQuestion } from "@/content/cybersecurity-math/types";
 
 export interface MathAttempt {
   attempt: number;
-  answers: Partial<Record<string, number>>;
+  answers: Partial<Record<string, MathAnswer>>;
   step: number;
   exploration: [number, number];
   reflection: string;
@@ -52,18 +52,25 @@ function parseAttempt(id: string, value: unknown): MathAttempt | null {
     || !Array.isArray(raw.seenSets) || !raw.seenSets.every((item) => item === 0 || item === 1)
     || !Array.isArray(raw.viewedSets) || !raw.viewedSets.every((item) => item === 0 || item === 1)) return null;
   const attempt = raw.attempt as number;
-  const answers: Record<string, number> = {};
+  const answers: Record<string, MathAnswer> = {};
   const inputAnswers = object(raw.answers);
   for (const question of questionsInRecord(id, attempt)) {
     const answer = inputAnswers?.[question.id];
-    if (typeof answer === "number" && Number.isSafeInteger(answer) && Math.abs(answer) <= 1000000) answers[question.id] = answer;
+    if (typeof question.answer === "number") {
+      if (typeof answer === "number" && mathAnswer(String(answer), question.decimalPlaces !== undefined) === answer) answers[question.id] = answer;
+    } else {
+      const fraction = object(answer);
+      if (fraction && typeof fraction.numerator === "number" && Number.isInteger(fraction.numerator)
+        && Math.abs(fraction.numerator) <= 10000 && integer(fraction.denominator, 10000) && (fraction.denominator as number) > 0) {
+        answers[question.id] = { numerator: fraction.numerator, denominator: fraction.denominator as number };
+      }
+    }
   }
   const content = mathLessons.find((lesson) => lesson.id === id)?.content;
   const initial = content?.exploration.initial ?? [0, 0];
   const position = Array.isArray(raw.exploration) ? raw.exploration : [];
-  const limits = content?.exploration.kind === "division" ? [24, 8] : [8, 8];
-  const validPosition = position.length === 2 && integer(position[0], limits[0]) && integer(position[1], limits[1])
-    && (content?.exploration.kind !== "division" || position[1] >= 1);
+  const bounds = mathVisualBounds[content?.exploration.kind ?? "count"];
+  const validPosition = position.length === 2 && bounds.every(([min, max], index) => integer(position[index], max) && position[index] >= min);
   return {
     attempt, answers,
     step: integer(raw.step, 5) ? raw.step as number : 0,
@@ -109,12 +116,21 @@ export function parseMathProgress(value: string): MathProgress {
     return { records, tasks, history, resume: typeof raw.resume === "string" && mathLessons.some((lesson) => lesson.id === raw.resume && lesson.content) ? raw.resume : null };
   } catch { return emptyMathProgress(); }
 }
-export function mathAnswer(input: string): number | null {
-  if (!/^-?\d{1,7}$/.test(input.trim())) return null;
-  const number = Number(input.trim());
-  return Number.isSafeInteger(number) && Math.abs(number) <= 1000000 ? number : null;
+export function mathAnswer(input: string, decimal = false): number | null {
+  if (!(decimal ? /^-?\d{1,7}(?:[.,]\d{1,4})?$/ : /^-?\d{1,7}$/).test(input.trim())) return null;
+  const number = Number(input.trim().replace(",", "."));
+  return Number.isFinite(number) && (decimal || Number.isSafeInteger(number)) && Math.abs(number) <= 1000000 ? number : null;
 }
-export const mathQuestionCorrect = (question: MathQuestion, record: MathAttempt) => record.answers[question.id] === question.answer;
+export function mathFraction(numerator: string, denominator: string): MathAnswer | null {
+  const n = mathAnswer(numerator), d = mathAnswer(denominator);
+  return n !== null && d !== null && Math.abs(n) <= 10000 && d >= 1 && d <= 10000 ? { numerator: n, denominator: d } : null;
+}
+export function mathAnswerCorrect(question: MathQuestion, value: MathAnswer | undefined): boolean {
+  if (typeof question.answer === "number") return typeof value === "number"
+    && Math.abs(value - question.answer) <= (question.decimalPlaces === undefined ? 0 : 0.5 * 10 ** -question.decimalPlaces + Number.EPSILON);
+  return !!value && typeof value !== "number" && value.numerator * question.answer.denominator === question.answer.numerator * value.denominator;
+}
+export const mathQuestionCorrect = (question: MathQuestion, record: MathAttempt) => mathAnswerCorrect(question, record.answers[question.id]);
 export function mathAttemptComplete(id: string, record: MathAttempt): boolean {
   const questions = mathQuestions(id, record.attempt);
   if (!questions.length || record.solutionOpen || !record.viewedSets.includes(record.attempt % 2)) return false;
@@ -145,7 +161,7 @@ export function mathModuleUnlocked(id: string, progress: MathProgress): boolean 
   if (index === 0) return true;
   const previous = mathModules[index - 1];
   if (previous.levelId !== mathModules[index].levelId) {
-    // No level assessment is published until its four modules are fully authored.
+    // shortcut: cross-level progress stays closed until authored level assessments are implemented.
     return false;
   }
   return mathModulePassed(previous.id, progress);

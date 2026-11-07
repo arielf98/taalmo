@@ -2,8 +2,8 @@
 import Link from "next/link";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import { useLocale } from "@/lib/locale";
-import { foundationTask, mathLevels, mathLessonHref, mathPathHref, mathQuestions, mathRecordKey, mathTitle } from "@/content/cybersecurity-math/catalog";
-import { mathAttemptComplete, mathLessonPassed, mathLessonUnlocked, mathModulePassed, mathSummary, newMathAttempt } from "@/lib/cybersecurity-math";
+import { mathModuleTasks, mathModuleCheckDescriptions, mathModules, mathLevels, mathLessonHref, mathPathHref, mathQuestions, mathRecordKey, mathTitle } from "@/content/cybersecurity-math/catalog";
+import { mathAttemptComplete, mathLessonPassed, mathLessonUnlocked, mathModulePassed, mathQuestionCorrect, mathSummary, newMathAttempt } from "@/lib/cybersecurity-math";
 import { useMathProgress } from "@/lib/cybersecurity-math-progress";
 import { Badge, Workspace } from "./shell";
 import { Button } from "./ui/button";
@@ -27,21 +27,22 @@ export function CybersecurityMathCourseCard() {
   </section>;
 }
 
-function FoundationModuleCheckpoint() {
+function MathModuleCheckpoint({ id }: { id: string }) {
   const { locale } = useLocale();
   const { progress, update, finish, restart, task } = useMathProgress();
-  const id = "cm-l0m01";
-  const module = mathLevels[0].modules[0];
+  const module = mathModules.find((item) => item.id === id)!;
   const record = progress.records[mathRecordKey(id)] ?? newMathAttempt(id);
   const unlocked = module.lessons.every((lesson) => mathLessonPassed(lesson.id, progress));
   const passed = mathModulePassed(id, progress);
   const questions = mathQuestions(id, record.attempt);
   const draft = progress.tasks[id] ?? { text: "", ready: false };
-  return <section className={`card ${styles.card}`} id="math-module-checkpoint">
-    <Badge>{locale === "id" ? "CHECKPOINT MODUL L0M01" : "L0M01 MODULE CHECKPOINT"}</Badge>
-    <h2>{locale === "id" ? "Gabungkan yang sudah kamu pelajari" : "Bring your learning together"}</h2>
-    <p>{locale === "id" ? "Lulus tiga lesson dahulu. Jawab lima soal; perlu nilai minimal 80% dan semua soal kritis benar. Soal kritis mencakup nol, tambahan total, dan urutan operasi." : "Complete all three lessons first. Answer five questions; you need at least 80% and every critical question correct. Critical questions cover zero, additions to totals, and operation order."}</p>
-    {!unlocked && <p className={styles.notice}>{locale === "id" ? "Checkpoint terbuka setelah tiga lesson L0M01 selesai. Teori lesson berikutnya tetap bisa dibaca sebagai preview." : "This checkpoint opens after all three L0M01 lessons are complete. You can still read later lesson theory in preview mode."}</p>}
+  const nextModule = mathModules[mathModules.findIndex((item) => item.id === id) + 1];
+  const nextLesson = nextModule?.lessons.find((lesson) => lesson.content);
+  return <section className={`card ${styles.card}`} id={`checkpoint-${id}`}>
+    <Badge>{locale === "id" ? "CHECKPOINT MODUL" : "MODULE CHECKPOINT"} · {id.toUpperCase()}</Badge>
+    <h2>{module.title[locale]}</h2>
+    <p>{mathModuleCheckDescriptions[id]?.[locale]}</p>
+    {!unlocked && <p className={styles.notice}>{locale === "id" ? "Checkpoint terbuka setelah tiga lesson modul ini selesai. Teori lesson berikutnya tetap bisa dibaca sebagai preview." : "This checkpoint opens after all three lessons in this module are complete. You can still read later lesson theory in preview mode."}</p>}
     {unlocked && <>
       <p className={styles.muted}>{locale === "id" ? `Set ${record.attempt % 2 + 1} · Percobaan ${record.attempt + 1}` : `Set ${record.attempt % 2 + 1} · Attempt ${record.attempt + 1}`}
         {record.seenSets.includes(record.attempt % 2) && (locale === "id" ? " · Soal pernah dilihat" : " · Previously seen questions")}
@@ -53,11 +54,13 @@ function FoundationModuleCheckpoint() {
         <Button variant="ghost" onClick={() => restart(id)}>{locale === "id" ? "Coba set lain" : "Try the other set"}</Button>
       </div>
       {record.solutionOpen && <div className={styles.notice}><p>{locale === "id" ? "Solusi dibuka; pilih Coba set lain sebelum menyelesaikan checkpoint." : "Solutions are open; choose Try the other set before completing the checkpoint."}</p><ol>{questions.map((question) => <li key={question.id}>{question.solution[locale]}</li>)}</ol></div>}
-      <p aria-live="polite">{locale === "id" ? `Jawaban benar: ${questions.filter((question) => record.answers[question.id] === question.answer).length} / ${questions.length}.` : `Correct answers: ${questions.filter((question) => record.answers[question.id] === question.answer).length} / ${questions.length}.`}</p>
+      <p aria-live="polite">{locale === "id" ? `Jawaban benar: ${questions.filter((question) => mathQuestionCorrect(question, record)).length} / ${questions.length}.` : `Correct answers: ${questions.filter((question) => mathQuestionCorrect(question, record)).length} / ${questions.length}.`}</p>
     </>}
-    {passed && <p className={styles.feedback} role="status">{locale === "id" ? "Checkpoint modul selesai. Kelulusan formatif tetap tersimpan saat kamu mengulang. Modul berikutnya masih direncanakan; assessment L0 terbit setelah empat modul lengkap." : "Module checkpoint complete. Formative completion stays saved when you retake it. The next module is planned; the L0 assessment will publish after all four modules are complete."}</p>}
-    <h3>{locale === "id" ? "Task pelajar: per akun atau total?" : "Learner task: per account or total?"}</h3>
-    <p>{foundationTask[locale]}</p>
+    {passed && <><p className={styles.feedback} role="status">{locale === "id" ? "Checkpoint modul selesai. Kelulusan formatif tetap tersimpan saat kamu mengulang. Assessment L0 menunggu empat modul lengkap." : "Module checkpoint complete. Formative completion stays saved when you retake it. The L0 assessment awaits all four complete modules."}</p>
+      {nextLesson ? <Link className={styles.link} href={mathLessonHref(nextLesson.id)}>{locale === "id" ? "Lanjutkan: " : "Continue: "}{nextLesson.title[locale]}</Link> : <p className={styles.muted}>{locale === "id" ? "Modul berikutnya masih direncanakan; belum ada lesson lanjutan yang dapat diluncurkan." : "The next module is still planned; there are no further published lessons to launch."}</p>}
+    </>}
+    <h3>{locale === "id" ? "Task pelajar" : "Learner task"} · {module.title[locale]}</h3>
+    <p>{mathModuleTasks[id]?.[locale]}</p>
     <p className={styles.muted}>{locale === "id" ? "Rubrik 10 poin: ketepatan hasil 4, langkah/alasan 3, asumsi dan batas 2, kejelasan 1. Target review manusia ≥8 tanpa miskonsepsi kritis. Task ini tidak dinilai otomatis dan tidak mengunci progres lesson." : "10-point rubric: correct results 4, steps/reasoning 3, assumptions and limits 2, clarity 1. Human-review target ≥8 without critical misconceptions. This task is not automatically graded and does not lock lesson progress."}</p>
     {passed ? <>
       <label className={styles.writing}>{locale === "id" ? "Draf task (maksimal 20.000 karakter)" : "Task draft (up to 20,000 characters)"}<textarea maxLength={20000} value={draft.text} onChange={(event) => task(id, event.target.value, false)} /></label>
@@ -83,8 +86,8 @@ export function CybersecurityMathPath() {
           <div className={styles.stat}><strong>{summary.target - summary.total}</strong><span>{locale === "id" ? "Lesson masih direncanakan" : "Lessons still planned"}</span></div>
           <div className={styles.stat}><strong>{summary.percent}%</strong><span>{locale === "id" ? "Progres materi yang sudah terbit" : "Progress through published material"}</span></div>
         </div>
-        <p>{locale === "id" ? "Cara belajar: prediksi → eksplorasi visual → penjelasan → latihan dan hint → penerapan → checkpoint. Tiga lesson pertama sudah tersedia. Materi lanjutan akan diterbitkan per modul; 120 adalah target, bukan jumlah yang sudah siap." : "Learning loop: predict → explore a visual → understand → practice and hints → apply → checkpoint. The first three lessons are available. Advanced content will publish module by module; 120 is the target, not the available count."}</p>
-        <a className={styles.link} href="#math-module-checkpoint">{locale === "id" ? "Buka checkpoint dan task L0M01" : "Go to the L0M01 checkpoint and task"}</a>
+        <p>{locale === "id" ? `Cara belajar: prediksi → eksplorasi visual → penjelasan → latihan dan hint → penerapan → checkpoint. ${summary.total} lesson sudah tersedia. Materi lanjutan diterbitkan per modul; 120 adalah target, bukan jumlah yang sudah siap.` : `Learning loop: predict → explore a visual → understand → practice and hints → apply → checkpoint. ${summary.total} lessons are available. Advanced content publishes module by module; 120 is the target, not the available count.`}</p>
+        <a className={styles.link} href="#checkpoint-cm-l0m01">{locale === "id" ? "Buka checkpoint dan task modul" : "Go to module checkpoints and tasks"}</a>
       </section>
       <section className={styles.levels} aria-label={locale === "id" ? "Peta kurikulum" : "Curriculum map"}>
         {mathLevels.map((level, levelIndex) => <details key={level.id} className={styles.level} open={levelIndex === 0}>
@@ -101,7 +104,7 @@ export function CybersecurityMathPath() {
           </section>)}
         </details>)}
       </section>
-      <FoundationModuleCheckpoint />
+      {mathModules.filter((module) => module.checks).map((module) => <MathModuleCheckpoint key={module.id} id={module.id} />)}
       <MathStorageNotice />
       <section className={`card ${styles.card}`}>
         <h2>{locale === "id" ? "Ke mana jalur ini menuju?" : "Where does this path lead?"}</h2>

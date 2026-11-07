@@ -1,6 +1,6 @@
 # Backlog — menu Matematika untuk Cybersecurity
 
-Tanggal: 7 November 2026. Status: **CM-00 disetujui; CM-01 diimplementasikan; CM-02 dan seterusnya belum selesai**.
+Tanggal: 7 November 2026. Status: **CM-00 disetujui; CM-01 dan CM-02a diimplementasikan; CM-02b dan seterusnya belum selesai**.
 
 [Kebutuhan/desain](superpowers/specs/2026-11-07-cybersecurity-math-design.md) · [Kurikulum dan task pelajar](../curriculum/cybersecurity-math/README.md)
 
@@ -47,7 +47,7 @@ Penerimaan: AC01–AC12 untuk scope fondasi; jumlah published tiga dan draft 117
 
 Dependency: CM-01.
 
-- [ ] CM-02a: `cm-l0m02` — pecahan, desimal, persentase, relative change; visual kisi/batang dan task 30/200.
+- [x] CM-02a: `cm-l0m02` — pecahan, desimal, persentase, relative change; visual kisi/batang dan task 30/200, dua set checkpoint lesson/modul, grader pecahan/desimal dan source/diff review terpisah.
 - [ ] CM-02b: `cm-l0m03` — rasio, rate, satuan, bit/byte, kB/KiB; validasi unit dan task rate hipotetis.
 - [ ] CM-02c: `cm-l0m04` — negatif, estimasi, pembulatan, pangkat; kemudian tulis/publish dua set assessment L0 minimal sepuluh item per set.
 
@@ -173,8 +173,10 @@ Penerimaan: seluruh materi disepakati selesai di-author tanpa menyamakan source 
 | Kebutuhan, kurikulum, learner task, backlog | Ditulis; builder review selesai dan desain disetujui |
 | Persetujuan desain detail | Disetujui 7 November 2026 |
 | Menu/routing/player/progres matematika | CM-01 diimplementasikan, source/diff review |
-| Lesson matematika published | 3/120 target; L0M01 lengkap, 117 draft |
+| Lesson matematika published | 6/120 target; L0M01–L0M02 lengkap, 114 draft |
 | Pengujian/runtime/build/lint/typecheck | Tidak dilakukan sesuai AGENTS.md |
 | Review capstone oleh manusia | Belum ada peserta/artefak/review |
 
-Langkah kode berikutnya: CM-02a/L0M02, pecahan dan persentase. Perlu visual pecahan serta grader desimal/pecahan yang sesuai sebelum tiga lesson berikutnya dapat diterbitkan. Sisa L0, L1–L9, assessment level, dan capstone tetap belum selesai.
+Commit `9d96ed4` (dokumen) dan `1e6f108` (CM-01) sudah dipush ke origin/main setelah izin eksplisit pengguna. Pengguna juga mengizinkan push seluruh commit roadmap matematika berikutnya ke arielf98/taalmo branch main.
+
+Langkah kode berikutnya: CM-02b/L0M03, rasio/laju/unit, dengan visual yang sesuai dan konversi waktu, bit/byte, kB/KiB. L0M04, L1–L9, assessment level, dan capstone tetap belum selesai.
