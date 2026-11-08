@@ -1,6 +1,6 @@
 # Backlog — menu Matematika untuk Cybersecurity
 
-Diperbarui 8 November 2026. Status: **CM-01, CM-02a–CM-02c dan CM-03a–CM-03c diimplementasikan; L0 lengkap dan L1M01–M03 terbit; CM-03d dan seterusnya belum selesai**.
+Diperbarui 8 November 2026. Status: **CM-01–CM-03 diimplementasikan; L0 dan L1 lengkap; CM-04 dan seterusnya belum selesai**.
 
 [Kebutuhan/desain](superpowers/specs/2026-11-07-cybersecurity-math-design.md) · [Kurikulum dan task pelajar](../curriculum/cybersecurity-math/README.md)
 
@@ -60,7 +60,7 @@ Dependency: CM-02; kerjakan/commit/push tiap modul sebelum berikutnya.
 - [x] CM-03a: `cm-l1m01` — tiga lesson bilingual variabel/substitusi, persamaan dua sisi, pertidaksamaan/budget integer, visual dan dua set checkpoint lesson/modul serta task/rubrik. Navigasi antarlevel mengarah ke assessment L0 bila perlu.
 - [x] CM-03b: `cm-l1m02` — tiga lesson bilingual fungsi/domain/range, grafik/kemiringan, komposisi/invers; visual terfokus, dua set checkpoint lesson/modul, hint/feedback, task/rubrik, kasus domain tidak sah dan invers tidak unik.
 - [x] CM-03c: `cm-l1m03` — tiga lesson bilingual aturan pangkat, tambahan/faktor pertumbuhan dan ruang string; grafik/tabel serta pohon prefix kecil, dua set checkpoint lesson/modul, task/rubrik, kasus panjang nol/alfabet tunggal dan batas asumsi distribusi.
-- [ ] CM-03d: `cm-l1m04` — log₂, worst/average search, asumsi distribusi; assessment L1.
+- [x] CM-03d: `cm-l1m04` — tiga lesson bilingual log, bit pilihan vs tebakan, mean/worst enumerasi dengan asumsi dan unit; visual, dua set checkpoint lesson/modul, task/rubrik serta assessment L1 dua set × 15 soal.
 
 Penerimaan: sumbu dan unit jelas, log tidak menerima domain tidak sah, model seragam dinyatakan, rate tidak dianggap benchmark. Target kumulatif 24 lesson.
 
@@ -173,11 +173,11 @@ Penerimaan: seluruh materi disepakati selesai di-author tanpa menyamakan source 
 | Kebutuhan, kurikulum, learner task, backlog | Ditulis; builder review selesai dan desain disetujui |
 | Persetujuan desain detail | Disetujui 7 November 2026 |
 | Menu/routing/player/progres matematika | CM-01 diimplementasikan, source/diff review |
-| Lesson matematika published | 21/120 target; L0 lengkap dan L1M01–M03 terbit, 99 draft |
-| Assessment level matematika | Dua set L0 × 13 soal tersedia; L1–L9 belum terbit |
+| Lesson matematika published | 24/120 target; L0 dan L1 lengkap, 96 draft |
+| Assessment level matematika | Dua set L0 × 13 dan L1 × 15 soal tersedia; L2–L9 belum terbit |
 | Pengujian/runtime/build/lint/typecheck | Tidak dilakukan sesuai AGENTS.md |
 | Review capstone oleh manusia | Belum ada peserta/artefak/review |
 
 Commit `9d96ed4` (dokumen) dan `1e6f108` (CM-01) sudah dipush ke origin/main setelah izin eksplisit pengguna. Pengguna juga mengizinkan push seluruh commit roadmap matematika berikutnya ke arielf98/taalmo branch main.
 
-CM-02a dipush sebagai `28eba62`, CM-02b sebagai `d55524a`, CM-02c/L0 lengkap sebagai `89f5ce2`. CM-03a/L1M01 dipush sebagai `ee2b95f`. CM-03b/L1M02 menambahkan tiga lesson fungsi/grafik/komposisi/invers serta checkpoint/task. CM-03b dipush sebagai `566815c`; CM-03c/L1M03 menambahkan tiga lesson pangkat/pertumbuhan/ruang string serta checkpoint/task. Berikutnya CM-03d/L1M04: logaritma, biaya pencarian, dan assessment L1. Sisa L1, L2–L9 serta capstone belum selesai; materi authored tidak diklaim terverifikasi runtime.
+CM-02a dipush sebagai `28eba62`, CM-02b sebagai `d55524a`, CM-02c/L0 lengkap sebagai `89f5ce2`. CM-03a/L1M01 dipush sebagai `ee2b95f`. CM-03b/L1M02 menambahkan tiga lesson fungsi/grafik/komposisi/invers serta checkpoint/task. CM-03b dipush sebagai `566815c`; CM-03c/L1M03 menambahkan tiga lesson pangkat/pertumbuhan/ruang string serta checkpoint/task. CM-03c dipush sebagai `d8cd89c`; CM-03d melengkapi L1M04 dan assessment L1. Berikutnya CM-04a/L2M01: biner, heksadesimal, signedness/overflow. Sisa L2–L9 serta capstone belum selesai; materi authored tidak diklaim terverifikasi runtime.

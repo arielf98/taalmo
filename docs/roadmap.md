@@ -46,7 +46,9 @@ CM-03a dipush sebagai `ee2b95f`. CM-03b menambahkan L1M02 dengan tiga lesson fun
 
 CM-03b dipush sebagai `566815c`. CM-03c menambahkan L1M03: aturan pangkat, linear vs eksponensial, serta ruang string. Visual faktor, grafik/tabel sampel dan pohon prefix kecil menyatakan domain, unit/skala, kasus nol/alfabet tunggal serta perbedaan hitungan dari asumsi pemilihan seragam/independen. Dua set checkpoint lesson/modul dan task/rubrik tersedia.
 
-**Status authoring: 21 lesson published, 99 draft; L0 lengkap dan L1M01–M03 terbit.** Assessment L0 tersedia; sisa L1, L2–L9 dan capstone belum terbit. Berikutnya CM-03d/L1M04 (logaritma, biaya pencarian dan assessment L1). Source/diff review termasuk reviewer terpisah; tidak menjalankan test, browser/manual check, lint, typecheck, build, atau contoh. Tidak ada merge/deploy.
+CM-03c dipush sebagai `d8cd89c`. CM-03d melengkapi L1M04 dengan logaritma/invers, bit label vs tebakan dan mean/worst pencarian, visual domain/rate yang terbatas, checkpoint/task dan assessment L1 dua set × 15 soal. Model seragam tanpa pengulangan, unit dan batas rate hipotetis dinyatakan; record dan gate level memakai engine yang sama.
+
+**Status authoring: 24 lesson published, 96 draft; L0 dan L1 lengkap.** Assessment L0 dan L1 tersedia; L2–L9 dan capstone belum terbit. Berikutnya CM-04a/L2M01 (biner, heksadesimal, signedness/overflow). Source/diff review termasuk reviewer terpisah; tidak menjalankan test, browser/manual check, lint, typecheck, build, atau contoh. Tidak ada merge/deploy.
 
 ## Later learning improvements
 

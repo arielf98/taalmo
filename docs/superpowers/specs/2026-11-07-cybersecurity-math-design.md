@@ -1,6 +1,6 @@
 # Kebutuhan dan desain — Matematika untuk Cybersecurity
 
-Dibuat 7 November, diperbarui 8 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-03c diimplementasikan; L0 lengkap dan L1M01–M03 terbit dengan review source/diff**.
+Dibuat 7 November, diperbarui 8 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-03 diimplementasikan; L0 dan L1 lengkap dengan review source/diff**.
 
 Pengguna memilih **jalur lengkap bertahap** dan pada 7 November 2026 menyetujui dokumen desain ini serta memulai implementasi menu dan tiga lesson L0M01. Pengguna juga mengizinkan push dokumen ke GitHub arielf98/taalmo branch main. Ukuran kurikulum, aturan penilaian, dan keputusan teknis di bawah merupakan usulan perancang yang tercakup dalam persetujuan desain.
 
@@ -268,3 +268,9 @@ Status authoring menjadi **18 lesson published, 102 draft**, enam checkpoint/tas
 Tiga lesson aturan pangkat, pertumbuhan linear/eksponensial dan ruang string ditambahkan dengan seluruh tahap bilingual, hint/feedback, dua set checkpoint lesson/modul serta task/rubrik. Aturan pangkat dijelaskan melalui faktor dan syarat basis/domain; 0^0 tetap dikecualikan. Grafik 1+bn vs b^n memakai sampel putaran integer, sumbu/unit/skala, marker berbeda dan tabel setara. Model eksponensial tidak diklaim selalu lebih besar pada input awal. Pohon hanya menampilkan maksimal dua posisi; tabel mengakui seluruh kelanjutan yang tidak digambar, termasuk ε saat panjang nol. Syarat seluruh kombinasi dengan pengulangan dipisahkan dari asumsi pemilihan seragam/independen untuk peluang sama; angka bukan skor entropy password manusia.
 
 Status authoring menjadi **21 lesson published, 99 draft**, tujuh checkpoint/task modul dan assessment L0 tetap dua set × 13 soal. Progress/versi lama, route dan grading tetap memakai kontrak yang sama; assessment L1 belum tersedia. Berikutnya CM-03d/L1M04 dan assessment L1. Evidence source/diff saja, runtime belum diverifikasi.
+
+## 20. Lanjutan CM-03d — L1 lengkap
+
+L1M04 menambah logaritma/invers pangkat, bit pilihan/pembelahan ideal dan mean/worst enumerasi, dengan seluruh tahap bilingual, dua set checkpoint lesson/modul dan task/rubrik. Log riil menolak argumen nonpositif dan basis satu; kontrol memakai pangkat eksak kecil. Pembelahan seimbang bukan satu tebakan kandidat; h>k ditandai di luar model. Search model memakai N positif, target seragam/pasti di daftar, urutan tetap/tanpa ulang, rate tetap hipotetis dan tanpa overhead/paralelisme. Mean (N+1)/2 berbeda dari worst N; rate nol tidak dibagi. Waktu mean adalah rata-rata kasus, bukan batas tiap kasus.
+
+Assessment L1 dua set × 15 soal mencakup semua 12 lesson serta distribusi, mean/worst dan domain log. Semua modul wajib lulus, semua jawaban terisi, nilai aktual ≥85%, semua critical benar; solusi/retake/snapshot/histori memakai aturan yang sama. Task tertulis tidak otomatis dianggap benar. Status authoring **24 lesson published, 96 draft**, delapan checkpoint/task modul, L0 2×13 soal dan L1 2×15 soal. L2–L9 tetap draft. Berikutnya CM-04a/L2M01. Evidence source/diff saja; runtime belum diverifikasi, tidak ada merge/deploy.
