@@ -1,6 +1,6 @@
 # Kebutuhan dan desain — Matematika untuk Cybersecurity
 
-Dibuat 7 November, diperbarui 8 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-03 diimplementasikan; L0 dan L1 lengkap dengan review source/diff**.
+Dibuat 7 November, diperbarui 8 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-03 serta CM-04a diimplementasikan; L0/L1 lengkap dan L2M01 terbit dengan review source/diff**.
 
 Pengguna memilih **jalur lengkap bertahap** dan pada 7 November 2026 menyetujui dokumen desain ini serta memulai implementasi menu dan tiga lesson L0M01. Pengguna juga mengizinkan push dokumen ke GitHub arielf98/taalmo branch main. Ukuran kurikulum, aturan penilaian, dan keputusan teknis di bawah merupakan usulan perancang yang tercakup dalam persetujuan desain.
 
@@ -274,3 +274,9 @@ Status authoring menjadi **21 lesson published, 99 draft**, tujuh checkpoint/tas
 L1M04 menambah logaritma/invers pangkat, bit pilihan/pembelahan ideal dan mean/worst enumerasi, dengan seluruh tahap bilingual, dua set checkpoint lesson/modul dan task/rubrik. Log riil menolak argumen nonpositif dan basis satu; kontrol memakai pangkat eksak kecil. Pembelahan seimbang bukan satu tebakan kandidat; h>k ditandai di luar model. Search model memakai N positif, target seragam/pasti di daftar, urutan tetap/tanpa ulang, rate tetap hipotetis dan tanpa overhead/paralelisme. Mean (N+1)/2 berbeda dari worst N; rate nol tidak dibagi. Waktu mean adalah rata-rata kasus, bukan batas tiap kasus.
 
 Assessment L1 dua set × 15 soal mencakup semua 12 lesson serta distribusi, mean/worst dan domain log. Semua modul wajib lulus, semua jawaban terisi, nilai aktual ≥85%, semua critical benar; solusi/retake/snapshot/histori memakai aturan yang sama. Task tertulis tidak otomatis dianggap benar. Status authoring **24 lesson published, 96 draft**, delapan checkpoint/task modul, L0 2×13 soal dan L1 2×15 soal. L2–L9 tetap draft. Berikutnya CM-04a/L2M01. Evidence source/diff saja; runtime belum diverifikasi, tidak ada merge/deploy.
+
+## 21. Lanjutan CM-04a — L2M01
+
+Tiga lesson nilai tempat biner/desimal, hexadecimal dan signedness/overflow ditambahkan dengan seluruh tahap bilingual, dua set checkpoint lesson/modul serta task/rubrik. Visual memakai delapan tombol bit dengan posisi, bobot, pressed state dan keyboard native; tabel memperlihatkan bobot atau kelompok empat bit. Signedness mengubah bobot tertinggi menjadi −128 tanpa mengubah pola. Model tambahan nonnegatif 0…15 mempertahankan delapan bit rendah, memisahkan jumlah matematika unsigned/signed, pola simpan, interpretasi hasil serta masing-masing overflow. Definisi sisa pembagian/modulo dijelaskan; model wrap tidak menjadi klaim perilaku semua bahasa/API.
+
+Status authoring **27 lesson published, 93 draft**, sembilan checkpoint/task modul. L2M01 memerlukan assessment L1 untuk progres resmi, tetap bisa dipreview tanpa write resmi. Sisa L2, L3–L9 dan assessment L2 tetap draft; L0/L1 assessment, ID/version dan bentuk record lama tidak berubah. Berikutnya CM-04b/L2M02. Evidence source/diff saja; runtime belum diverifikasi.

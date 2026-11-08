@@ -9,7 +9,8 @@ import { functions, functionsModuleChecks, functionsTask } from "./functions";
 import { growth, growthModuleChecks, growthTask } from "./growth";
 import { logarithms, logarithmsModuleChecks, logarithmsTask } from "./logarithms";
 import { l1Assessment } from "./l1-assessment";
-const authored = { ...foundation, ...fractions, ...measurements, ...numeracy, ...algebra, ...functions, ...growth, ...logarithms };
+import { representations, representationsModuleChecks, representationsTask } from "./representations";
+const authored = { ...foundation, ...fractions, ...measurements, ...numeracy, ...algebra, ...functions, ...growth, ...logarithms, ...representations };
 const authoredModuleChecks: Partial<Record<string, [MathQuestion[], MathQuestion[]]>> = {
   "cm-l0m01": foundationModuleChecks, "cm-l0m02": fractionsModuleChecks, "cm-l0m03": measurementsModuleChecks,
   "cm-l0m04": numeracyModuleChecks,
@@ -17,6 +18,7 @@ const authoredModuleChecks: Partial<Record<string, [MathQuestion[], MathQuestion
   "cm-l1m02": functionsModuleChecks,
   "cm-l1m03": growthModuleChecks,
   "cm-l1m04": logarithmsModuleChecks,
+  "cm-l2m01": representationsModuleChecks,
 };
 const authoredLevelChecks: Partial<Record<string, [MathQuestion[], MathQuestion[]]>> = { "cm-l0": l0Assessment, "cm-l1": l1Assessment };
 
@@ -131,7 +133,7 @@ export const foundationTask = copy(
   "Four accounts each receive six attempts. Make a per-account table; calculate 24 initial attempts, 28 after four extra in total, and 40 after four extra per account. Explain the units, show one empty-group example, then explain how many groups of size five are needed to process 28 events. Write your steps, result, assumptions, and limits: a count of attempts alone does not prove an attack.",
 );
 
-export const mathModuleTasks: Partial<Record<string, Copy>> = { "cm-l0m01": foundationTask, "cm-l0m02": fractionsTask, "cm-l0m03": measurementsTask, "cm-l0m04": numeracyTask, "cm-l1m01": algebraTask, "cm-l1m02": functionsTask, "cm-l1m03": growthTask, "cm-l1m04": logarithmsTask };
+export const mathModuleTasks: Partial<Record<string, Copy>> = { "cm-l0m01": foundationTask, "cm-l0m02": fractionsTask, "cm-l0m03": measurementsTask, "cm-l0m04": numeracyTask, "cm-l1m01": algebraTask, "cm-l1m02": functionsTask, "cm-l1m03": growthTask, "cm-l1m04": logarithmsTask, "cm-l2m01": representationsTask };
 export const mathModuleCheckDescriptions: Partial<Record<string, Copy>> = {
   "cm-l0m01": copy("Lulus tiga lesson dahulu. Jawab lima soal; perlu nilai minimal 80% dan semua soal kritis benar. Soal kritis mencakup nol, tambahan total, dan urutan operasi.", "Complete all three lessons first. Answer five questions; you need at least 80% and every critical question correct. Critical questions cover zero, additions to totals, and operation order."),
   "cm-l0m02": copy("Lulus tiga lesson dan checkpoint modul sebelumnya dahulu. Jawab lima soal, perlu minimal 80% dan semua soal kritis benar. Bedakan pecahan, angka persen, desimal, poin persentase, dan perubahan relatif.", "Complete the three lessons and the previous module checkpoint first. Answer five questions, requiring at least 80% and every critical question correct. Distinguish fractions, percentage numbers, decimals, percentage points, and relative change."),
@@ -141,4 +143,5 @@ export const mathModuleCheckDescriptions: Partial<Record<string, Copy>> = {
   "cm-l1m02": copy("Selesaikan prasyarat dan ketiga lesson. Lima soal memerlukan ≥80% dan seluruh critical benar: domain/range, kemiringan dengan unit, urutan komposisi, dan invers fungsi yang bukan kebalikan pecahan.", "Complete prerequisites and all three lessons. Five questions require ≥80% and all critical items correct: domain/range, slope with units, composition order, and function inverse versus reciprocal."),
   "cm-l1m03": copy("Selesaikan prasyarat dan ketiga lesson. Lima soal memerlukan ≥80% dan seluruh critical benar: aturan pangkat, model pertumbuhan, ruang string/kasus batas, serta hitungan kemungkinan yang berbeda dari distribusi pemilihan manusia.", "Complete prerequisites and all three lessons. Five questions require ≥80% and all critical items correct: exponent rules, growth models, string spaces/edge cases, and possibility counts versus human selection distributions."),
   "cm-l1m04": copy("Selesaikan prasyarat dan ketiga lesson. Lima soal memerlukan ≥80% dan seluruh critical benar: log, bit label vs tebakan, mean/worst dengan unit, dan syarat distribusi/pengulangan. Angka rate hipotetis, bukan benchmark.", "Complete prerequisites and all three lessons. Five questions require ≥80% and all critical items correct: logs, label bits versus guesses, mean/worst with units, and distribution/repetition conditions. Rates are hypothetical, not benchmarks."),
+  "cm-l2m01": copy("Selesaikan assessment L1 dan tiga lesson modul ini. Lima soal memerlukan ≥80% dan seluruh critical benar: bobot biner, lebar hex, signedness serta hasil model wrap signed/unsigned. Selalu baca lebar dan interpretasi yang dinyatakan.", "Complete the L1 assessment and all three lessons in this module. Five questions require ≥80% and all critical items correct: binary weights, hex width, signedness and signed/unsigned wrap-model results. Always read the stated width and interpretation."),
 };

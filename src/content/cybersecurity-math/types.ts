@@ -20,7 +20,7 @@ export interface MathLessonContent {
   objective: Copy;
   prediction: MathQuestion;
   exploration: {
-    kind: "count" | "groups" | "division" | "fraction" | "percentage-change" | "ratio" | "rate" | "bytes" | "distance" | "rounding" | "powers" | "budget" | "function" | "linear" | "composition" | "growth" | "search-space" | "logarithm" | "binary-choices" | "search-cost";
+    kind: "count" | "groups" | "division" | "fraction" | "percentage-change" | "ratio" | "rate" | "bytes" | "distance" | "rounding" | "powers" | "budget" | "function" | "linear" | "composition" | "growth" | "search-space" | "logarithm" | "binary-choices" | "search-cost" | "binary" | "hexadecimal" | "signed-byte";
     inputLabels?: [Copy, Copy];
     initial: [number, number];
     target: [number, number];
@@ -45,4 +45,5 @@ export const mathVisualBounds: Record<MathLessonContent["exploration"]["kind"], 
   function: [[0, 4], [0, 4]], linear: [[0, 6], [0, 4]], composition: [[0, 6], [0, 1]],
   growth: [[0, 6], [2, 3]], "search-space": [[1, 4], [0, 6]],
   logarithm: [[2, 4], [0, 6]], "binary-choices": [[0, 8], [0, 8]], "search-cost": [[1, 256], [0, 16]],
+  binary: [[0, 15], [0, 15]], hexadecimal: [[0, 15], [0, 15]], "signed-byte": [[0, 255], [0, 15]],
 };
