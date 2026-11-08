@@ -1,6 +1,6 @@
 # Kebutuhan dan desain — Matematika untuk Cybersecurity
 
-Dibuat 7 November, diperbarui 8 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-03b diimplementasikan; L0 lengkap dan L1M01–M02 terbit dengan review source/diff**.
+Dibuat 7 November, diperbarui 8 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-03c diimplementasikan; L0 lengkap dan L1M01–M03 terbit dengan review source/diff**.
 
 Pengguna memilih **jalur lengkap bertahap** dan pada 7 November 2026 menyetujui dokumen desain ini serta memulai implementasi menu dan tiga lesson L0M01. Pengguna juga mengizinkan push dokumen ke GitHub arielf98/taalmo branch main. Ukuran kurikulum, aturan penilaian, dan keputusan teknis di bawah merupakan usulan perancang yang tercakup dalam persetujuan desain.
 
@@ -262,3 +262,9 @@ Status kini **15 lesson published, 105 draft**, lima checkpoint/task modul, dan 
 Tiga lesson fungsi/domain/range, grafik linear/kemiringan dan komposisi/invers ditambahkan, dengan seluruh tahapan bilingual, dua set checkpoint lesson/modul serta task/rubrik. Tabel fungsi menolak input di luar domain dan membedakan range dari domain. Grafik N(t)=3+mt memperlihatkan nilai awal, rate dan sampel integer bersumbu/unit; garis putus-putus hanya penghubung sampel. Model komposisi f(x)=x+2 dan g(u)=3u menunjukkan kedua urutan, nilai antara dan pembatalan tahap terbalik. Domain integer nonnegatif lebih luas dari rentang kontrol; domain invers adalah range komposisi. Fungsi konstan, invers tidak unik dan perbedaan invers/reciprocal dijelaskan serta dinilai.
 
 Status authoring menjadi **18 lesson published, 102 draft**, enam checkpoint/task modul dan assessment L0 dua set × 13 soal. Tidak ada perubahan ID/version lama, bentuk progres, grading atau route API. Assessment L1 belum terbit. Berikutnya CM-03c/L1M03. Evidence tetap source/diff; runtime belum diverifikasi.
+
+## 19. Lanjutan CM-03c — L1M03
+
+Tiga lesson aturan pangkat, pertumbuhan linear/eksponensial dan ruang string ditambahkan dengan seluruh tahap bilingual, hint/feedback, dua set checkpoint lesson/modul serta task/rubrik. Aturan pangkat dijelaskan melalui faktor dan syarat basis/domain; 0^0 tetap dikecualikan. Grafik 1+bn vs b^n memakai sampel putaran integer, sumbu/unit/skala, marker berbeda dan tabel setara. Model eksponensial tidak diklaim selalu lebih besar pada input awal. Pohon hanya menampilkan maksimal dua posisi; tabel mengakui seluruh kelanjutan yang tidak digambar, termasuk ε saat panjang nol. Syarat seluruh kombinasi dengan pengulangan dipisahkan dari asumsi pemilihan seragam/independen untuk peluang sama; angka bukan skor entropy password manusia.
+
+Status authoring menjadi **21 lesson published, 99 draft**, tujuh checkpoint/task modul dan assessment L0 tetap dua set × 13 soal. Progress/versi lama, route dan grading tetap memakai kontrak yang sama; assessment L1 belum tersedia. Berikutnya CM-03d/L1M04 dan assessment L1. Evidence source/diff saja, runtime belum diverifikasi.

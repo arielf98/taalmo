@@ -44,7 +44,9 @@ L0 lengkap dipush sebagai `89f5ce2`. CM-03a menambahkan L1M01 (tiga lesson varia
 
 CM-03a dipush sebagai `ee2b95f`. CM-03b menambahkan L1M02 dengan tiga lesson fungsi/domain/range, grafik linear dan kemiringan, serta komposisi/invers. Visual menampilkan domain/range yang eksplisit, sampel waktu integer dengan sumbu/unit dan tabel, serta tahap komposisi dan langkah invers. Input di luar domain, rate nol, fungsi konstan tanpa invers unik, dan reciprocal dibedakan. Dua set checkpoint lesson/modul dan task/rubrik tersedia.
 
-**Status authoring: 18 lesson published, 102 draft; L0 lengkap dan L1M01–M02 terbit.** Assessment L0 tersedia; sisa L1, L2–L9 dan capstone belum terbit. Berikutnya CM-03c/L1M03 (pangkat/pertumbuhan/ruang pilihan string). Source/diff review termasuk reviewer terpisah; tidak menjalankan test, browser/manual check, lint, typecheck, build, atau contoh. Tidak ada merge/deploy.
+CM-03b dipush sebagai `566815c`. CM-03c menambahkan L1M03: aturan pangkat, linear vs eksponensial, serta ruang string. Visual faktor, grafik/tabel sampel dan pohon prefix kecil menyatakan domain, unit/skala, kasus nol/alfabet tunggal serta perbedaan hitungan dari asumsi pemilihan seragam/independen. Dua set checkpoint lesson/modul dan task/rubrik tersedia.
+
+**Status authoring: 21 lesson published, 99 draft; L0 lengkap dan L1M01–M03 terbit.** Assessment L0 tersedia; sisa L1, L2–L9 dan capstone belum terbit. Berikutnya CM-03d/L1M04 (logaritma, biaya pencarian dan assessment L1). Source/diff review termasuk reviewer terpisah; tidak menjalankan test, browser/manual check, lint, typecheck, build, atau contoh. Tidak ada merge/deploy.
 
 ## Later learning improvements
 
