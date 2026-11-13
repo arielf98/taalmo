@@ -54,7 +54,9 @@ CM-04a dipush sebagai `0298531`. CM-04b menambahkan truth table, operasi bit/mas
 
 CM-04b dipush sebagai `5d5a744`. CM-04c melengkapi L2M03: operasi himpunan, pasangan/relasi, fungsi/bijeksi dengan visual anggota/Venn, grid pasangan dan panah/tabel; dua set checkpoint lesson/modul serta task/rubrik.
 
-**Status authoring: 33 lesson published, 87 draft; L0/L1 lengkap dan L2M01–M03 terbit.** Assessment L0/L1 tersedia; sisa L2, L3–L9 dan capstone belum terbit. Berikutnya CM-04d/L2M04 dan assessment L2. Source/diff review termasuk reviewer terpisah. Atas permintaan eksplisit 13 November, build/TypeScript, startup produksi, HTTP route dan interaksi browser representatif berhasil; [evidence/batas](cybersecurity-math-runtime.md). Suite unit/E2E/lint tidak dijalankan. Tidak ada merge/deploy.
+CM-04c dipush sebagai `d033139`. CM-04d melengkapi L2M04 kuantor/bukti/induksi/invariant, seluruh tahap bilingual, checkpoint/task dan assessment L2 dua set × 16 soal.
+
+**Status authoring: 36 lesson published, 84 draft; L0/L1/L2 lengkap.** Assessment L0/L1/L2 tersedia; L3–L9 dan capstone belum terbit. Berikutnya CM-05a/L3M01 (kombinatorika). Source/diff review termasuk reviewer terpisah. Atas permintaan eksplisit 13 November, build/TypeScript, startup produksi, HTTP route dan interaksi browser representatif berhasil; [evidence/batas](cybersecurity-math-runtime.md). Suite unit/E2E/lint tidak dijalankan. Tidak ada merge/deploy.
 
 ## Later learning improvements
 

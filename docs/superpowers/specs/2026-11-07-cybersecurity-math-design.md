@@ -1,6 +1,6 @@
 # Kebutuhan dan desain — Matematika untuk Cybersecurity
 
-Dibuat 7 November, diperbarui 13 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-03 serta CM-04a–CM-04c diimplementasikan; L0/L1 lengkap dan L2M01–M03 terbit dengan review source/diff**.
+Dibuat 7 November, diperbarui 13 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-04 diimplementasikan; L0/L1/L2 lengkap dengan review source/diff**.
 
 Pengguna memilih **jalur lengkap bertahap** dan pada 7 November 2026 menyetujui dokumen desain ini serta memulai implementasi menu dan tiga lesson L0M01. Pengguna juga mengizinkan push dokumen ke GitHub arielf98/taalmo branch main. Ukuran kurikulum, aturan penilaian, dan keputusan teknis di bawah merupakan usulan perancang yang tercakup dalam persetujuan desain.
 
@@ -292,3 +292,9 @@ Status authoring **30 lesson published, 90 draft**, sepuluh checkpoint/task modu
 Tiga lesson bilingual operasi himpunan, pasangan/relasi dan fungsi/bijeksi memiliki seluruh tahap, dua set checkpoint lesson/modul serta task/rubrik. Visual tombol anggota dan Venn skematis memakai universe terbatas; grid pasangan membedakan product dari relasi; panah/tabel menyatakan domain, codomain dan image. Relasi multi-output tetap sah sebagai relasi tetapi bukan fungsi total. Perubahan codomain mempertahankan panah, dapat mengubah onto; target di luar C ditandai tidak sah. Invers seluruh C dibedakan dari invers pada image. Kasus himpunan kosong, urutan pasangan, tabrakan dan tujuan tidak tercapai ikut dinilai.
 
 Status **33 lesson published, 87 draft**, sebelas checkpoint/task modul; assessment L0/L1 tetap tersedia. L2M04/assessment L2 berikutnya. Tidak ada perubahan ID/version, storage, grader atau API route. Evidence runtime terbatas dicatat terpisah; bukan sertifikasi/review task manusia.
+
+## 24. Lanjutan CM-04d — L2 lengkap
+
+Tiga lesson bilingual kuantor/counterexample, bukti langsung/kontradiksi dan induksi/invariant memiliki seluruh tahap, dua set checkpoint lesson/modul serta task/rubrik. Domain, implikasi/converse/contrapositive, negasi kuantor dan domain kosong dinyatakan. Visual finite-table tidak mengklaim membuktikan semua integer; kartu simbolik memakai variabel sembarang. Tabel loop membedakan initialization/preservation/exit dan terminasi, update berurutan, kasus kosong serta keadaan i>N yang tidak terjangkau. Teks bukti tetap membutuhkan review manusia; jawaban numerik bukan bukti argumen tertulis telah sah.
+
+Assessment L2 dua set × 16 mencakup semua12lesson dan guard wrap/urutan kuantor/contoh vs bukti/invariant vs terminasi; seluruh empat modul, semua jawaban, nilai aktual ≥85% dan semua critical wajib. Status **36 lesson published, 84 draft**, dua belas checkpoint/task modul, L0 2×13, L1 2×15 dan L2 2×16. Grader, storage, stable ID/version dan route API lama tidak berubah. L3–L9/capstone belum terbit; berikutnya CM-05a/L3M01. Evidence runtime terbatas tetap dicatat terpisah.
