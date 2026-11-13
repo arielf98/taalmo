@@ -1,6 +1,6 @@
 # Kebutuhan dan desain — Matematika untuk Cybersecurity
 
-Dibuat 7 November, diperbarui 13 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-04 diimplementasikan; L0/L1/L2 lengkap dengan review source/diff**.
+Dibuat 7 November, diperbarui 13 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-04 serta CM-05a diimplementasikan; L0/L1/L2 lengkap dan L3M01 terbit dengan review source/diff**.
 
 Pengguna memilih **jalur lengkap bertahap** dan pada 7 November 2026 menyetujui dokumen desain ini serta memulai implementasi menu dan tiga lesson L0M01. Pengguna juga mengizinkan push dokumen ke GitHub arielf98/taalmo branch main. Ukuran kurikulum, aturan penilaian, dan keputusan teknis di bawah merupakan usulan perancang yang tercakup dalam persetujuan desain.
 
@@ -298,3 +298,9 @@ Status **33 lesson published, 87 draft**, sebelas checkpoint/task modul; assessm
 Tiga lesson bilingual kuantor/counterexample, bukti langsung/kontradiksi dan induksi/invariant memiliki seluruh tahap, dua set checkpoint lesson/modul serta task/rubrik. Domain, implikasi/converse/contrapositive, negasi kuantor dan domain kosong dinyatakan. Visual finite-table tidak mengklaim membuktikan semua integer; kartu simbolik memakai variabel sembarang. Tabel loop membedakan initialization/preservation/exit dan terminasi, update berurutan, kasus kosong serta keadaan i>N yang tidak terjangkau. Teks bukti tetap membutuhkan review manusia; jawaban numerik bukan bukti argumen tertulis telah sah.
 
 Assessment L2 dua set × 16 mencakup semua12lesson dan guard wrap/urutan kuantor/contoh vs bukti/invariant vs terminasi; seluruh empat modul, semua jawaban, nilai aktual ≥85% dan semua critical wajib. Status **36 lesson published, 84 draft**, dua belas checkpoint/task modul, L0 2×13, L1 2×15 dan L2 2×16. Grader, storage, stable ID/version dan route API lama tidak berubah. L3–L9/capstone belum terbit; berikutnya CM-05a/L3M01. Evidence runtime terbatas tetap dicatat terpisah.
+
+## 25. Lanjutan CM-05a — L3M01
+
+Tiga lesson lengkap bilingual aturan penjumlahan/perkalian, permutasi/kombinasi serta inklusi–eksklusi/pigeonhole memiliki seluruh tahap, dua set checkpoint lesson/modul dan task/rubrik. Visual menampilkan seluruh pasangan dua daftar, semua tim/peran dua orang, kotak seimbang dan tabel setara. Cabang tidak seragam, tanpa pengulangan,0!,pilihan kosong,k>n,overlap dan batas ceil(N/M) dijelaskan. N<2 tidak memiliki pasangan collision; untuk2≤N≤M collision mungkin tetapi belum pasti. Contoh seimbang mencapai batas minimal maksimum, bukan klaim semua mapping sama atau seragam. Hitungan tidak menjadi peluang, penilaian keamanan atau algoritme serangan.
+
+Status **39 lesson published, 81 draft**, tiga belas checkpoint/task modul. Assessment L0/L1/L2 tetap tersedia, L3 assessment belum terbit. L3 memerlukan assessment L2 untuk progres resmi; preview tetap tanpa write resmi. Storage/grader/route API/ID/version lama tidak berubah. Berikutnya CM-05b/L3M02; sisa L3–L9 dan capstone belum selesai. Evidence runtime terbatas dicatat terpisah.

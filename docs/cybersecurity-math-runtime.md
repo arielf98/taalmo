@@ -2,6 +2,8 @@
 
 Pengguna meminta melanjutkan pekerjaan dan memastikan aplikasi bisa dijalankan. Izin ini mencakup build/startup dan pemeriksaan route aplikasi pada pekerjaan ini; unit test tidak dibuat atau dijalankan. Evidence modul terdahulu tetap source/diff sebagaimana saat dikerjakan.
 
+Catatan ini memuat riwayat pemeriksaan per modul. Hasil terbaru ada pada bagian CM-05a: 39 lesson/176 halaman build; entri jumlah sebelumnya merekam keadaan saat modul tersebut selesai.
+
 Lingkungan: macOS ARM64, Node v24.13.1, npm 11.14.1. Paket Next dikunci `16.4.2` di `package-lock.json`.
 
 ## Pemulihan dependency lokal
@@ -37,3 +39,11 @@ Build setelah L2M03 exit 0, termasuk TypeScript dan 170 halaman statis (33 lesso
 ## Lanjutan CM-04d — L2 lengkap
 
 Build final setelah perbaikan review exit0: kompilasi/TypeScript berhasil dan173halaman dihasilkan (36lesson matematika). Server Next16.4.2 restart localhost:3100, ready71ms. HTTP `/`, `/dashboard`, jalur database/matematika dan ketiga lesson `cm-l2m04l01`–`l03` masing-masing200; draft `cm-l3m01l01`404. Browser preview invariant: N4/i3 memberi S6/sisa1 dan membuka pengamatan; i5 ditandai tidak terjangkau dan menutupnya; N0/i0 memberi S0/sisa0/exit. Mengganti bahasa ke Indonesia mempertahankan kontrol dan menampilkan penjelasan terjemahan. Browser kuantor: N0/k3 menampilkan ∀P benar,∃P salah,tanpa saksi/pelanggar; N5/k3 menampilkan dua pelanggar4,5 dan membuka pengamatan. Tidak menulis progres resmi. Visual paritas dan assessment2×16 ditinjau source; tidak diuji kelulusan lengkap di browser. `next-env.d.ts` dipulihkan persis. Unit/E2E/lint/audit tidak dijalankan.
+
+## Lanjutan CM-05a — kombinatorika
+
+Build final setelah review dan perbaikan penjelasan N=0 exit 0: kompilasi/TypeScript berhasil, 176 halaman dihasilkan (39 lesson matematika). Startup Next16.4.2 localhost:3100 ready72ms. HTTP `/`, `/dashboard`, jalur database/matematika dan ketiga lesson `cm-l3m01l01`–`l03` masing-masing200; draft `cm-l3m02l01`404.
+
+Browser preview pada n5 tanpa ulang menampilkan seluruh20 penugasan ketua–wakil; mengganti ke tim menampilkan10 hasil dan menutup pengamatan. n1 menampilkan0 pilihan pasangan. Visual pigeonhole N5/M2 menampilkan isi kotak{1,3,5}/{2,4}, maksimum3, ceil(5/2)=3 dan collision pasti; N3/M3 menjelaskan collision tidak dijamin tetapi mungkin pada mapping lain. N0 menampilkan semua kotak kosong, maksimum0 dan tanpa pasangan collision. Pemeriksaan awal menemukan paragraf kapasitas positif masih tampil pada N0; paragraph diberi branch kasus kosong, lalu build/restart/browser ulang mengonfirmasi penjelasan N0 yang benar. Screenshot lokal `/tmp/taalmo-counting-2026-11-13.jpg` menunjukkan kotak/tabel/batas.
+
+Ini pemeriksaan kontrol representatif, bukan seluruh alur kelulusan, semua perangkat/browser atau review bukti peserta. Visual sum/product ditinjau source; tidak dijalankan sebagai suite. Unit test tidak dibuat/dijalankan; E2E/lint/audit tidak dijalankan sesuai batas pengguna. Tidak ada merge/deploy. Server lokal dibiarkan berjalan; `next-env.d.ts` awal pengguna dipulihkan persis, tidak di-commit.

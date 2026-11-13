@@ -1,6 +1,6 @@
 # Backlog — menu Matematika untuk Cybersecurity
 
-Diperbarui 13 November 2026. Status: **CM-01–CM-04 diimplementasikan; L0/L1/L2 lengkap; CM-05 dan seterusnya belum selesai**.
+Diperbarui 13 November 2026. Status: **CM-01–CM-04 dan CM-05a diimplementasikan; L0/L1/L2 lengkap serta L3M01 terbit; CM-05b dan seterusnya belum selesai**.
 
 [Kebutuhan/desain](superpowers/specs/2026-11-07-cybersecurity-math-design.md) · [Kurikulum dan task pelajar](../curriculum/cybersecurity-math/README.md)
 
@@ -79,7 +79,7 @@ Penerimaan: lebar bit dan interpretasi eksplisit; kontrol keyboard setara intera
 
 Dependency: CM-04.
 
-- [ ] CM-05a: `cm-l3m01` — counting, permutasi/kombinasi, inklusi–eksklusi/pigeonhole.
+- [x] CM-05a: `cm-l3m01` — tiga lesson lengkap aturan hitung, permutasi/kombinasi dan inklusi–eksklusi/pigeonhole; visual daftar/kotak, dua set checkpoint lesson/modul serta task/rubrik.
 - [ ] CM-05b: `cm-l3m02` — ruang sampel, conditional probability, independensi.
 - [ ] CM-05c: `cm-l3m03` — distribusi diskret, ekspektasi, binomial/geometrik, variansi.
 - [ ] CM-05d: `cm-l3m04` — Shannon/min-entropy, bias, birthday/collision; assessment L3.
@@ -173,11 +173,11 @@ Penerimaan: seluruh materi disepakati selesai di-author tanpa menyamakan source 
 | Kebutuhan, kurikulum, learner task, backlog | Ditulis; builder review selesai dan desain disetujui |
 | Persetujuan desain detail | Disetujui 7 November 2026 |
 | Menu/routing/player/progres matematika | CM-01 diimplementasikan, source/diff review |
-| Lesson matematika published | 36/120 target; L0/L1/L2 lengkap, 84 draft |
+| Lesson matematika published | 39/120 target; L0/L1/L2 lengkap dan L3M01 terbit, 81 draft |
 | Assessment level matematika | Dua set L0 × 13, L1 × 15 dan L2 × 16 soal tersedia; L3–L9 belum terbit |
 | Runtime/build | Build/TypeScript, startup, HTTP dan interaksi browser representatif berhasil 13 November atas izin eksplisit pengguna; suite unit/E2E/lint tidak dijalankan |
 | Review capstone oleh manusia | Belum ada peserta/artefak/review |
 
 Commit `9d96ed4` (dokumen) dan `1e6f108` (CM-01) sudah dipush ke origin/main setelah izin eksplisit pengguna. Pengguna juga mengizinkan push seluruh commit roadmap matematika berikutnya ke arielf98/taalmo branch main.
 
-CM-02a dipush sebagai `28eba62`, CM-02b sebagai `d55524a`, CM-02c/L0 lengkap sebagai `89f5ce2`. CM-03a/L1M01 dipush sebagai `ee2b95f`. CM-03b/L1M02 menambahkan tiga lesson fungsi/grafik/komposisi/invers serta checkpoint/task. CM-03b dipush sebagai `566815c`; CM-03c/L1M03 menambahkan tiga lesson pangkat/pertumbuhan/ruang string serta checkpoint/task. CM-03c dipush sebagai `d8cd89c`; CM-03d melengkapi L1M04 dan assessment L1. CM-03d dipush sebagai `e1de199`; CM-04a menambahkan L2M01 dengan tiga lesson representasi bilangan dan checkpoint/task. CM-04a dipush sebagai `0298531`. CM-04b menambahkan tiga lesson logika/bit/predikat serta checkpoint/task. CM-04b dipush sebagai `5d5a744`. CM-04c melengkapi L2M03 dengan himpunan, relasi, fungsi/bijeksi beserta checkpoint/task. CM-04c dipush sebagai `d033139`. CM-04d melengkapi L2M04 dan assessment L2. Berikutnya CM-05a/L3M01 (kombinatorika). Sisa L3–L9 serta capstone belum selesai; authoring materi ditinjau source/diff, dengan pemeriksaan runtime terbatas sebagaimana evidence terpisah.
+CM-02a dipush sebagai `28eba62`, CM-02b sebagai `d55524a`, CM-02c/L0 lengkap sebagai `89f5ce2`. CM-03a/L1M01 dipush sebagai `ee2b95f`. CM-03b/L1M02 menambahkan tiga lesson fungsi/grafik/komposisi/invers serta checkpoint/task. CM-03b dipush sebagai `566815c`; CM-03c/L1M03 menambahkan tiga lesson pangkat/pertumbuhan/ruang string serta checkpoint/task. CM-03c dipush sebagai `d8cd89c`; CM-03d melengkapi L1M04 dan assessment L1. CM-03d dipush sebagai `e1de199`; CM-04a menambahkan L2M01 dengan tiga lesson representasi bilangan dan checkpoint/task. CM-04a dipush sebagai `0298531`. CM-04b menambahkan tiga lesson logika/bit/predikat serta checkpoint/task. CM-04b dipush sebagai `5d5a744`. CM-04c melengkapi L2M03 dengan himpunan, relasi, fungsi/bijeksi beserta checkpoint/task. CM-04c dipush sebagai `d033139`. CM-04d melengkapi L2M04 dan assessment L2. CM-04d dipush sebagai `0336a14`. CM-05a menambahkan L3M01 kombinatorika dengan checkpoint/task. Berikutnya CM-05b/L3M02 (peluang dasar). Sisa L3–L9 serta capstone belum selesai; authoring materi ditinjau source/diff, dengan pemeriksaan runtime terbatas sebagaimana evidence terpisah.
