@@ -29,3 +29,7 @@ Server produksi lokal dibiarkan berjalan untuk ditinjau pengguna. Untuk menjalan
 ## Batas cakupan
 
 Ini pemeriksaan build/startup/route dan beberapa interaksi browser, bukan suite unit/E2E atau penilaian kebenaran seluruh lesson/assessment/task. Unit test tidak dibuat/dijalankan; suite E2E, lint dan audit tidak dijalankan. Tidak ada SQL, benchmark, merge atau deploy. Pengujian browser dilakukan dalam preview dan tidak menghasilkan kelulusan peserta. Perubahan awal pengguna pada `next-env.d.ts` dipulihkan persis setelah Next selesai membuat tipe route; file itu tidak dimasukkan commit.
+
+## Lanjutan CM-04c — himpunan/relasi
+
+Build setelah L2M03 exit 0, termasuk TypeScript dan 170 halaman statis (33 lesson matematika). Server Next16.4.2 restart pada localhost:3100, ready74ms. HTTP `/`, jalur matematika dan ketiga lesson `cm-l2m03l01`–`l03` masing-masing 200; draft `cm-l2m04l01` tetap 404. Di browser preview, mapping u→x,v→y dengan C={x,y} menampilkan injektif/onto/bijektif Ya dan 0 tujuan terlewat. Memperluas C menjadi {x,y,z} mempertahankan panah, mengubah onto/bijektif menjadi Tidak dan menutup pengamatan. Memilih z saat C={x,y} ditandai bukan fungsi sah tanpa mengubah C otomatis. Mengembalikan v→y membuka pengamatan lagi. Ini smoke check kontrol mapping, bukan pemeriksaan end-to-end seluruh checkpoint atau progres resmi; visual sets/relation ditinjau source. `next-env.d.ts` pengguna dipulihkan persis.

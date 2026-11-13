@@ -1,6 +1,6 @@
 # Kebutuhan dan desain — Matematika untuk Cybersecurity
 
-Dibuat 7 November, diperbarui 13 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-03 serta CM-04a–CM-04b diimplementasikan; L0/L1 lengkap dan L2M01–M02 terbit dengan review source/diff**.
+Dibuat 7 November, diperbarui 13 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-03 serta CM-04a–CM-04c diimplementasikan; L0/L1 lengkap dan L2M01–M03 terbit dengan review source/diff**.
 
 Pengguna memilih **jalur lengkap bertahap** dan pada 7 November 2026 menyetujui dokumen desain ini serta memulai implementasi menu dan tiga lesson L0M01. Pengguna juga mengizinkan push dokumen ke GitHub arielf98/taalmo branch main. Ukuran kurikulum, aturan penilaian, dan keputusan teknis di bawah merupakan usulan perancang yang tercakup dalam persetujuan desain.
 
@@ -286,3 +286,9 @@ Status authoring **27 lesson published, 93 draft**, sembilan checkpoint/task mod
 Tiga lesson truth table, bitwise/mask/shift dan predikat/De Morgan ditambahkan dengan seluruh tahap bilingual, dua set checkpoint lesson/modul dan task/rubrik. Visual Boolean membandingkan empat pasangan input dan kedua identitas, termasuk rewrite salah serta marker baris terpilih. Operasi unsigned empat bit memakai jarak shift satu, NOT4 terbatas dan pemeriksaan any/all yang berbeda pada mask kosong. Lesson bitwise memiliki tujuh latihan wajib agar setiap operator dan edge case tercakup. Model akses menetapkan persamaan keputusan secara eksplisit; contoh bukan sistem otorisasi produksi.
 
 Status authoring **30 lesson published, 90 draft**, sepuluh checkpoint/task modul. L2M03–M04 dan assessment L2 belum terbit. Pada 13 November pengguna secara eksplisit meminta aplikasi dipastikan bisa dijalankan, sehingga build dan pemeriksaan startup/route kini diizinkan untuk pekerjaan ini; larangan membuat/menjalankan unit test tetap berlaku. Hasil aktual dicatat di [evidence runtime](../../cybersecurity-math-runtime.md). Berikutnya CM-04c/L2M03.
+
+## 23. Lanjutan CM-04c — L2M03
+
+Tiga lesson bilingual operasi himpunan, pasangan/relasi dan fungsi/bijeksi memiliki seluruh tahap, dua set checkpoint lesson/modul serta task/rubrik. Visual tombol anggota dan Venn skematis memakai universe terbatas; grid pasangan membedakan product dari relasi; panah/tabel menyatakan domain, codomain dan image. Relasi multi-output tetap sah sebagai relasi tetapi bukan fungsi total. Perubahan codomain mempertahankan panah, dapat mengubah onto; target di luar C ditandai tidak sah. Invers seluruh C dibedakan dari invers pada image. Kasus himpunan kosong, urutan pasangan, tabrakan dan tujuan tidak tercapai ikut dinilai.
+
+Status **33 lesson published, 87 draft**, sebelas checkpoint/task modul; assessment L0/L1 tetap tersedia. L2M04/assessment L2 berikutnya. Tidak ada perubahan ID/version, storage, grader atau API route. Evidence runtime terbatas dicatat terpisah; bukan sertifikasi/review task manusia.

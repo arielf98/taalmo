@@ -52,7 +52,9 @@ CM-03d dipush sebagai `e1de199`. CM-04a menambahkan L2M01: biner/desimal, hex, s
 
 CM-04a dipush sebagai `0298531`. CM-04b menambahkan truth table, operasi bit/mask/shift unsigned empat bit dan kedua hukum De Morgan, tujuh latihan wajib pada lesson bitwise, dua set checkpoint lesson/modul serta task/rubrik.
 
-**Status authoring: 30 lesson published, 90 draft; L0/L1 lengkap dan L2M01–M02 terbit.** Assessment L0/L1 tersedia; sisa L2, L3–L9 dan capstone belum terbit. Berikutnya CM-04c/L2M03 (himpunan, relasi, fungsi/bijeksi). Source/diff review termasuk reviewer terpisah. Atas permintaan eksplisit 13 November, build/TypeScript, startup produksi, HTTP route dan interaksi browser representatif berhasil; [evidence/batas](cybersecurity-math-runtime.md). Suite unit/E2E/lint tidak dijalankan. Tidak ada merge/deploy.
+CM-04b dipush sebagai `5d5a744`. CM-04c melengkapi L2M03: operasi himpunan, pasangan/relasi, fungsi/bijeksi dengan visual anggota/Venn, grid pasangan dan panah/tabel; dua set checkpoint lesson/modul serta task/rubrik.
+
+**Status authoring: 33 lesson published, 87 draft; L0/L1 lengkap dan L2M01–M03 terbit.** Assessment L0/L1 tersedia; sisa L2, L3–L9 dan capstone belum terbit. Berikutnya CM-04d/L2M04 dan assessment L2. Source/diff review termasuk reviewer terpisah. Atas permintaan eksplisit 13 November, build/TypeScript, startup produksi, HTTP route dan interaksi browser representatif berhasil; [evidence/batas](cybersecurity-math-runtime.md). Suite unit/E2E/lint tidak dijalankan. Tidak ada merge/deploy.
 
 ## Later learning improvements
 
