@@ -1,6 +1,6 @@
 # Kebutuhan dan desain — Matematika untuk Cybersecurity
 
-Dibuat 7 November, diperbarui 8 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-03 serta CM-04a diimplementasikan; L0/L1 lengkap dan L2M01 terbit dengan review source/diff**.
+Dibuat 7 November, diperbarui 13 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-03 serta CM-04a–CM-04b diimplementasikan; L0/L1 lengkap dan L2M01–M02 terbit dengan review source/diff**.
 
 Pengguna memilih **jalur lengkap bertahap** dan pada 7 November 2026 menyetujui dokumen desain ini serta memulai implementasi menu dan tiga lesson L0M01. Pengguna juga mengizinkan push dokumen ke GitHub arielf98/taalmo branch main. Ukuran kurikulum, aturan penilaian, dan keputusan teknis di bawah merupakan usulan perancang yang tercakup dalam persetujuan desain.
 
@@ -280,3 +280,9 @@ Assessment L1 dua set × 15 soal mencakup semua 12 lesson serta distribusi, mean
 Tiga lesson nilai tempat biner/desimal, hexadecimal dan signedness/overflow ditambahkan dengan seluruh tahap bilingual, dua set checkpoint lesson/modul serta task/rubrik. Visual memakai delapan tombol bit dengan posisi, bobot, pressed state dan keyboard native; tabel memperlihatkan bobot atau kelompok empat bit. Signedness mengubah bobot tertinggi menjadi −128 tanpa mengubah pola. Model tambahan nonnegatif 0…15 mempertahankan delapan bit rendah, memisahkan jumlah matematika unsigned/signed, pola simpan, interpretasi hasil serta masing-masing overflow. Definisi sisa pembagian/modulo dijelaskan; model wrap tidak menjadi klaim perilaku semua bahasa/API.
 
 Status authoring **27 lesson published, 93 draft**, sembilan checkpoint/task modul. L2M01 memerlukan assessment L1 untuk progres resmi, tetap bisa dipreview tanpa write resmi. Sisa L2, L3–L9 dan assessment L2 tetap draft; L0/L1 assessment, ID/version dan bentuk record lama tidak berubah. Berikutnya CM-04b/L2M02. Evidence source/diff saja; runtime belum diverifikasi.
+
+## 22. Lanjutan CM-04b — L2M02 dan izin runtime
+
+Tiga lesson truth table, bitwise/mask/shift dan predikat/De Morgan ditambahkan dengan seluruh tahap bilingual, dua set checkpoint lesson/modul dan task/rubrik. Visual Boolean membandingkan empat pasangan input dan kedua identitas, termasuk rewrite salah serta marker baris terpilih. Operasi unsigned empat bit memakai jarak shift satu, NOT4 terbatas dan pemeriksaan any/all yang berbeda pada mask kosong. Lesson bitwise memiliki tujuh latihan wajib agar setiap operator dan edge case tercakup. Model akses menetapkan persamaan keputusan secara eksplisit; contoh bukan sistem otorisasi produksi.
+
+Status authoring **30 lesson published, 90 draft**, sepuluh checkpoint/task modul. L2M03–M04 dan assessment L2 belum terbit. Pada 13 November pengguna secara eksplisit meminta aplikasi dipastikan bisa dijalankan, sehingga build dan pemeriksaan startup/route kini diizinkan untuk pekerjaan ini; larangan membuat/menjalankan unit test tetap berlaku. Hasil aktual dicatat di [evidence runtime](../../cybersecurity-math-runtime.md). Berikutnya CM-04c/L2M03.

@@ -52,6 +52,9 @@
 .bitRow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .bitRow :global(.button) { display: flex; flex-direction: column; gap: 5px; padding: 8px 3px; font-size: 13px; }
 .bitRow button[aria-pressed="true"] { background: var(--mint); color: #172d35; }
+.visual .logicTable th, .visual .logicTable td { padding: 6px 3px; font-size: 13px; overflow-wrap: anywhere; }
+.logicTable { table-layout: fixed; }
+.logicTable tr[data-current="true"] { background: var(--mint-soft); font-weight: 700; }
 .notice { border-left: 4px solid #bd7925; padding: 16px; background: var(--surface); border-radius: 8px; line-height: 1.7; }
 @media (max-width: 760px) {
   .question form { align-items: stretch; }

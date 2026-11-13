@@ -12,6 +12,7 @@ import { MathFunctionVisual } from "./cybersecurity-math-functions";
 import { MathGrowthVisual } from "./cybersecurity-math-growth";
 import { MathLogarithmVisual } from "./cybersecurity-math-logarithms";
 import { MathRepresentationVisual } from "./cybersecurity-math-representations";
+import { MathLogicVisual } from "./cybersecurity-math-logic";
 
 export function MathQuestionCard({ question, answer, onAnswer }: {
   question: MathQuestion; answer?: MathAnswer; onAnswer: (value: MathAnswer | undefined) => void;
@@ -73,6 +74,7 @@ export function MathVisual({ activity, value, onChange }: {
   if (activity.kind === "growth" || activity.kind === "search-space") return <MathGrowthVisual activity={activity} value={value} onChange={onChange} />;
   if (activity.kind === "logarithm" || activity.kind === "binary-choices" || activity.kind === "search-cost") return <MathLogarithmVisual activity={activity} value={value} onChange={onChange} />;
   if (activity.kind === "binary" || activity.kind === "hexadecimal" || activity.kind === "signed-byte") return <MathRepresentationVisual activity={activity} value={value} onChange={onChange} />;
+  if (activity.kind === "truth-table" || activity.kind === "bitwise" || activity.kind === "de-morgan") return <MathLogicVisual activity={activity} value={value} onChange={onChange} />;
   const division = activity.kind === "division";
   const count = activity.kind === "count";
   const fraction = activity.kind === "fraction";
