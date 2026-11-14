@@ -2,7 +2,7 @@
 
 Pengguna meminta melanjutkan pekerjaan dan memastikan aplikasi bisa dijalankan. Izin ini mencakup build/startup dan pemeriksaan route aplikasi pada pekerjaan ini; unit test tidak dibuat atau dijalankan. Evidence modul terdahulu tetap source/diff sebagaimana saat dikerjakan.
 
-Catatan ini memuat riwayat pemeriksaan per modul. Hasil terbaru ada pada bagian CM-05c: 45 lesson/182 halaman build; entri jumlah sebelumnya merekam keadaan saat modul tersebut selesai.
+Catatan ini memuat riwayat pemeriksaan per modul. Hasil terbaru ada pada bagian CM-05d: 48 lesson/185 halaman build; entri jumlah sebelumnya merekam keadaan saat modul tersebut selesai.
 
 Lingkungan: macOS ARM64, Node v24.13.1, npm 11.14.1. Paket Next dikunci `16.4.2` di `package-lock.json`.
 
@@ -59,3 +59,11 @@ Browser preview mode iid N16: daun1/256,15/256,15/256,225/256,total1,minimal sat
 Build final exit0,kompilasi/TypeScript berhasil dan182halaman dihasilkan(45lesson matematika). Startup Next16.4.2 localhost:3100 ready72ms. HTTP utama,jalur database/matematika dan tiga lesson `cm-l3m03l01`–`l03` masing-masing200; draft `cm-l3m04l01`404.
 
 Browser preview geometrik p1/4,h4: bobot64,48,36,27,81 dibagi256,total1,mean4,Var12,ekor81/256;pengamatan terbuka. p0 menampilkan seluruh massa di bucket tail,tanpa mean berhingga/variansi biasa; p1 menampilkan T1 pasti,mean1,Var0. Histogram sumbu tetap0…1 terlihat beserta bucket T>4. Browser binomial n0,p0: satu baris k0 berbobot1,total1,mean0,tanpa0^0. Bukti gambar lokal `/tmp/taalmo-random-variables-2026-11-14.jpg`. Tidak ada progres resmi ditulis. Visual distribusi/seluruh checkpoint ditinjau source;belum ada alur kelulusan lengkap atau review argumen manusia. `next-env.d.ts` dipulihkan persis;unit/E2E/lint/audit tidak dijalankan.
+
+## Lanjutan CM-05d — L3 lengkap, 14 November
+
+Build final exit0,kompilasi/TypeScript berhasil dan185halaman dihasilkan(48lesson matematika). Startup Next16.4.2 localhost:3100 ready72ms. HTTP utama,dashboard,jalur database/matematika dan tiga lesson `cm-l3m04l01`–`l03` masing-masing200;draft `cm-l4m01l01`404.
+
+Browser preview Shannon:uniform H2,bias4/2/1/1 H14/8=7/4 dan pengamatan terbuka;deterministik dengan simbol p0 terpilih memberi H0,kontribusi0 dan log0 tidak dievaluasi. Birthday N8/q3:collision176/512,fixed-target169/512,λ3/8,upper3/8,pendekatan/lower≈0.31271. q0 memberi kedua peluang0/1 dan tanpa pasangan;N1/q2 memberi collision1 dan menghentikan produk pada faktor0 tanpa faktor negatif. Screenshot lokal `/tmp/taalmo-entropy-2026-11-14.jpg` menunjukkan tabel/hasil/bound. Tidak ada progres resmi ditulis.
+
+Visual min-entropy serta assessment L3 dua set × 18 ditinjau source,belum diuji alur kelulusan lengkap di browser. Kunci seluruh36soal level dan28checkpoint lesson/modul ditinjau terpisah sebagai authoring,bukan eksekusi suite. `next-env.d.ts` awal pengguna dipulihkan persis. Unit test tidak dibuat/dijalankan,E2E/lint/audit tidak dijalankan. Tidak ada merge/deploy;server localhost dibiarkan berjalan.

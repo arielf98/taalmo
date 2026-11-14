@@ -17,7 +17,9 @@ import { l2Assessment } from "./l2-assessment";
 import { counting, countingModuleChecks, countingTask } from "./counting";
 import { probability, probabilityModuleChecks, probabilityTask } from "./probability";
 import { randomVariables, randomVariablesModuleChecks, randomVariablesTask } from "./random-variables";
-const authored = { ...foundation, ...fractions, ...measurements, ...numeracy, ...algebra, ...functions, ...growth, ...logarithms, ...representations, ...logic, ...sets, ...proofs, ...counting, ...probability, ...randomVariables };
+import { entropy, entropyModuleChecks, entropyTask } from "./entropy";
+import { l3Assessment } from "./l3-assessment";
+const authored = { ...foundation, ...fractions, ...measurements, ...numeracy, ...algebra, ...functions, ...growth, ...logarithms, ...representations, ...logic, ...sets, ...proofs, ...counting, ...probability, ...randomVariables, ...entropy };
 const authoredModuleChecks: Partial<Record<string, [MathQuestion[], MathQuestion[]]>> = {
   "cm-l0m01": foundationModuleChecks, "cm-l0m02": fractionsModuleChecks, "cm-l0m03": measurementsModuleChecks,
   "cm-l0m04": numeracyModuleChecks,
@@ -32,8 +34,9 @@ const authoredModuleChecks: Partial<Record<string, [MathQuestion[], MathQuestion
   "cm-l3m01": countingModuleChecks,
   "cm-l3m02": probabilityModuleChecks,
   "cm-l3m03": randomVariablesModuleChecks,
+  "cm-l3m04": entropyModuleChecks,
 };
-const authoredLevelChecks: Partial<Record<string, [MathQuestion[], MathQuestion[]]>> = { "cm-l0": l0Assessment, "cm-l1": l1Assessment, "cm-l2": l2Assessment };
+const authoredLevelChecks: Partial<Record<string, [MathQuestion[], MathQuestion[]]>> = { "cm-l0": l0Assessment, "cm-l1": l1Assessment, "cm-l2": l2Assessment, "cm-l3": l3Assessment };
 
 export const mathPathHref = "/learn/cybersecurity-math";
 export const mathVersion = "1.0.0";
@@ -146,7 +149,7 @@ export const foundationTask = copy(
   "Four accounts each receive six attempts. Make a per-account table; calculate 24 initial attempts, 28 after four extra in total, and 40 after four extra per account. Explain the units, show one empty-group example, then explain how many groups of size five are needed to process 28 events. Write your steps, result, assumptions, and limits: a count of attempts alone does not prove an attack.",
 );
 
-export const mathModuleTasks: Partial<Record<string, Copy>> = { "cm-l0m01": foundationTask, "cm-l0m02": fractionsTask, "cm-l0m03": measurementsTask, "cm-l0m04": numeracyTask, "cm-l1m01": algebraTask, "cm-l1m02": functionsTask, "cm-l1m03": growthTask, "cm-l1m04": logarithmsTask, "cm-l2m01": representationsTask, "cm-l2m02": logicTask, "cm-l2m03": setsTask, "cm-l2m04": proofsTask, "cm-l3m01": countingTask, "cm-l3m02": probabilityTask, "cm-l3m03": randomVariablesTask };
+export const mathModuleTasks: Partial<Record<string, Copy>> = { "cm-l0m01": foundationTask, "cm-l0m02": fractionsTask, "cm-l0m03": measurementsTask, "cm-l0m04": numeracyTask, "cm-l1m01": algebraTask, "cm-l1m02": functionsTask, "cm-l1m03": growthTask, "cm-l1m04": logarithmsTask, "cm-l2m01": representationsTask, "cm-l2m02": logicTask, "cm-l2m03": setsTask, "cm-l2m04": proofsTask, "cm-l3m01": countingTask, "cm-l3m02": probabilityTask, "cm-l3m03": randomVariablesTask, "cm-l3m04": entropyTask };
 export const mathModuleCheckDescriptions: Partial<Record<string, Copy>> = {
   "cm-l0m01": copy("Lulus tiga lesson dahulu. Jawab lima soal; perlu nilai minimal 80% dan semua soal kritis benar. Soal kritis mencakup nol, tambahan total, dan urutan operasi.", "Complete all three lessons first. Answer five questions; you need at least 80% and every critical question correct. Critical questions cover zero, additions to totals, and operation order."),
   "cm-l0m02": copy("Lulus tiga lesson dan checkpoint modul sebelumnya dahulu. Jawab lima soal, perlu minimal 80% dan semua soal kritis benar. Bedakan pecahan, angka persen, desimal, poin persentase, dan perubahan relatif.", "Complete the three lessons and the previous module checkpoint first. Answer five questions, requiring at least 80% and every critical question correct. Distinguish fractions, percentage numbers, decimals, percentage points, and relative change."),
@@ -163,4 +166,5 @@ export const mathModuleCheckDescriptions: Partial<Record<string, Copy>> = {
   "cm-l3m01": copy("Selesaikan assessment L2 dan ketiga lesson. Lima soal memerlukan ≥80% dan semua critical benar: urutan/peran, tanpa pengulangan, overlap dan pigeonhole. Jumlah kemungkinan bukan peluang atau jaminan keamanan.", "Complete the L2 assessment and three lessons. Five questions require ≥80% and all critical items correct: order/roles, no reuse, overlap and pigeonhole. Possibility counts are neither probabilities nor security guarantees."),
   "cm-l3m02": copy("Selesaikan prasyarat dan tiga lesson. Lima soal memerlukan ≥80% dan semua critical benar: penyebut conditional, independensi vs disjoint, sampling ulang dan kasus nol. Distribusi/skema harus eksplisit; model tidak mengukur keamanan secret nyata.", "Complete prerequisites and three lessons. Five questions require ≥80% and all critical items correct: conditional denominators, independence versus disjointness, repeated sampling and zero cases. Distributions/schemes must be explicit; this model does not measure real-secret security."),
   "cm-l3m03": copy("Selesaikan prasyarat dan tiga lesson. Lima soal memerlukan ≥80% dan semua critical benar: bobot/mean, PMF binomial beserta syarat iid, konvensi geometrik dan variansi. Mean bukan batas kasus terburuk; teks task memerlukan review manusia.", "Complete prerequisites and three lessons. Five questions require ≥80% and all critical items correct: weights/means, binomial PMF and iid conditions, geometric convention and variance. Means are not worst-case bounds; written tasks require human review."),
+  "cm-l3m04": copy("Selesaikan prasyarat dan tiga lesson. Lima soal memerlukan ≥80% dan semua critical benar: bobot informasi, min-entropy/pmax, korelasi dan collision eksak vs bound. Model tidak mengukur hash/password nyata; bukti teks perlu review manusia.", "Complete prerequisites and three lessons. Five questions require ≥80% and all critical items correct: information weights, min-entropy/pmax, correlation and exact collisions versus bounds. This model measures no real hash/password; written reasoning needs human review."),
 };

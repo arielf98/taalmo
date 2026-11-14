@@ -1,6 +1,6 @@
 # Kebutuhan dan desain — Matematika untuk Cybersecurity
 
-Dibuat 7 November, diperbarui 14 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-04 serta CM-05a–CM-05c diimplementasikan; L0/L1/L2 lengkap dan L3M01–M03 terbit dengan review source/diff**.
+Dibuat 7 November, diperbarui 14 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-05 diimplementasikan; L0/L1/L2/L3 lengkap dengan review source/diff**.
 
 Pengguna memilih **jalur lengkap bertahap** dan pada 7 November 2026 menyetujui dokumen desain ini serta memulai implementasi menu dan tiga lesson L0M01. Pengguna juga mengizinkan push dokumen ke GitHub arielf98/taalmo branch main. Ukuran kurikulum, aturan penilaian, dan keputusan teknis di bawah merupakan usulan perancang yang tercakup dalam persetujuan desain.
 
@@ -316,3 +316,9 @@ Status **42 lesson published, 78 draft**, empat belas checkpoint/task modul; ass
 Tiga lesson bilingual distribusi/ekspektasi, Bernoulli/binomial dan geometrik/variansi memiliki seluruh tahap, dua set checkpoint lesson/modul dan task/rubrik. Peubah sebagai mapping, bobot ternormalisasi, mean berbobot/linearitas dan interpretasi mean dinyatakan. Binomial memerlukan n tetap, independensi dan p sama; koefisien menghitung pola dengan jumlah sukses sama. Endpoint n0/p0/p1 tidak memakai0^0. Geometrik menghitung percobaan termasuk sukses; grafik memberi bucket tail dan rumus mean/variansi support penuh. p0 tidak sukses, p1 konstan1, mean bukan deadline. Variansi menggunakan satuan kuadrat dan syarat ketergantungan berbeda dari linearitas mean.
 
 Status **45 lesson published, 75 draft**, lima belas checkpoint/task modul. Assessment L0/L1/L2 tetap tersedia; assessment L3 belum terbit sampai L3M04 lengkap. Storage/grader/stable ID/version/route API lama tetap. Berikutnya CM-05d/L3M04 dan assessment L3. Evidence runtime terbatas dicatat terpisah, bukan pengesahan argumen peserta.
+
+## 28. Lanjutan CM-05d — L3 lengkap
+
+Tiga lesson bilingual informasi/Shannon entropy,min-entropy/bias dan collision/birthday bound memiliki seluruh tahap,dua set checkpoint lesson/modul dan task/rubrik. Visual memberi distribusi eksplisit,kontribusi pI,support gabungan bit independen/salinan serta seluruh pasangan potensial. H bukan panjang/mean tebakan;Hmin berbasis pmax,korelasi mengubah support. Suku p0 tidak mengevaluasi log0. Collision eksak,bound dan pendekatan dipisahkan;λ expected count,zero/single output serta pigeonhole ditangani eksak. Model tidak menilai hash/password nyata atau mengukur biaya serangan.
+
+Assessment L3 dua set × 18 mencakup seluruh12lesson beserta guard model/batas/miskonsepsi. Semua empat modul,semua jawaban,≥85% aktual dan semua critical wajib;provenance bantuan/retake/snapshot memakai kontrak yang sama. Status **48 lesson published,72 draft**,enam belas checkpoint/task modul;assessment L0 2×13,L1 2×15,L2 2×16,L3 2×18. Storage/grader/ID/version/API route lama tetap. Berikutnya CM-06a/L4M01;L4–L9/capstone belum selesai. Teks argumen tetap memerlukan review manusia.

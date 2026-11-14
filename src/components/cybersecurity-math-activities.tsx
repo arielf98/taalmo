@@ -18,6 +18,7 @@ import { MathProofVisual } from "./cybersecurity-math-proofs";
 import { MathCountingVisual } from "./cybersecurity-math-counting";
 import { MathProbabilityVisual } from "./cybersecurity-math-probability";
 import { MathRandomVariableVisual } from "./cybersecurity-math-random-variables";
+import { MathEntropyVisual } from "./cybersecurity-math-entropy";
 
 export function MathQuestionCard({ question, answer, onAnswer }: {
   question: MathQuestion; answer?: MathAnswer; onAnswer: (value: MathAnswer | undefined) => void;
@@ -85,6 +86,7 @@ export function MathVisual({ activity, value, onChange }: {
   if (activity.kind === "counting" || activity.kind === "selection" || activity.kind === "pigeonhole") return <MathCountingVisual activity={activity} value={value} onChange={onChange} />;
   if (activity.kind === "sample-space" || activity.kind === "conditional" || activity.kind === "repeated-trials") return <MathProbabilityVisual activity={activity} value={value} onChange={onChange} />;
   if (activity.kind === "distribution" || activity.kind === "binomial" || activity.kind === "geometric") return <MathRandomVariableVisual activity={activity} value={value} onChange={onChange} />;
+  if (activity.kind === "shannon" || activity.kind === "min-entropy" || activity.kind === "birthday") return <MathEntropyVisual activity={activity} value={value} onChange={onChange} />;
   const division = activity.kind === "division";
   const count = activity.kind === "count";
   const fraction = activity.kind === "fraction";
