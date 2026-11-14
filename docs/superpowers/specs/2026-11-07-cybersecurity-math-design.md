@@ -1,6 +1,6 @@
 # Kebutuhan dan desain — Matematika untuk Cybersecurity
 
-Dibuat 7 November, diperbarui 14 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-05 serta CM-06a diimplementasikan; L0/L1/L2/L3 lengkap dan L4M01 terbit dengan review source/diff**.
+Dibuat 7 November, diperbarui 14 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-05 serta CM-06a–CM-06b diimplementasikan; L0/L1/L2/L3 lengkap dan L4M01–M02 terbit dengan review source/diff**.
 
 Pengguna memilih **jalur lengkap bertahap** dan pada 7 November 2026 menyetujui dokumen desain ini serta memulai implementasi menu dan tiga lesson L0M01. Pengguna juga mengizinkan push dokumen ke GitHub arielf98/taalmo branch main. Ukuran kurikulum, aturan penilaian, dan keputusan teknis di bawah merupakan usulan perancang yang tercakup dalam persetujuan desain.
 
@@ -328,3 +328,9 @@ Assessment L3 dua set × 18 mencakup seluruh12lesson beserta guard model/batas/m
 Tiga lesson bilingual sampel/bias,mean/median/persentil/outlier dan variasi/standardisasi memiliki seluruh tahap,dua set checkpoint lesson/modul serta task/rubrik. Populasi sasaran,frame,cakupan dan missingness dibedakan;urutan campuran bukan random sampling. Dot plot fixed-axis dan persentil nearest-rank dinyatakan bersama konvensi median biasa;flag strict1,5IQR bukan bukti serangan/penghapusan otomatis. Variansi populasi dan estimator sampel memakai peran/pembagi berbeda;SD/variansi bersatuan berbeda,z tanpa satuan dan memerlukan SDpositif. Data kosong,n1,SD0 serta batas probabilitas score dijelaskan.
 
 Status **51 lesson published,69 draft**,tujuh belas checkpoint/task modul;assessment L0–L3 tetap tersedia,L4 assessment belum terbit. Progres resmi L4 memerlukan assessment L3;preview tidak menulis progres. Storage/grader/versi/API route lama tetap. Berikutnya CM-06b/L4M02;angka seluruhnya sintetis,bukan pengukuran layanan atau diagnosis insiden.
+
+## 30. Lanjutan CM-06b — L4M02
+
+Tiga lesson bilingual reverse conditional/Bayes,frekuensi natural dan base-rate fallacy memiliki seluruh tahap,dua set checkpoint lesson/modul serta task/rubrik. Tabel empat sel memisahkan label sintetis D/alert A,kelompok referensi dan denominator. Pohon kohort10000/1%/90%/5% menghasilkanTP90,FN10,FP495,TN9405,posterior2/13;proporsi dikonstruksi,bukan janji pengukuran acak. Grafik mempertahankan rate conditional sambil mengubah prior,FPR dibedakan dari false-alert fraction. Tidak ada alert membuat posterior tidak terdefinisi,FPR0 masih dapat punya FNpositif. Bayes bukan asumsi independensi atau bukti sebab akibat.
+
+Status **54 lesson published,66 draft**,delapan belas checkpoint/task modul;assessment L0–L3 tersedia,L4 assessment belum terbit. Storage/grader/versi/API route lama tetap. Berikutnya CM-06c/L4M03;semua angka sintetis dan task teks memerlukan review manusia.
