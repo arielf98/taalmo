@@ -21,7 +21,8 @@ import { entropy, entropyModuleChecks, entropyTask } from "./entropy";
 import { l3Assessment } from "./l3-assessment";
 import { summaries, summariesModuleChecks, summariesTask } from "./summaries";
 import { bayes, bayesModuleChecks, bayesTask } from "./bayes";
-const authored = { ...foundation, ...fractions, ...measurements, ...numeracy, ...algebra, ...functions, ...growth, ...logarithms, ...representations, ...logic, ...sets, ...proofs, ...counting, ...probability, ...randomVariables, ...entropy, ...summaries, ...bayes };
+import { classifiers, classifiersModuleChecks, classifiersTask } from "./classifiers";
+const authored = { ...foundation, ...fractions, ...measurements, ...numeracy, ...algebra, ...functions, ...growth, ...logarithms, ...representations, ...logic, ...sets, ...proofs, ...counting, ...probability, ...randomVariables, ...entropy, ...summaries, ...bayes, ...classifiers };
 const authoredModuleChecks: Partial<Record<string, [MathQuestion[], MathQuestion[]]>> = {
   "cm-l0m01": foundationModuleChecks, "cm-l0m02": fractionsModuleChecks, "cm-l0m03": measurementsModuleChecks,
   "cm-l0m04": numeracyModuleChecks,
@@ -39,6 +40,7 @@ const authoredModuleChecks: Partial<Record<string, [MathQuestion[], MathQuestion
   "cm-l3m04": entropyModuleChecks,
   "cm-l4m01": summariesModuleChecks,
   "cm-l4m02": bayesModuleChecks,
+  "cm-l4m03": classifiersModuleChecks,
 };
 const authoredLevelChecks: Partial<Record<string, [MathQuestion[], MathQuestion[]]>> = { "cm-l0": l0Assessment, "cm-l1": l1Assessment, "cm-l2": l2Assessment, "cm-l3": l3Assessment };
 
@@ -153,7 +155,7 @@ export const foundationTask = copy(
   "Four accounts each receive six attempts. Make a per-account table; calculate 24 initial attempts, 28 after four extra in total, and 40 after four extra per account. Explain the units, show one empty-group example, then explain how many groups of size five are needed to process 28 events. Write your steps, result, assumptions, and limits: a count of attempts alone does not prove an attack.",
 );
 
-export const mathModuleTasks: Partial<Record<string, Copy>> = { "cm-l0m01": foundationTask, "cm-l0m02": fractionsTask, "cm-l0m03": measurementsTask, "cm-l0m04": numeracyTask, "cm-l1m01": algebraTask, "cm-l1m02": functionsTask, "cm-l1m03": growthTask, "cm-l1m04": logarithmsTask, "cm-l2m01": representationsTask, "cm-l2m02": logicTask, "cm-l2m03": setsTask, "cm-l2m04": proofsTask, "cm-l3m01": countingTask, "cm-l3m02": probabilityTask, "cm-l3m03": randomVariablesTask, "cm-l3m04": entropyTask, "cm-l4m01": summariesTask, "cm-l4m02": bayesTask };
+export const mathModuleTasks: Partial<Record<string, Copy>> = { "cm-l0m01": foundationTask, "cm-l0m02": fractionsTask, "cm-l0m03": measurementsTask, "cm-l0m04": numeracyTask, "cm-l1m01": algebraTask, "cm-l1m02": functionsTask, "cm-l1m03": growthTask, "cm-l1m04": logarithmsTask, "cm-l2m01": representationsTask, "cm-l2m02": logicTask, "cm-l2m03": setsTask, "cm-l2m04": proofsTask, "cm-l3m01": countingTask, "cm-l3m02": probabilityTask, "cm-l3m03": randomVariablesTask, "cm-l3m04": entropyTask, "cm-l4m01": summariesTask, "cm-l4m02": bayesTask, "cm-l4m03": classifiersTask };
 export const mathModuleCheckDescriptions: Partial<Record<string, Copy>> = {
   "cm-l0m01": copy("Lulus tiga lesson dahulu. Jawab lima soal; perlu nilai minimal 80% dan semua soal kritis benar. Soal kritis mencakup nol, tambahan total, dan urutan operasi.", "Complete all three lessons first. Answer five questions; you need at least 80% and every critical question correct. Critical questions cover zero, additions to totals, and operation order."),
   "cm-l0m02": copy("Lulus tiga lesson dan checkpoint modul sebelumnya dahulu. Jawab lima soal, perlu minimal 80% dan semua soal kritis benar. Bedakan pecahan, angka persen, desimal, poin persentase, dan perubahan relatif.", "Complete the three lessons and the previous module checkpoint first. Answer five questions, requiring at least 80% and every critical question correct. Distinguish fractions, percentage numbers, decimals, percentage points, and relative change."),
@@ -173,4 +175,5 @@ export const mathModuleCheckDescriptions: Partial<Record<string, Copy>> = {
   "cm-l3m04": copy("Selesaikan prasyarat dan tiga lesson. Lima soal memerlukan ≥80% dan semua critical benar: bobot informasi, min-entropy/pmax, korelasi dan collision eksak vs bound. Model tidak mengukur hash/password nyata; bukti teks perlu review manusia.", "Complete prerequisites and three lessons. Five questions require ≥80% and all critical items correct: information weights, min-entropy/pmax, correlation and exact collisions versus bounds. This model measures no real hash/password; written reasoning needs human review."),
   "cm-l4m01": copy("Selesaikan assessment L3 dan tiga lesson. Lima soal memerlukan ≥80% dan semua critical benar: median, cakupan sampel, pembagi variansi dan syarat z. Flag/score bukan bukti insiden; task teks tetap perlu review manusia.", "Complete the L3 assessment and three lessons. Five questions require ≥80% and all critical items correct: median, sample coverage, variance divisors and z conditions. Flags/scores are not incident evidence; written tasks still need human review."),
   "cm-l4m02": copy("Selesaikan prasyarat dan tiga lesson. Lima soal memerlukan ≥80% dan semua critical benar: arah conditional, denominator frekuensi, posterior/false-alert fraction dan kondisi tanpa alert. Data sintetis,bukan validasi detektor atau keputusan investigasi nyata.", "Complete prerequisites and three lessons. Five questions require ≥80% and all critical items correct: conditional direction, frequency denominators, posterior/false-alert fraction and no-alert conditions. Synthetic data does not validate a detector or decide actual investigations."),
+  "cm-l4m03": copy("Selesaikan prasyarat dan tiga lesson. Lima soal memerlukan ≥80% dan seluruh critical benar: matrix, precision/recall/F1, sumbu ROC/PR, ties dan denominator nol. F1 memakai konvensi hitungan; data/biaya sintetis bukan validasi classifier nyata. Task tertulis perlu review manusia.", "Complete prerequisites and three lessons. Five questions require ≥80% and all critical items correct: matrix, precision/recall/F1, ROC/PR axes, ties and zero denominators. F1 uses the count convention; synthetic data/costs do not validate actual classifiers. Written tasks require human review."),
 };

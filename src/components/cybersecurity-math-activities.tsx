@@ -20,6 +20,7 @@ import { MathProbabilityVisual } from "./cybersecurity-math-probability";
 import { MathRandomVariableVisual } from "./cybersecurity-math-random-variables";
 import { MathEntropyVisual } from "./cybersecurity-math-entropy";
 import { MathSummaryVisual } from "./cybersecurity-math-summaries";
+import { MathClassifierVisual } from "./cybersecurity-math-classifiers";
 import { MathBayesVisual } from "./cybersecurity-math-bayes";
 
 export function MathQuestionCard({ question, answer, onAnswer }: {
@@ -90,6 +91,7 @@ export function MathVisual({ activity, value, onChange }: {
   if (activity.kind === "distribution" || activity.kind === "binomial" || activity.kind === "geometric") return <MathRandomVariableVisual activity={activity} value={value} onChange={onChange} />;
   if (activity.kind === "shannon" || activity.kind === "min-entropy" || activity.kind === "birthday") return <MathEntropyVisual activity={activity} value={value} onChange={onChange} />;
   if (activity.kind === "sampling" || activity.kind === "summary" || activity.kind === "standardization") return <MathSummaryVisual activity={activity} value={value} onChange={onChange} />;
+  if (activity.kind === "confusion-matrix" || activity.kind === "classifier-metrics" || activity.kind === "classifier-threshold") return <MathClassifierVisual activity={activity} value={value} onChange={onChange} />;
   if (activity.kind === "bayes-reverse" || activity.kind === "natural-frequencies" || activity.kind === "base-rate") return <MathBayesVisual activity={activity} value={value} onChange={onChange} />;
   const division = activity.kind === "division";
   const count = activity.kind === "count";

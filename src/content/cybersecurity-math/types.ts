@@ -20,7 +20,7 @@ export interface MathLessonContent {
   objective: Copy;
   prediction: MathQuestion;
   exploration: {
-    kind: "count" | "groups" | "division" | "fraction" | "percentage-change" | "ratio" | "rate" | "bytes" | "distance" | "rounding" | "powers" | "budget" | "function" | "linear" | "composition" | "growth" | "search-space" | "logarithm" | "binary-choices" | "search-cost" | "binary" | "hexadecimal" | "signed-byte" | "truth-table" | "bitwise" | "de-morgan" | "sets" | "relation" | "mapping" | "quantifiers" | "parity-proof" | "invariant" | "counting" | "selection" | "pigeonhole" | "sample-space" | "conditional" | "repeated-trials" | "distribution" | "binomial" | "geometric" | "shannon" | "min-entropy" | "birthday" | "sampling" | "summary" | "standardization" | "bayes-reverse" | "natural-frequencies" | "base-rate";
+    kind: "count" | "groups" | "division" | "fraction" | "percentage-change" | "ratio" | "rate" | "bytes" | "distance" | "rounding" | "powers" | "budget" | "function" | "linear" | "composition" | "growth" | "search-space" | "logarithm" | "binary-choices" | "search-cost" | "binary" | "hexadecimal" | "signed-byte" | "truth-table" | "bitwise" | "de-morgan" | "sets" | "relation" | "mapping" | "quantifiers" | "parity-proof" | "invariant" | "counting" | "selection" | "pigeonhole" | "sample-space" | "conditional" | "repeated-trials" | "distribution" | "binomial" | "geometric" | "shannon" | "min-entropy" | "birthday" | "sampling" | "summary" | "standardization" | "bayes-reverse" | "natural-frequencies" | "base-rate" | "confusion-matrix" | "classifier-metrics" | "classifier-threshold";
     inputLabels?: [Copy, Copy];
     initial: [number, number];
     target: [number, number];
@@ -54,5 +54,6 @@ export const mathVisualBounds: Record<MathLessonContent["exploration"]["kind"], 
   distribution: [[0, 2], [1, 3]], binomial: [[0, 5], [0, 4]], geometric: [[0, 4], [1, 6]],
   shannon: [[0, 2], [0, 3]], "min-entropy": [[1, 4], [0, 1]], birthday: [[1, 8], [0, 6]],
   sampling: [[0, 2], [0, 8]], summary: [[0, 30], [0, 5]], standardization: [[4, 12], [0, 4]],
+  "confusion-matrix": [[0, 3], [1, 3]], "classifier-metrics": [[0, 4], [0, 6]], "classifier-threshold": [[0, 101], [1, 5]],
   "bayes-reverse": [[0, 2], [0, 1]], "natural-frequencies": [[1, 3], [1, 10]], "base-rate": [[1, 20], [0, 20]],
 };

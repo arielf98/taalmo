@@ -2,7 +2,7 @@
 
 Pengguna meminta melanjutkan pekerjaan dan memastikan aplikasi bisa dijalankan. Izin ini mencakup build/startup dan pemeriksaan route aplikasi pada pekerjaan ini; unit test tidak dibuat atau dijalankan. Evidence modul terdahulu tetap source/diff sebagaimana saat dikerjakan.
 
-Catatan ini memuat riwayat pemeriksaan per modul. Hasil terbaru ada pada bagian CM-06b: 54 lesson/191 halaman build; entri jumlah sebelumnya merekam keadaan saat modul tersebut selesai.
+Catatan ini memuat riwayat pemeriksaan per modul. Hasil terbaru ada pada bagian CM-06c: 57 lesson/194 halaman build; entri jumlah sebelumnya merekam keadaan saat modul tersebut selesai.
 
 Lingkungan: macOS ARM64, Node v24.13.1, npm 11.14.1. Paket Next dikunci `16.4.2` di `package-lock.json`.
 
@@ -83,3 +83,11 @@ Build final selesai: kompilasi/TypeScript berhasil dan191halaman dihasilkan(54le
 Browser preview natural frequencies N10000/prior1% memberi TP90/FN10/FP495/TN9405,posterior90/585=2/13≈15.38%. Skala2 menggandakan semua sel dan mempertahankan posterior. Tabel tanpa alert memberi posterior tidak terdefinisi sementara TPR/FPR0 tetap sah. Base rate2%/FPR5% memberi TP180/FP490/posterior18/67≈26.87%;FPR0 memberi posterior1 tetapi FN20 tetap terlewat. Grafik dan tabel titik terlihat. Bukti gambar `/tmp/taalmo-bayes-2026-11-14.jpg`. Tidak ada progres resmi ditulis.
 
 Review source terpisah selesai tanpa temuan penting. Seluruh checkpoint/task ditinjau source,belum ada alur kelulusan lengkap atau review jawaban peserta. `next-env.d.ts` pengguna dipulihkan persis. Unit test tidak dibuat/dijalankan,E2E/lint/audit tidak dijalankan;tidak ada merge/deploy. Server lokal dibiarkan berjalan.
+
+## Lanjutan CM-06c — classifier/metrik/threshold,14 November
+
+Build final exit0,kompilasi/TypeScript berhasil dan194halaman dihasilkan(57lesson matematika). Startup produksi localhost:3100 ready70ms. HTTP utama,dashboard,jalur database/matematika dan tiga lesson `cm-l4m03l01`–`l03` masing-masing200;draft `cm-l4m04l01`404.
+
+Browser preview threshold50/FNcost3 memberi TP3/FN1/FP2/TN2,precision3/5,recall3/4,F1=6/9,cost5,ROC(1/2,3/4),PR(3/4,3/5). Threshold101 memberi nol alert,precision undefined,recall0,F1 hitungan0 dan ROC(0,0). Threshold70 memasukkan kedua event tied,matrix2/2/2/2,cost8. Grafik/tabel tampil. Panel metrik TP0/FP0 pada D4/non-D6 memberi precision undefined,recall0/4,F1=0/4. Screenshot `/tmp/taalmo-classifiers-2026-11-14.jpg`. Tidak ada progres resmi ditulis.
+
+Review source terpisah menemukan satu mismatch jumlah lesson/modul di dokumen,yang diperbaiki;tidak ada temuan substantif. Visual matrix/no-D/kosong dan seluruh checkpoint/task ditinjau source,belum diuji kelulusan penuh atau review jawaban peserta. `next-env.d.ts` awal pengguna dipulihkan persis. Unit test tidak dibuat/dijalankan,E2E/lint/audit tidak dijalankan;tidak ada merge/deploy. Server lokal dibiarkan berjalan.

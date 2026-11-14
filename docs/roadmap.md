@@ -68,7 +68,9 @@ CM-05d dipush sebagai `d16bc12`. CM-06a menambahkan L4M01 sampel/bias,ringkasan/
 
 CM-06a dipush sebagai `bea0130`. CM-06b menambahkan L4M02 Bayes/reverse conditional,frekuensi natural dan base-rate fallacy,seluruh tahap bilingual,dua set checkpoint lesson/modul dan task/rubrik.
 
-**Status authoring: 54 lesson published,66 draft;L0/L1/L2/L3 lengkap dan L4M01–M02 terbit.** Assessment L0–L3 tersedia;L4M03–M04,L5–L9 dan capstone belum terbit. Berikutnya CM-06c/L4M03 (classifier/metrik/threshold). Source/diff review termasuk reviewer terpisah. Atas permintaan eksplisit 13 November, build/TypeScript, startup produksi, HTTP route dan interaksi browser representatif berhasil; [evidence/batas](cybersecurity-math-runtime.md). Suite unit/E2E/lint tidak dijalankan. Tidak ada merge/deploy.
+CM-06b dipush sebagai `f4ccb72`. CM-06c menambahkan L4M03 confusion matrix,precision/recall/F1 dan threshold/ROC/PR,seluruh tahap bilingual,dua set checkpoint lesson/modul serta task/rubrik.
+
+**Status authoring: 57 lesson published,63 draft;L0/L1/L2/L3 lengkap dan L4M01–M03 terbit.** Assessment L0–L3 tersedia;L4M04,L5–L9 dan capstone belum terbit. Berikutnya CM-06d/L4M04 (inferensi dan assessment L4). Source/diff review termasuk reviewer terpisah. Atas permintaan eksplisit 13 November, build/TypeScript, startup produksi, HTTP route dan interaksi browser representatif berhasil; [evidence/batas](cybersecurity-math-runtime.md). Suite unit/E2E/lint tidak dijalankan. Tidak ada merge/deploy.
 
 ## Later learning improvements
 
