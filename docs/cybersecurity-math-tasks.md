@@ -1,6 +1,6 @@
 # Backlog — menu Matematika untuk Cybersecurity
 
-Diperbarui 14 November 2026. Status: **CM-01–CM-05 dan CM-06a–CM-06c diimplementasikan; L0/L1/L2/L3 lengkap serta L4M01–M03 terbit; CM-06d dan seterusnya belum selesai**.
+Diperbarui 14 November 2026. Status: **CM-01–CM-05 dan CM-06 lengkap diimplementasikan; L0–L4 lengkap; CM-07 dan seterusnya belum selesai**.
 
 [Kebutuhan/desain](superpowers/specs/2026-11-07-cybersecurity-math-design.md) · [Kurikulum dan task pelajar](../curriculum/cybersecurity-math/README.md)
 
@@ -93,7 +93,7 @@ Dependency: CM-05.
 - [x] CM-06a: `cm-l4m01` — tiga lesson lengkap sampel/bias,mean/median/persentil/outlier dan variasi/standardisasi;visual populasi/dot plot/SD,dua set checkpoint lesson/modul serta task/rubrik.
 - [x] CM-06b: `cm-l4m02` — tiga lesson lengkap reverse conditional/Bayes,frekuensi natural dan base-rate fallacy;contoh90TP/495FP,tabel/pohon/graf,dua set checkpoint lesson/modul dan task/rubrik.
 - [x] CM-06c: `cm-l4m03` — tiga lesson lengkap confusion matrix/accuracy,precision/recall/F1 dan threshold/ROC/PR;ties,denominator nol,biaya sintetis,dua set checkpoint lesson/modul dan task/rubrik.
-- [ ] CM-06d: `cm-l4m04` — interval, hipotesis, multiple comparisons, drift/causal limits; assessment L4.
+- [x] CM-06d: `cm-l4m04` — interval, hipotesis, multiple comparisons, drift/causal limits; assessment L4.
 
 Penerimaan: data seluruhnya sintetis, undefined metric tidak menjadi 0 tanpa penjelasan, rate/precision dibedakan, sample size dan asumsi tercantum. Target 60 lesson.
 
@@ -173,11 +173,11 @@ Penerimaan: seluruh materi disepakati selesai di-author tanpa menyamakan source 
 | Kebutuhan, kurikulum, learner task, backlog | Ditulis; builder review selesai dan desain disetujui |
 | Persetujuan desain detail | Disetujui 7 November 2026 |
 | Menu/routing/player/progres matematika | CM-01 diimplementasikan, source/diff review |
-| Lesson matematika published | 57/120 target; L0/L1/L2/L3 lengkap dan L4M01–M03 terbit, 63 draft |
-| Assessment level matematika | Dua set L0 × 13,L1 × 15,L2 × 16 dan L3 × 18 soal tersedia; L4–L9 belum terbit |
+| Lesson matematika published | 60/120 target; L0–L4 lengkap, 60 draft |
+| Assessment level matematika | Dua set L0 ×13,L1 ×15,L2 ×16,L3 ×18 dan L4 ×20 soal tersedia; L5–L9 belum terbit |
 | Runtime/build | Build/TypeScript, startup, HTTP dan interaksi browser representatif berhasil 13 November atas izin eksplisit pengguna; suite unit/E2E/lint tidak dijalankan |
 | Review capstone oleh manusia | Belum ada peserta/artefak/review |
 
 Commit `9d96ed4` (dokumen) dan `1e6f108` (CM-01) sudah dipush ke origin/main setelah izin eksplisit pengguna. Pengguna juga mengizinkan push seluruh commit roadmap matematika berikutnya ke arielf98/taalmo branch main.
 
-CM-02a dipush sebagai `28eba62`, CM-02b sebagai `d55524a`, CM-02c/L0 lengkap sebagai `89f5ce2`. CM-03a/L1M01 dipush sebagai `ee2b95f`. CM-03b/L1M02 menambahkan tiga lesson fungsi/grafik/komposisi/invers serta checkpoint/task. CM-03b dipush sebagai `566815c`; CM-03c/L1M03 menambahkan tiga lesson pangkat/pertumbuhan/ruang string serta checkpoint/task. CM-03c dipush sebagai `d8cd89c`; CM-03d melengkapi L1M04 dan assessment L1. CM-03d dipush sebagai `e1de199`; CM-04a menambahkan L2M01 dengan tiga lesson representasi bilangan dan checkpoint/task. CM-04a dipush sebagai `0298531`. CM-04b menambahkan tiga lesson logika/bit/predikat serta checkpoint/task. CM-04b dipush sebagai `5d5a744`. CM-04c melengkapi L2M03 dengan himpunan, relasi, fungsi/bijeksi beserta checkpoint/task. CM-04c dipush sebagai `d033139`. CM-04d melengkapi L2M04 dan assessment L2. CM-04d dipush sebagai `0336a14`. CM-05a menambahkan L3M01 kombinatorika dengan checkpoint/task. CM-05a dipush sebagai `245053f`. CM-05b melengkapi L3M02 peluang dasar dengan checkpoint/task. CM-05b dipush sebagai `5d7d864`. CM-05c melengkapi L3M03 peubah acak/ekspektasi dengan checkpoint/task. CM-05c dipush sebagai `f90da40`. CM-05d melengkapi L3M04 dan assessment L3. CM-05d dipush sebagai `d16bc12`. CM-06a melengkapi L4M01 ringkasan data dengan checkpoint/task. CM-06a dipush sebagai `bea0130`. CM-06b melengkapi L4M02 Bayes/base rate dengan checkpoint/task. CM-06b dipush sebagai `f4ccb72`. CM-06c melengkapi L4M03 classifier/metrik/threshold dengan checkpoint/task. Berikutnya CM-06d/L4M04 (inferensi dan assessment L4). Sisa L4–L9 serta capstone belum selesai; authoring materi ditinjau source/diff, dengan pemeriksaan runtime terbatas sebagaimana evidence terpisah.
+CM-02a dipush sebagai `28eba62`, CM-02b sebagai `d55524a`, CM-02c/L0 lengkap sebagai `89f5ce2`. CM-03a/L1M01 dipush sebagai `ee2b95f`. CM-03b/L1M02 menambahkan tiga lesson fungsi/grafik/komposisi/invers serta checkpoint/task. CM-03b dipush sebagai `566815c`; CM-03c/L1M03 menambahkan tiga lesson pangkat/pertumbuhan/ruang string serta checkpoint/task. CM-03c dipush sebagai `d8cd89c`; CM-03d melengkapi L1M04 dan assessment L1. CM-03d dipush sebagai `e1de199`; CM-04a menambahkan L2M01 dengan tiga lesson representasi bilangan dan checkpoint/task. CM-04a dipush sebagai `0298531`. CM-04b menambahkan tiga lesson logika/bit/predikat serta checkpoint/task. CM-04b dipush sebagai `5d5a744`. CM-04c melengkapi L2M03 dengan himpunan, relasi, fungsi/bijeksi beserta checkpoint/task. CM-04c dipush sebagai `d033139`. CM-04d melengkapi L2M04 dan assessment L2. CM-04d dipush sebagai `0336a14`. CM-05a menambahkan L3M01 kombinatorika dengan checkpoint/task. CM-05a dipush sebagai `245053f`. CM-05b melengkapi L3M02 peluang dasar dengan checkpoint/task. CM-05b dipush sebagai `5d7d864`. CM-05c melengkapi L3M03 peubah acak/ekspektasi dengan checkpoint/task. CM-05c dipush sebagai `f90da40`. CM-05d melengkapi L3M04 dan assessment L3. CM-05d dipush sebagai `d16bc12`. CM-06a melengkapi L4M01 ringkasan data dengan checkpoint/task. CM-06a dipush sebagai `bea0130`. CM-06b melengkapi L4M02 Bayes/base rate dengan checkpoint/task. CM-06b dipush sebagai `f4ccb72`. CM-06c melengkapi L4M03 classifier/metrik/threshold dengan checkpoint/task dan dipush sebagai `dabf928`. CM-06d melengkapi L4M04 inferensi/drift serta assessment L4 dua set ×20. Berikutnya CM-07a/L5M01 (pembagian dan prima). Sisa L5–L9 serta capstone belum selesai; authoring materi ditinjau source/diff, dengan pemeriksaan runtime terbatas sebagaimana evidence terpisah.

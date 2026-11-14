@@ -1,6 +1,6 @@
 # Kebutuhan dan desain — Matematika untuk Cybersecurity
 
-Dibuat 7 November, diperbarui 14 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-05 serta CM-06a–CM-06c diimplementasikan; L0/L1/L2/L3 lengkap dan L4M01–M03 terbit dengan review source/diff**.
+Dibuat 7 November, diperbarui 14 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-06 diimplementasikan; L0–L4 lengkap dengan review source/diff**.
 
 Pengguna memilih **jalur lengkap bertahap** dan pada 7 November 2026 menyetujui dokumen desain ini serta memulai implementasi menu dan tiga lesson L0M01. Pengguna juga mengizinkan push dokumen ke GitHub arielf98/taalmo branch main. Ukuran kurikulum, aturan penilaian, dan keputusan teknis di bawah merupakan usulan perancang yang tercakup dalam persetujuan desain.
 
@@ -340,3 +340,9 @@ Status **54 lesson published,66 draft**,delapan belas checkpoint/task modul;asse
 Tiga lesson bilingual confusion matrix/accuracy,precision/recall/F1 serta threshold/ROC/PR memiliki seluruh tahap,dua set checkpoint lesson/modul dan task/rubrik. Visual memisahkan kebenaran/prediksi,memeriksa total dan setiap denominator,menunjukkan accuracy tinggi yang melewatkan kelas langka. F1 menggunakan konvensi count-based2TP/(2TP+FP+FN);nilai0 dapat sah saat precision/recall undefined,tanpa menganggap0/0 sebagai0. Tabel kosong/tanpa alert/tanpa D tersedia;tanpa non-D dijelaskan pada materi/task.
 
 Threshold inklusif pada8event berlabel,D4/non-D4,skor70 tied;skor bukan probabilitas. ROC xFPR/yrecall,PR xrecall/yprecision memakai sumbu tetap0…1,tabel seluruh titik dan garis guide saja. Titik tanpa alert tidak dipalsukan menjadi precision1. Biaya FN/FP sintetis dan validasi terpisah dibahas;tidak ada optimizer atau klaim deployment. Status **57 lesson published,63 draft**,sembilan belas checkpoint/task modul;assessment L0–L3 tersedia,L4 menunggu M04. Storage/grader/versi/API route tetap. Berikutnya CM-06d/L4M04 dan assessment L4;task teks tetap memerlukan review manusia.
+
+## 32. Lanjutan CM-06d — L4 lengkap
+
+Tiga lesson bilingual sampling distribution/SE/CI,hipotesis/p-value/multiple comparisons serta drift/confounding/kausalitas memiliki seluruh tahap,dua set checkpoint lesson/modul dan task/rubrik. CI mean memakai model iid normal/knownσ10,SEσ/√n,kuantil≈1.96;coverage prosedur berbeda dari posterior μ/accuracy/SD band,summary kontrol bukan simulasi coverage. Binomial exactn4/H0p1/2/H1lebihbesar memakai ekor inklusif,bukan probabilitas H0;α dipilih sebelum data,TypeI/II,power,efek,Bonferroni,union bound dan optional stopping diajarkan. Campuran dan conditional dibedakan lewat H/L,observedratekelompokkosongundefined;diagram causal hanya asumsi,tidak mengidentifikasi efek dari before/after.
+
+Assessment L4 dua set ×20 mencakup12lesson dan guard sampling,conditional,denominator,coverage,p-value serta kausalitas. Seluruh empat modul,semua jawaban,≥85% aktual dan seluruh critical wajib. Task/memo tetap perlu review manusia. Status **60 lesson published,60 draft**,dua puluh checkpoint/task modul;assessment L0–L4 tersedia. Storage/grader/ID/version/API lama tetap;assessment L4 menjadi prasyarat resmi L5M01. Berikutnya CM-07a/L5M01;L5–L9/capstone belum selesai.

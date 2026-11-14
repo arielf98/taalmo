@@ -2,7 +2,7 @@
 
 Pengguna meminta melanjutkan pekerjaan dan memastikan aplikasi bisa dijalankan. Izin ini mencakup build/startup dan pemeriksaan route aplikasi pada pekerjaan ini; unit test tidak dibuat atau dijalankan. Evidence modul terdahulu tetap source/diff sebagaimana saat dikerjakan.
 
-Catatan ini memuat riwayat pemeriksaan per modul. Hasil terbaru ada pada bagian CM-06c: 57 lesson/194 halaman build; entri jumlah sebelumnya merekam keadaan saat modul tersebut selesai.
+Catatan ini memuat riwayat pemeriksaan per modul. Hasil terbaru ada pada bagian CM-06d: 60 lesson/197 halaman build; entri jumlah sebelumnya merekam keadaan saat modul tersebut selesai.
 
 Lingkungan: macOS ARM64, Node v24.13.1, npm 11.14.1. Paket Next dikunci `16.4.2` di `package-lock.json`.
 
@@ -91,3 +91,13 @@ Build final exit0,kompilasi/TypeScript berhasil dan194halaman dihasilkan(57lesso
 Browser preview threshold50/FNcost3 memberi TP3/FN1/FP2/TN2,precision3/5,recall3/4,F1=6/9,cost5,ROC(1/2,3/4),PR(3/4,3/5). Threshold101 memberi nol alert,precision undefined,recall0,F1 hitungan0 dan ROC(0,0). Threshold70 memasukkan kedua event tied,matrix2/2/2/2,cost8. Grafik/tabel tampil. Panel metrik TP0/FP0 pada D4/non-D6 memberi precision undefined,recall0/4,F1=0/4. Screenshot `/tmp/taalmo-classifiers-2026-11-14.jpg`. Tidak ada progres resmi ditulis.
 
 Review source terpisah menemukan satu mismatch jumlah lesson/modul di dokumen,yang diperbaiki;tidak ada temuan substantif. Visual matrix/no-D/kosong dan seluruh checkpoint/task ditinjau source,belum diuji kelulusan penuh atau review jawaban peserta. `next-env.d.ts` awal pengguna dipulihkan persis. Unit test tidak dibuat/dijalankan,E2E/lint/audit tidak dijalankan;tidak ada merge/deploy. Server lokal dibiarkan berjalan.
+
+## Lanjutan CM-06d — inferensi/L4 lengkap,14 November
+
+Build final setelah perbaikan review exit0,kompilasi/TypeScript berhasil dan197halaman dihasilkan(60lesson matematika). Startup produksi localhost:3100 ready71ms. HTTP utama,dashboard,jalur database/matematika dan tiga lesson `cm-l4m04l01`–`l03` masing-masing200;draft `cm-l5m01l01`404.
+
+Browser preview CI mean52/rootN5 memberi n25,SE2,margin3.92,interval[48.08,55.92],mencakup referensiμ50. rootN10 memberi n100,SE1,interval[50.04,53.96],tidak mencakup50. Perubahan bahasa ke Indonesia mempertahankan kontrol dan menampilkan label batas/referensi yang diterjemahkan. P-value n4/k4 memberi1/16=0.0625;α5% gagal reject,α10% menolak,efekp-hat−p0=.5,tanpa mengubah data/p-value.
+
+Browser drift dengan H20%/rateH80% memberi H200D160/L800D80,total240/1000=.24 vsbaseline.66,selisih−42poin persentase. ModeH40% pada campuran tetap memberi160/1000=.16. H0% membuat rate H teramati tidak terdefinisi,sementara asumsi model tetap tertera. Tabel dan diagram confounding tampil;panah efek kebijakan ditandai belum diketahui. Bukti gambar `/tmp/taalmo-inference-2026-11-14.jpg`. Tidak menulis progres resmi.
+
+Source reviewer memeriksa seluruh lesson/practice/checkpoint/modul serta40kunci assessment L4 dan integrasi. Tidak ada temuan matematis penting;status dokumen lama dan label visual diperbaiki lalu build diulang. Assessment2×20/gate≥85%/allcritical/allmodules ditinjau source;belum dijalankan alur kelulusan lengkap atau review memo peserta. `next-env.d.ts` awal pengguna dipulihkan persis. Unit test tidak dibuat/dijalankan,E2E/lint/audit tidak dijalankan;tidak ada merge/deploy. Server lokal dibiarkan berjalan.
