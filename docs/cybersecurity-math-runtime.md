@@ -1,8 +1,8 @@
-# Evidence menjalankan aplikasi — 13 November 2026
+# Evidence menjalankan aplikasi — 13–14 November 2026
 
 Pengguna meminta melanjutkan pekerjaan dan memastikan aplikasi bisa dijalankan. Izin ini mencakup build/startup dan pemeriksaan route aplikasi pada pekerjaan ini; unit test tidak dibuat atau dijalankan. Evidence modul terdahulu tetap source/diff sebagaimana saat dikerjakan.
 
-Catatan ini memuat riwayat pemeriksaan per modul. Hasil terbaru ada pada bagian CM-05a: 39 lesson/176 halaman build; entri jumlah sebelumnya merekam keadaan saat modul tersebut selesai.
+Catatan ini memuat riwayat pemeriksaan per modul. Hasil terbaru ada pada bagian CM-05b: 42 lesson/179 halaman build; entri jumlah sebelumnya merekam keadaan saat modul tersebut selesai.
 
 Lingkungan: macOS ARM64, Node v24.13.1, npm 11.14.1. Paket Next dikunci `16.4.2` di `package-lock.json`.
 
@@ -47,3 +47,9 @@ Build final setelah review dan perbaikan penjelasan N=0 exit 0: kompilasi/TypeSc
 Browser preview pada n5 tanpa ulang menampilkan seluruh20 penugasan ketua–wakil; mengganti ke tim menampilkan10 hasil dan menutup pengamatan. n1 menampilkan0 pilihan pasangan. Visual pigeonhole N5/M2 menampilkan isi kotak{1,3,5}/{2,4}, maksimum3, ceil(5/2)=3 dan collision pasti; N3/M3 menjelaskan collision tidak dijamin tetapi mungkin pada mapping lain. N0 menampilkan semua kotak kosong, maksimum0 dan tanpa pasangan collision. Pemeriksaan awal menemukan paragraf kapasitas positif masih tampil pada N0; paragraph diberi branch kasus kosong, lalu build/restart/browser ulang mengonfirmasi penjelasan N0 yang benar. Screenshot lokal `/tmp/taalmo-counting-2026-11-13.jpg` menunjukkan kotak/tabel/batas.
 
 Ini pemeriksaan kontrol representatif, bukan seluruh alur kelulusan, semua perangkat/browser atau review bukti peserta. Visual sum/product ditinjau source; tidak dijalankan sebagai suite. Unit test tidak dibuat/dijalankan; E2E/lint/audit tidak dijalankan sesuai batas pengguna. Tidak ada merge/deploy. Server lokal dibiarkan berjalan; `next-env.d.ts` awal pengguna dipulihkan persis, tidak di-commit.
+
+## Lanjutan CM-05b — peluang dasar, 14 November
+
+Build final setelah perbaikan review exit0: kompilasi/TypeScript berhasil dan179halaman dihasilkan (42lesson matematika). Startup Next16.4.2 localhost:3100 ready89ms. HTTP utama,dashboard,jalur database/matematika dan tiga lesson `cm-l3m02l01`–`l03` masing-masing200; draft `cm-l3m03l01`404.
+
+Browser preview mode iid N16: daun1/256,15/256,15/256,225/256,total1,minimal satu sukses31/256 dan pengamatan terbuka. N1 iid: HH1,cabang pertama gagal0,conditional pada cabang itu tidak terdefinisi,hasil sukses1; N1 dua berbeda:strategi ditandai tidak tersedia. Browser conditional dengan B dikosongkan: P(B)=0/4,P(A∩B)=0/4,P(A|B) tidak terdefinisi,sedangkan P(B|A)=0/1 pada A tidak kosong. Tidak ada progres resmi ditulis. Visual tiket/semua checkpoint ditinjau source,belum diuji kelulusan lengkap. Bukti gambar lokal `/tmp/taalmo-probability-2026-11-14.jpg`. `next-env.d.ts` pengguna dipulihkan persis;unit/E2E/lint/audit tidak dijalankan.

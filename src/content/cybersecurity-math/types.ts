@@ -20,7 +20,7 @@ export interface MathLessonContent {
   objective: Copy;
   prediction: MathQuestion;
   exploration: {
-    kind: "count" | "groups" | "division" | "fraction" | "percentage-change" | "ratio" | "rate" | "bytes" | "distance" | "rounding" | "powers" | "budget" | "function" | "linear" | "composition" | "growth" | "search-space" | "logarithm" | "binary-choices" | "search-cost" | "binary" | "hexadecimal" | "signed-byte" | "truth-table" | "bitwise" | "de-morgan" | "sets" | "relation" | "mapping" | "quantifiers" | "parity-proof" | "invariant" | "counting" | "selection" | "pigeonhole";
+    kind: "count" | "groups" | "division" | "fraction" | "percentage-change" | "ratio" | "rate" | "bytes" | "distance" | "rounding" | "powers" | "budget" | "function" | "linear" | "composition" | "growth" | "search-space" | "logarithm" | "binary-choices" | "search-cost" | "binary" | "hexadecimal" | "signed-byte" | "truth-table" | "bitwise" | "de-morgan" | "sets" | "relation" | "mapping" | "quantifiers" | "parity-proof" | "invariant" | "counting" | "selection" | "pigeonhole" | "sample-space" | "conditional" | "repeated-trials";
     inputLabels?: [Copy, Copy];
     initial: [number, number];
     target: [number, number];
@@ -50,4 +50,5 @@ export const mathVisualBounds: Record<MathLessonContent["exploration"]["kind"], 
   sets: [[0, 15], [0, 15]], relation: [[0, 3], [0, 3]], mapping: [[0, 8], [2, 3]],
   quantifiers: [[0, 6], [0, 6]], "parity-proof": [[-3, 3], [-3, 3]], invariant: [[0, 6], [0, 7]],
   counting: [[0, 4], [0, 4]], selection: [[0, 5], [0, 1]], pigeonhole: [[0, 6], [1, 4]],
+  "sample-space": [[0, 4], [0, 4]], conditional: [[0, 15], [0, 15]], "repeated-trials": [[1, 16], [0, 1]],
 };

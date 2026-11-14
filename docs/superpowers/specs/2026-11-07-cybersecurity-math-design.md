@@ -1,6 +1,6 @@
 # Kebutuhan dan desain — Matematika untuk Cybersecurity
 
-Dibuat 7 November, diperbarui 13 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-04 serta CM-05a diimplementasikan; L0/L1/L2 lengkap dan L3M01 terbit dengan review source/diff**.
+Dibuat 7 November, diperbarui 14 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-04 serta CM-05a–CM-05b diimplementasikan; L0/L1/L2 lengkap dan L3M01–M02 terbit dengan review source/diff**.
 
 Pengguna memilih **jalur lengkap bertahap** dan pada 7 November 2026 menyetujui dokumen desain ini serta memulai implementasi menu dan tiga lesson L0M01. Pengguna juga mengizinkan push dokumen ke GitHub arielf98/taalmo branch main. Ukuran kurikulum, aturan penilaian, dan keputusan teknis di bawah merupakan usulan perancang yang tercakup dalam persetujuan desain.
 
@@ -304,3 +304,9 @@ Assessment L2 dua set × 16 mencakup semua12lesson dan guard wrap/urutan kuantor
 Tiga lesson lengkap bilingual aturan penjumlahan/perkalian, permutasi/kombinasi serta inklusi–eksklusi/pigeonhole memiliki seluruh tahap, dua set checkpoint lesson/modul dan task/rubrik. Visual menampilkan seluruh pasangan dua daftar, semua tim/peran dua orang, kotak seimbang dan tabel setara. Cabang tidak seragam, tanpa pengulangan,0!,pilihan kosong,k>n,overlap dan batas ceil(N/M) dijelaskan. N<2 tidak memiliki pasangan collision; untuk2≤N≤M collision mungkin tetapi belum pasti. Contoh seimbang mencapai batas minimal maksimum, bukan klaim semua mapping sama atau seragam. Hitungan tidak menjadi peluang, penilaian keamanan atau algoritme serangan.
 
 Status **39 lesson published, 81 draft**, tiga belas checkpoint/task modul. Assessment L0/L1/L2 tetap tersedia, L3 assessment belum terbit. L3 memerlukan assessment L2 untuk progres resmi; preview tetap tanpa write resmi. Storage/grader/route API/ID/version lama tidak berubah. Berikutnya CM-05b/L3M02; sisa L3–L9 dan capstone belum selesai. Evidence runtime terbatas dicatat terpisah.
+
+## 26. Lanjutan CM-05b — L3M02
+
+Tiga lesson bilingual ruang sampel/kejadian, komplemen/union/conditional dan independensi/dua percobaan memiliki seluruh tahap, dua set checkpoint lesson/modul serta task/rubrik. Visual tiket memberi bobot pada ID, bukan warna; Ω kosong tidak sah. Grid kejadian mengganti penyebut sesuai kondisi, menandai conditional berpeluang nol tidak terdefinisi. Pohon/tabel empat daun membedakan iid dengan ulang dari dua kandidat berbeda terhadap satu target tetap. Mode berbeda mensyaratkan N≥2; iid N1 memiliki conditional pada cabang gagal yang tidak terdefinisi tanpa membuat daun gabungan salah. Tidak ada random sampling/serangan nyata atau klaim distribusi secret manusia.
+
+Status **42 lesson published, 78 draft**, empat belas checkpoint/task modul; assessment L0/L1/L2 tetap tersedia, L3 assessment belum terbit. ID/version/storage/grader/API route tetap. Berikutnya CM-05c/L3M03; evidence runnable-app terbatas dicatat terpisah dari source review dan dari pemeriksaan kelulusan lengkap.
