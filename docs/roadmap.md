@@ -60,7 +60,9 @@ CM-04d dipush sebagai `0336a14`. CM-05a menambahkan L3M01 aturan hitung, permuta
 
 CM-05a dipush sebagai `245053f`. CM-05b menambahkan L3M02 ruang sampel/kejadian, conditional dan independensi, seluruh tahap bilingual, dua set checkpoint lesson/modul dan task/rubrik.
 
-**Status authoring: 42 lesson published, 78 draft; L0/L1/L2 lengkap dan L3M01–M02 terbit.** Assessment L0/L1/L2 tersedia; L3M03–M04, L4–L9 dan capstone belum terbit. Berikutnya CM-05c/L3M03 (peubah acak/ekspektasi). Source/diff review termasuk reviewer terpisah. Atas permintaan eksplisit 13 November, build/TypeScript, startup produksi, HTTP route dan interaksi browser representatif berhasil; [evidence/batas](cybersecurity-math-runtime.md). Suite unit/E2E/lint tidak dijalankan. Tidak ada merge/deploy.
+CM-05b dipush sebagai `5d7d864`. CM-05c menambahkan L3M03 distribusi/ekspektasi, binomial dan geometrik/variansi, seluruh tahap bilingual, dua set checkpoint lesson/modul serta task/rubrik.
+
+**Status authoring: 45 lesson published, 75 draft; L0/L1/L2 lengkap dan L3M01–M03 terbit.** Assessment L0/L1/L2 tersedia; L3M04, L4–L9 dan capstone belum terbit. Berikutnya CM-05d/L3M04 (entropy/collision) dan assessment L3. Source/diff review termasuk reviewer terpisah. Atas permintaan eksplisit 13 November, build/TypeScript, startup produksi, HTTP route dan interaksi browser representatif berhasil; [evidence/batas](cybersecurity-math-runtime.md). Suite unit/E2E/lint tidak dijalankan. Tidak ada merge/deploy.
 
 ## Later learning improvements
 

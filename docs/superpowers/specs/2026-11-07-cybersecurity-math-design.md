@@ -1,6 +1,6 @@
 # Kebutuhan dan desain — Matematika untuk Cybersecurity
 
-Dibuat 7 November, diperbarui 14 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-04 serta CM-05a–CM-05b diimplementasikan; L0/L1/L2 lengkap dan L3M01–M02 terbit dengan review source/diff**.
+Dibuat 7 November, diperbarui 14 November 2026. Status: **desain disetujui pengguna; CM-01 sampai CM-04 serta CM-05a–CM-05c diimplementasikan; L0/L1/L2 lengkap dan L3M01–M03 terbit dengan review source/diff**.
 
 Pengguna memilih **jalur lengkap bertahap** dan pada 7 November 2026 menyetujui dokumen desain ini serta memulai implementasi menu dan tiga lesson L0M01. Pengguna juga mengizinkan push dokumen ke GitHub arielf98/taalmo branch main. Ukuran kurikulum, aturan penilaian, dan keputusan teknis di bawah merupakan usulan perancang yang tercakup dalam persetujuan desain.
 
@@ -310,3 +310,9 @@ Status **39 lesson published, 81 draft**, tiga belas checkpoint/task modul. Asse
 Tiga lesson bilingual ruang sampel/kejadian, komplemen/union/conditional dan independensi/dua percobaan memiliki seluruh tahap, dua set checkpoint lesson/modul serta task/rubrik. Visual tiket memberi bobot pada ID, bukan warna; Ω kosong tidak sah. Grid kejadian mengganti penyebut sesuai kondisi, menandai conditional berpeluang nol tidak terdefinisi. Pohon/tabel empat daun membedakan iid dengan ulang dari dua kandidat berbeda terhadap satu target tetap. Mode berbeda mensyaratkan N≥2; iid N1 memiliki conditional pada cabang gagal yang tidak terdefinisi tanpa membuat daun gabungan salah. Tidak ada random sampling/serangan nyata atau klaim distribusi secret manusia.
 
 Status **42 lesson published, 78 draft**, empat belas checkpoint/task modul; assessment L0/L1/L2 tetap tersedia, L3 assessment belum terbit. ID/version/storage/grader/API route tetap. Berikutnya CM-05c/L3M03; evidence runnable-app terbatas dicatat terpisah dari source review dan dari pemeriksaan kelulusan lengkap.
+
+## 27. Lanjutan CM-05c — L3M03
+
+Tiga lesson bilingual distribusi/ekspektasi, Bernoulli/binomial dan geometrik/variansi memiliki seluruh tahap, dua set checkpoint lesson/modul dan task/rubrik. Peubah sebagai mapping, bobot ternormalisasi, mean berbobot/linearitas dan interpretasi mean dinyatakan. Binomial memerlukan n tetap, independensi dan p sama; koefisien menghitung pola dengan jumlah sukses sama. Endpoint n0/p0/p1 tidak memakai0^0. Geometrik menghitung percobaan termasuk sukses; grafik memberi bucket tail dan rumus mean/variansi support penuh. p0 tidak sukses, p1 konstan1, mean bukan deadline. Variansi menggunakan satuan kuadrat dan syarat ketergantungan berbeda dari linearitas mean.
+
+Status **45 lesson published, 75 draft**, lima belas checkpoint/task modul. Assessment L0/L1/L2 tetap tersedia; assessment L3 belum terbit sampai L3M04 lengkap. Storage/grader/stable ID/version/route API lama tetap. Berikutnya CM-05d/L3M04 dan assessment L3. Evidence runtime terbatas dicatat terpisah, bukan pengesahan argumen peserta.

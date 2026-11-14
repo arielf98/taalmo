@@ -2,7 +2,7 @@
 
 Pengguna meminta melanjutkan pekerjaan dan memastikan aplikasi bisa dijalankan. Izin ini mencakup build/startup dan pemeriksaan route aplikasi pada pekerjaan ini; unit test tidak dibuat atau dijalankan. Evidence modul terdahulu tetap source/diff sebagaimana saat dikerjakan.
 
-Catatan ini memuat riwayat pemeriksaan per modul. Hasil terbaru ada pada bagian CM-05b: 42 lesson/179 halaman build; entri jumlah sebelumnya merekam keadaan saat modul tersebut selesai.
+Catatan ini memuat riwayat pemeriksaan per modul. Hasil terbaru ada pada bagian CM-05c: 45 lesson/182 halaman build; entri jumlah sebelumnya merekam keadaan saat modul tersebut selesai.
 
 Lingkungan: macOS ARM64, Node v24.13.1, npm 11.14.1. Paket Next dikunci `16.4.2` di `package-lock.json`.
 
@@ -53,3 +53,9 @@ Ini pemeriksaan kontrol representatif, bukan seluruh alur kelulusan, semua peran
 Build final setelah perbaikan review exit0: kompilasi/TypeScript berhasil dan179halaman dihasilkan (42lesson matematika). Startup Next16.4.2 localhost:3100 ready89ms. HTTP utama,dashboard,jalur database/matematika dan tiga lesson `cm-l3m02l01`–`l03` masing-masing200; draft `cm-l3m03l01`404.
 
 Browser preview mode iid N16: daun1/256,15/256,15/256,225/256,total1,minimal satu sukses31/256 dan pengamatan terbuka. N1 iid: HH1,cabang pertama gagal0,conditional pada cabang itu tidak terdefinisi,hasil sukses1; N1 dua berbeda:strategi ditandai tidak tersedia. Browser conditional dengan B dikosongkan: P(B)=0/4,P(A∩B)=0/4,P(A|B) tidak terdefinisi,sedangkan P(B|A)=0/1 pada A tidak kosong. Tidak ada progres resmi ditulis. Visual tiket/semua checkpoint ditinjau source,belum diuji kelulusan lengkap. Bukti gambar lokal `/tmp/taalmo-probability-2026-11-14.jpg`. `next-env.d.ts` pengguna dipulihkan persis;unit/E2E/lint/audit tidak dijalankan.
+
+## Lanjutan CM-05c — peubah acak, 14 November
+
+Build final exit0,kompilasi/TypeScript berhasil dan182halaman dihasilkan(45lesson matematika). Startup Next16.4.2 localhost:3100 ready72ms. HTTP utama,jalur database/matematika dan tiga lesson `cm-l3m03l01`–`l03` masing-masing200; draft `cm-l3m04l01`404.
+
+Browser preview geometrik p1/4,h4: bobot64,48,36,27,81 dibagi256,total1,mean4,Var12,ekor81/256;pengamatan terbuka. p0 menampilkan seluruh massa di bucket tail,tanpa mean berhingga/variansi biasa; p1 menampilkan T1 pasti,mean1,Var0. Histogram sumbu tetap0…1 terlihat beserta bucket T>4. Browser binomial n0,p0: satu baris k0 berbobot1,total1,mean0,tanpa0^0. Bukti gambar lokal `/tmp/taalmo-random-variables-2026-11-14.jpg`. Tidak ada progres resmi ditulis. Visual distribusi/seluruh checkpoint ditinjau source;belum ada alur kelulusan lengkap atau review argumen manusia. `next-env.d.ts` dipulihkan persis;unit/E2E/lint/audit tidak dijalankan.
